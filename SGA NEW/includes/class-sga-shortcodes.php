@@ -46,6 +46,7 @@ class SGA_Shortcodes {
                 <div id="panel-view-estudiantes" class="panel-view"><?php $this->render_view_lista_estudiantes(); ?></div>
                 <div id="panel-view-cursos" class="panel-view"><?php $this->render_view_lista_cursos(); ?></div>
                 <div id="panel-view-registro_pagos" class="panel-view"><?php $this->render_view_registro_pagos(); ?></div>
+                <div id="panel-view-reportes" class="panel-view"><?php $this->render_view_reportes(); ?></div>
                 <div id="panel-view-log" class="panel-view"><?php $this->render_view_log(); ?></div>
                 <div id="panel-view-perfil_estudiante" class="panel-view"><?php $this->render_view_perfil_estudiante(); ?></div>
                 <div id="panel-view-comunicacion" class="panel-view"><?php $this->render_view_comunicacion(); ?></div>
@@ -158,10 +159,10 @@ class SGA_Shortcodes {
                 <h2>Comunicación</h2>
                 <p>Enviar correos masivos</p>
             </a>
-            <a href="#" data-view="log" class="panel-card panel-nav-link">
-                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
-                <h2>Actividad</h2>
-                <p>Ver registros del sistema</p>
+            <a href="#" data-view="reportes" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/></svg></div>
+                <h2>Reportes</h2>
+                <p>Visualizar y generar informes</p>
             </a>
         </div>
         <?php
@@ -472,7 +473,7 @@ class SGA_Shortcodes {
             }
         }
         ?>
-        <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
+        <a href="#" data-view="reportes" class="back-link panel-nav-link">&larr; Volver a Reportes</a>
         <h1 class="panel-title">Registro de Actividad del Sistema</h1>
         <div class="filtros-tabla">
             <input type="text" id="buscador-log" placeholder="Buscar en el registro...">
@@ -643,6 +644,96 @@ class SGA_Shortcodes {
         <?php
     }
 
+    public function render_view_reportes() {
+        $options = get_option('sga_report_options', [
+            'recipient_email' => get_option('admin_email'),
+            'enable_weekly' => 0,
+            'enable_monthly' => 0,
+        ]);
+        $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        ?>
+        <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
+        <h1 class="panel-title">Central de Reportes</h1>
+
+        <div class="report-grid">
+            <div class="report-main-content">
+                <div class="sga-card">
+                    <h3>Generador de Reportes</h3>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <input type="hidden" name="action" value="sga_generate_manual_report">
+                        <?php wp_nonce_field('sga_manual_report_nonce', '_wpnonce_manual_report'); ?>
+                        <div class="report-form-grid">
+                            <div class="sga-form-group">
+                                <label for="report_type">Tipo de Reporte</label>
+                                <select name="report_type" id="report_type">
+                                    <option value="matriculados">Estudiantes Matriculados</option>
+                                    <option value="pendientes">Inscripciones Pendientes</option>
+                                    <option value="cursos">Lista de Cursos Activos</option>
+                                    <option value="log">Registro de Actividad</option>
+                                    <option value="payment_history">Historial de Pagos</option>
+                                </select>
+                            </div>
+                            <div class="sga-form-group" id="report-curso-filter-container" style="display:none;">
+                                <label for="report_curso_filtro">Filtrar por Curso</label>
+                                <select name="curso_filtro" id="report_curso_filtro">
+                                    <option value="">Todos los cursos</option>
+                                    <?php foreach ($cursos as $curso) : ?>
+                                        <option value="<?php echo esc_attr($curso->post_title); ?>"><?php echo esc_html($curso->post_title); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="sga-form-group">
+                                <label for="report_date_from">Desde</label>
+                                <input type="date" name="date_from" id="report_date_from">
+                            </div>
+                            <div class="sga-form-group">
+                                <label for="report_date_to">Hasta</label>
+                                <input type="date" name="date_to" id="report_date_to">
+                            </div>
+                        </div>
+                        <div class="report-actions">
+                            <button type="submit" name="report_action" value="email" class="button button-secondary">Enviar por Correo</button>
+                            <button type="submit" name="report_action" value="download" class="button button-primary">Generar PDF</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="sga-card">
+                    <h3>Visualización de Datos</h3>
+                    <div class="chart-container">
+                        <canvas id="inscriptionsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="report-sidebar">
+                <div class="sga-card">
+                    <h3>Reportes Programados</h3>
+                    <form id="sga-scheduled-reports-form">
+                        <div class="sga-form-group">
+                            <label for="recipient_email">Correo Receptor</label>
+                            <input type="email" id="recipient_email" name="recipient_email" value="<?php echo esc_attr($options['recipient_email']); ?>" class="regular-text" />
+                        </div>
+                        <div class="sga-form-group">
+                            <label class="checkbox-label"><input type="checkbox" id="enable_weekly" name="enable_weekly" value="1" <?php checked(1, $options['enable_weekly'], true); ?> /> Activar reporte semanal</label>
+                            <p class="description">Se enviará cada lunes a las 2:00 AM.</p>
+                        </div>
+                        <div class="sga-form-group">
+                            <label class="checkbox-label"><input type="checkbox" id="enable_monthly" name="enable_monthly" value="1" <?php checked(1, $options['enable_monthly'], true); ?> /> Activar reporte mensual</label>
+                             <p class="description">Se enviará el primer día del mes a las 2:00 AM.</p>
+                        </div>
+                        <button type="submit" class="button button-primary" style="width: 100%;">Guardar Ajustes</button>
+                        <div id="scheduled-report-status" style="margin-top: 10px;"></div>
+                    </form>
+                </div>
+                <a href="#" data-view="log" class="panel-card panel-nav-link">
+                    <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
+                    <h2>Registro de Actividad</h2>
+                    <p>Consultar el log del sistema</p>
+                </a>
+            </div>
+        </div>
+        <?php
+    }
+
     // --- MÉTODOS PARA ESTILOS Y SCRIPTS ---
 
     public function render_panel_styles() {
@@ -750,14 +841,30 @@ class SGA_Shortcodes {
             #sga-estudiantes-checkbox-list { height: 200px; overflow-y: auto; border: 1px solid var(--sga-gray); padding: 10px; border-radius: 8px; margin-top: 10px; background-color: var(--sga-white); }
             .sga-student-item label { display: block; padding: 5px; border-radius: 4px; transition: background-color 0.2s; cursor: pointer; }
             .sga-student-item label:hover { background-color: #f1f5f9; }
+
+            /* Reports View */
+            .report-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; align-items: flex-start; }
+            .report-main-content { display: flex; flex-direction: column; gap: 30px; }
+            .report-sidebar { display: flex; flex-direction: column; gap: 30px; }
+            .sga-card { background-color: var(--sga-light); border-radius: 12px; padding: 25px; border: 1px solid var(--sga-gray); }
+            .sga-card h3 { margin-top: 0; font-size: 18px; font-weight: 600; color: var(--sga-primary); border-bottom: 1px solid var(--sga-gray); padding-bottom: 10px; margin-bottom: 20px; }
+            .report-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+            .sga-form-group label { display: block; font-weight: 500; margin-bottom: 8px; font-size: 14px; color: var(--sga-text-light); }
+            .sga-form-group input, .sga-form-group select { width: 100%; }
+            .sga-form-group .description { font-size: 12px; color: var(--sga-text-light); margin-top: 5px; }
+            .checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+            .report-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+            .chart-container { position: relative; height: 300px; }
+            @media (max-width: 960px) { .report-grid { grid-template-columns: 1fr; } }
         </style>
         <?php
     }
 
     public function render_panel_navigation_js() {
         ?>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            jQuery(document).ready(function($){var ajaxurl="<?php echo admin_url('admin-ajax.php');?>",approvalData={};function setDynamicDateTime(){if(!$("#dynamic-date").length)return;const e=new Date,t={weekday:"long",year:"numeric",month:"long",day:"numeric"},o={hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!0};let a=new Intl.DateTimeFormat("es-ES",t).format(e);a=a.charAt(0).toUpperCase()+a.slice(1);const n=e.toLocaleTimeString("es-ES",o);$("#dynamic-date").text(a),$("#dynamic-time").text(n)}setDynamicDateTime(),setInterval(setDynamicDateTime,1e3),$("#gestion-academica-app-container").on("click",".panel-nav-link",function(e){e.preventDefault();var t=$(this).data("view"),o=$(".panel-view.active");o.is("#panel-view-"+t)||o.fadeOut(200,function(){$(this).removeClass("active"),$("#panel-view-"+t).fadeIn(200).addClass("active")})}),$("#tabla-pendientes").on("click",".aprobar-btn",function(){var e=$(this);approvalData={type:"single",nonce:e.data("nonce"),post_id:e.data("postid"),row_index:e.data("rowindex"),cedula:e.data("cedula"),nombre:e.data("nombre"),element:e},$("#ga-modal-confirmacion").fadeIn(200)}),$("#apply-bulk-action").on("click",function(){if("aprobar"!==$("#bulk-action-select").val())return void alert("Por favor, selecciona una acción válida.");var e=[];$("#tabla-pendientes .bulk-checkbox:checked").each(function(){var t=$(this);e.push({post_id:t.data("postid"),row_index:t.data("rowindex")})}),e.length?(approvalData={type:"bulk",nonce:"<?php echo wp_create_nonce("aprobar_bulk_nonce");?>",seleccionados:e,element:$(this)},$("#ga-modal-confirmacion").fadeIn(200)):alert("Por favor, selecciona al menos un estudiante.")}),$("#ga-modal-confirmar").on("click",function(){var e=$(this);e.text("Procesando...").prop("disabled",!0),$("#ga-modal-cancelar").prop("disabled",!0),"single"===approvalData.type?$.post(ajaxurl,{action:"aprobar_para_matriculacion",_ajax_nonce:approvalData.nonce,post_id:approvalData.post_id,row_index:approvalData.row_index,cedula:approvalData.cedula,nombre:approvalData.nombre}).done(function(e){e.success?(actualizarUIAprobacion(e.data),approvalData.element.closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})):alert("Hubo un error: "+(e.data||"Error desconocido")),closeModal()}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()}):"bulk"===approvalData.type&&$.post(ajaxurl,{action:"aprobar_seleccionados",_ajax_nonce:approvalData.nonce,seleccionados:approvalData.seleccionados}).done(function(e){if(e.success){if(e.data.approved&&e.data.approved.length>0&&e.data.approved.forEach(function(e){actualizarUIAprobacion(e),$('#tabla-pendientes .bulk-checkbox[data-postid="'+e.post_id+'"][data-rowindex="'+e.row_index+'"]').closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})}),e.data.failed&&e.data.failed.length>0){var t="No se pudo aprobar a "+e.data.failed.length+" estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.";alert(t),console.log("Estudiantes no aprobados:",e.data.failed)}}else alert("Hubo un error al procesar la solicitud: "+(e.data.message||"Error desconocido"));closeModal(),$("#select-all-pendientes").prop("checked",!1),$("#tabla-pendientes .bulk-checkbox").prop("checked",!1)}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()})});function closeModal(){$("#ga-modal-confirmacion").fadeOut(200),$("#ga-modal-confirmar").text("Confirmar y Enviar").prop("disabled",!1),$("#ga-modal-cancelar").prop("disabled",!1),approvalData={}}function actualizarUIAprobacion(e){var t='<tr data-curso="'+e.nombre_curso+'"><td><strong>'+e.matricula+"</strong></td><td>"+e.nombre+"</td><td>"+e.cedula+"</td><td>"+e.email+"</td><td>"+e.telefono+"</td><td>"+e.nombre_curso+"</td></tr>";$("#tabla-matriculados .no-results").remove(),$("#tabla-matriculados tbody").append(t)}function checkEmptyTable(e,t,o){0===$(e+" tbody tr:not(.no-results-search)").length&&!$(e+" .no-results").length&&$(e+" tbody").append('<tr class="no-results"><td colspan="'+t+'">'+o+"</td></tr>")}$("#ga-modal-cancelar, .ga-modal").on("click",function(e){(e.target==this||$(this).is("#ga-modal-cancelar"))&&closeModal()}),$("#select-all-pendientes").on("click",function(){$("#tabla-pendientes .bulk-checkbox").prop("checked",this.checked)});function actualizarFiltros(e,t,o){var a=$(t).val().toLowerCase(),n=o?$(o).val():"",r=0;$(e+" tbody tr").each(function(){var t=$(this);if(!t.hasClass("no-results")&&!t.hasClass("no-results-search")){var l=t.text().toLowerCase(),d=t.data("curso"),s=(""===a||l.includes(a))&&(!o||""===n||d===n);s?(t.show(),r++):t.hide()}}),$(e+" .no-results-search").remove(),0===r&&!$(e+" .no-results").is(":visible")&&$(e+" tbody").append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>')}function actualizarFiltrosLog(){var e=$("#buscador-log").val().toLowerCase(),t=$("#filtro-usuario-log").val(),o=$("#filtro-fecha-inicio").val(),a=$("#filtro-fecha-fin").val(),n=0;$("#tabla-log tbody tr").each(function(){var r=$(this);if(!r.hasClass("no-results")){var l=r.text().toLowerCase(),d=r.data("usuario"),s=r.data("fecha"),c=(""===e||l.includes(e))&&(""===t||d===t),i=!0;i=o&&a?s>=o&&s<=a:o?s>=o:a?s<=a:!0,c&&i?(r.show(),n++):r.hide()}}),$("#tabla-log .no-results-search").remove(),0===n&&!$("#tabla-log .no-results").is(":visible")&&$("#tabla-log tbody").append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>')}$("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change",function(){actualizarFiltros("#tabla-pendientes","#buscador-estudiantes-pendientes","#filtro-curso-pendientes")}),$("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change",function(){actualizarFiltros("#tabla-matriculados","#buscador-matriculados","#filtro-curso-matriculados")}),$("#buscador-general-estudiantes").on("keyup",function(){actualizarFiltros("#tabla-general-estudiantes","#buscador-general-estudiantes",null)}),$("#buscador-cursos").on("keyup",function(){actualizarFiltros("#tabla-cursos","#buscador-cursos",null)}),$("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change",function(){actualizarFiltrosLog()}),$("#exportar-btn").on("click",function(e){e.preventDefault();var t=$("#export-format-select").val(),o=$("#buscador-matriculados").val(),a=$("#filtro-curso-matriculados").val(),n="<?php echo wp_create_nonce("export_nonce");?>",r=new URL(ajaxurl);"excel"===t?r.searchParams.append("action","exportar_excel"):r.searchParams.append("action","exportar_moodle_csv"),r.searchParams.append("_wpnonce",n),r.searchParams.append("search_term",o),r.searchParams.append("course_filter",a),window.location.href=r.href}),$("#panel-view-cursos").on("click",".ver-matriculados-btn",function(e){e.preventDefault();var t=$(this).data("curso-nombre");$(".panel-view").removeClass("active").hide(),$("#panel-view-lista_matriculados").addClass("active").show(),$("#filtro-curso-matriculados").val(t).change(),$("#buscador-matriculados").val("")}),$("#buscador-pagos").on("keyup",function(){actualizarFiltros("#tabla-pagos","#buscador-pagos",null)});
+            jQuery(document).ready(function($){var ajaxurl="<?php echo admin_url('admin-ajax.php');?>",approvalData={},inscriptionsChart;function setDynamicDateTime(){if(!$("#dynamic-date").length)return;const e=new Date,t={weekday:"long",year:"numeric",month:"long",day:"numeric"},o={hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!0};let a=new Intl.DateTimeFormat("es-ES",t).format(e);a=a.charAt(0).toUpperCase()+a.slice(1);const n=e.toLocaleTimeString("es-ES",o);$("#dynamic-date").text(a),$("#dynamic-time").text(n)}setDynamicDateTime(),setInterval(setDynamicDateTime,1e3),$("#gestion-academica-app-container").on("click",".panel-nav-link",function(e){e.preventDefault();var t=$(this).data("view"),o=$(".panel-view.active");o.is("#panel-view-"+t)||o.fadeOut(200,function(){$(this).removeClass("active"),$("#panel-view-"+t).fadeIn(200).addClass("active"),"reportes"===t&&renderInscriptionsChart()})}),$("#tabla-pendientes").on("click",".aprobar-btn",function(){var e=$(this);approvalData={type:"single",nonce:e.data("nonce"),post_id:e.data("postid"),row_index:e.data("rowindex"),cedula:e.data("cedula"),nombre:e.data("nombre"),element:e},$("#ga-modal-confirmacion").fadeIn(200)}),$("#apply-bulk-action").on("click",function(){if("aprobar"!==$("#bulk-action-select").val())return void alert("Por favor, selecciona una acción válida.");var e=[];$("#tabla-pendientes .bulk-checkbox:checked").each(function(){var t=$(this);e.push({post_id:t.data("postid"),row_index:t.data("rowindex")})}),e.length?(approvalData={type:"bulk",nonce:"<?php echo wp_create_nonce("aprobar_bulk_nonce");?>",seleccionados:e,element:$(this)},$("#ga-modal-confirmacion").fadeIn(200)):alert("Por favor, selecciona al menos un estudiante.")}),$("#ga-modal-confirmar").on("click",function(){var e=$(this);e.text("Procesando...").prop("disabled",!0),$("#ga-modal-cancelar").prop("disabled",!0),"single"===approvalData.type?$.post(ajaxurl,{action:"aprobar_para_matriculacion",_ajax_nonce:approvalData.nonce,post_id:approvalData.post_id,row_index:approvalData.row_index,cedula:approvalData.cedula,nombre:approvalData.nombre}).done(function(e){e.success?(actualizarUIAprobacion(e.data),approvalData.element.closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})):alert("Hubo un error: "+(e.data||"Error desconocido")),closeModal()}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()}):"bulk"===approvalData.type&&$.post(ajaxurl,{action:"aprobar_seleccionados",_ajax_nonce:approvalData.nonce,seleccionados:approvalData.seleccionados}).done(function(e){if(e.success){if(e.data.approved&&e.data.approved.length>0&&e.data.approved.forEach(function(e){actualizarUIAprobacion(e),$('#tabla-pendientes .bulk-checkbox[data-postid="'+e.post_id+'"][data-rowindex="'+e.row_index+'"]').closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})}),e.data.failed&&e.data.failed.length>0){var t="No se pudo aprobar a "+e.data.failed.length+" estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.";alert(t),console.log("Estudiantes no aprobados:",e.data.failed)}}else alert("Hubo un error al procesar la solicitud: "+(e.data.message||"Error desconocido"));closeModal(),$("#select-all-pendientes").prop("checked",!1),$("#tabla-pendientes .bulk-checkbox").prop("checked",!1)}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()})});function closeModal(){$("#ga-modal-confirmacion").fadeOut(200),$("#ga-modal-confirmar").text("Confirmar y Enviar").prop("disabled",!1),$("#ga-modal-cancelar").prop("disabled",!1),approvalData={}}function actualizarUIAprobacion(e){var t='<tr data-curso="'+e.nombre_curso+'"><td><strong>'+e.matricula+"</strong></td><td>"+e.nombre+"</td><td>"+e.cedula+"</td><td>"+e.email+"</td><td>"+e.telefono+"</td><td>"+e.nombre_curso+"</td></tr>";$("#tabla-matriculados .no-results").remove(),$("#tabla-matriculados tbody").append(t)}function checkEmptyTable(e,t,o){0===$(e+" tbody tr:not(.no-results-search)").length&&!$(e+" .no-results").length&&$(e+" tbody").append('<tr class="no-results"><td colspan="'+t+'">'+o+"</td></tr>")}$("#ga-modal-cancelar, .ga-modal").on("click",function(e){(e.target==this||$(this).is("#ga-modal-cancelar"))&&closeModal()}),$("#select-all-pendientes").on("click",function(){$("#tabla-pendientes .bulk-checkbox").prop("checked",this.checked)});function actualizarFiltros(e,t,o){var a=$(t).val().toLowerCase(),n=o?$(o).val():"",r=0;$(e+" tbody tr").each(function(){var t=$(this);if(!t.hasClass("no-results")&&!t.hasClass("no-results-search")){var l=t.text().toLowerCase(),d=t.data("curso"),s=(""===a||l.includes(a))&&(!o||""===n||d===n);s?(t.show(),r++):t.hide()}}),$(e+" .no-results-search").remove(),0===r&&!$(e+" .no-results").is(":visible")&&$(e+" tbody").append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>')}function actualizarFiltrosLog(){var e=$("#buscador-log").val().toLowerCase(),t=$("#filtro-usuario-log").val(),o=$("#filtro-fecha-inicio").val(),a=$("#filtro-fecha-fin").val(),n=0;$("#tabla-log tbody tr").each(function(){var r=$(this);if(!r.hasClass("no-results")){var l=r.text().toLowerCase(),d=r.data("usuario"),s=r.data("fecha"),c=(""===e||l.includes(e))&&(""===t||d===t),i=!0;i=o&&a?s>=o&&s<=a:o?s>=o:a?s<=a:!0,c&&i?(r.show(),n++):r.hide()}}),$("#tabla-log .no-results-search").remove(),0===n&&!$("#tabla-log .no-results").is(":visible")&&$("#tabla-log tbody").append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>')}$("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change",function(){actualizarFiltros("#tabla-pendientes","#buscador-estudiantes-pendientes","#filtro-curso-pendientes")}),$("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change",function(){actualizarFiltros("#tabla-matriculados","#buscador-matriculados","#filtro-curso-matriculados")}),$("#buscador-general-estudiantes").on("keyup",function(){actualizarFiltros("#tabla-general-estudiantes","#buscador-general-estudiantes",null)}),$("#buscador-cursos").on("keyup",function(){actualizarFiltros("#tabla-cursos","#buscador-cursos",null)}),$("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change",function(){actualizarFiltrosLog()}),$("#exportar-btn").on("click",function(e){e.preventDefault();var t=$("#export-format-select").val(),o=$("#buscador-matriculados").val(),a=$("#filtro-curso-matriculados").val(),n="<?php echo wp_create_nonce("export_nonce");?>",r=new URL(ajaxurl);"excel"===t?r.searchParams.append("action","exportar_excel"):r.searchParams.append("action","exportar_moodle_csv"),r.searchParams.append("_wpnonce",n),r.searchParams.append("search_term",o),r.searchParams.append("course_filter",a),window.location.href=r.href}),$("#panel-view-cursos").on("click",".ver-matriculados-btn",function(e){e.preventDefault();var t=$(this).data("curso-nombre");$(".panel-view").removeClass("active").hide(),$("#panel-view-lista_matriculados").addClass("active").show(),$("#filtro-curso-matriculados").val(t).change(),$("#buscador-matriculados").val("")}),$("#buscador-pagos").on("keyup",function(){actualizarFiltros("#tabla-pagos","#buscador-pagos",null)});
             $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
                 var studentId = $(this).data('estudiante-id');
                 var profileContainer = $("#sga-student-profile-content");
@@ -901,6 +1008,47 @@ class SGA_Shortcodes {
                     btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
                 });
             });
+
+            // Reports View Logic
+            $('#report_type').on('change', function() {
+                const reportType = $(this).val();
+                const courseFilter = $('#report-curso-filter-container');
+                if (reportType === 'matriculados' || reportType === 'pendientes') {
+                    courseFilter.slideDown();
+                } else {
+                    courseFilter.slideUp();
+                }
+            });
+
+            function renderInscriptionsChart() {
+                if (inscriptionsChart) {
+                    inscriptionsChart.destroy();
+                }
+                var ctx = document.getElementById('inscriptionsChart').getContext('2d');
+                // Dummy data for now. Replace with AJAX call.
+                const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul'];
+                const data = {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Inscripciones por Mes',
+                        data: [65, 59, 80, 81, 56, 55, 40],
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                };
+                inscriptionsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+            }
         });
         </script>
         <?php
