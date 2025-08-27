@@ -187,11 +187,17 @@ class SGA_Ajax {
         $curso_especifico = sanitize_text_field($_POST['curso']);
         $subject = sanitize_text_field($_POST['subject']);
         $body_html = wp_kses_post(stripslashes_deep($_POST['body']));
-        $specific_student_ids = isset($_POST['student_ids']) && is_array($_POST['student_ids']) ? array_map('intval', $_POST['student_ids']) : [];
-
+        
         $recipients = [];
 
         if ($recipient_group === 'especificos') {
+            $specific_student_ids_json = isset($_POST['student_ids']) ? stripslashes($_POST['student_ids']) : '[]';
+            $specific_student_ids = json_decode($specific_student_ids_json, true);
+            if (!is_array($specific_student_ids)) {
+                $specific_student_ids = [];
+            }
+            $specific_student_ids = array_map('intval', $specific_student_ids);
+
             if (!empty($specific_student_ids)) {
                 foreach ($specific_student_ids as $student_id) {
                     $email = get_field('email', $student_id);
@@ -253,4 +259,3 @@ class SGA_Ajax {
         wp_send_json_success(['message' => "Proceso completado. Se enviaron {$sent_count} correos."]);
     }
 }
-
