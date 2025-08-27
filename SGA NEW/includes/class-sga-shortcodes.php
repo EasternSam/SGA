@@ -367,36 +367,58 @@ class SGA_Shortcodes {
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Lista de Cursos Activos</h1>
-
+    
         <div class="filtros-tabla">
             <input type="text" id="buscador-cursos" placeholder="Buscar por nombre de curso...">
              <a href="<?php echo esc_url(admin_url('post-new.php?post_type=curso')); ?>" target="_blank" class="button button-primary">Nuevo Curso</a>
             <a href="<?php echo esc_url(admin_url('edit.php?post_type=curso')); ?>" target="_blank" class="button button-secondary">Editar Cursos</a>
+            <div class="view-switcher">
+                <button class="view-btn active" data-view="grid" title="Vista de Tarjetas">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                </button>
+                <button class="view-btn" data-view="list" title="Vista de Lista">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                </button>
+            </div>
         </div>
-
-        <div class="tabla-wrapper" style="margin-top: 25px;">
-            <table class="wp-list-table widefat striped" id="tabla-cursos">
-                <thead>
-                    <tr>
-                        <th>Nombre del Curso</th><th>Horarios y Modalidades</th><th>Cupos</th><th>Escuela</th>
-                        <th>Precio</th><th>Mensualidad</th><th>Duración</th><th>Fecha de Inicio</th><th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if ($cursos_activos && function_exists('get_field')) : ?>
-                        <?php
-                        foreach ($cursos_activos as $curso) :
+    
+        <div class="cursos-grid" style="margin-top: 25px;">
+            <?php if ($cursos_activos && function_exists('get_field')) : ?>
+                <?php foreach ($cursos_activos as $curso) : 
+                    $escuelas = get_the_terms($curso->ID, 'category');
+                    $escuela_display = 'N/A';
+                    if ($escuelas && !is_wp_error($escuelas)) {
+                        $escuela_names = array_map(function($term) { return $term->name; }, $escuelas);
+                        $escuela_display = implode(', ', $escuela_names);
+                    }
+                ?>
+                <div class="curso-card" data-search-term="<?php echo esc_attr(strtolower($curso->post_title . ' ' . $escuela_display)); ?>">
+                    <div class="curso-card-header">
+                        <h3><?php echo esc_html($curso->post_title); ?></h3>
+                        <div class="curso-card-actions">
+                            <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
+                            <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
+                        </div>
+                    </div>
+                    <div class="curso-card-body">
+                        <div class="curso-details-grid">
+                            <div><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); ?></div>
+                            <div><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></div>
+                            <div><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></div>
+                            <div><span>Escuela:</span> <?php echo esc_html($escuela_display); ?></div>
+                        </div>
+                        <div class="horarios-section">
+                            <h4>Horarios Disponibles</h4>
+                            <?php 
                             $horarios_repeater = get_field('horarios_del_curso', $curso->ID);
-                            $horarios_html = '';
-                            $cupos_display = '';
-                            $fecha_inicio_display = '';
-
-                            if ($horarios_repeater) {
-                                $horarios_html = '<div class="horarios-container">';
-                                $fechas_inicio_array = [];
-                                $cupos_array = [];
-                                foreach ($horarios_repeater as $horario) {
-                                    $horario_completo = $horario['dias_de_la_semana'] . ' ' . $horario['hora'];
+                            if ($horarios_repeater) : ?>
+                                <ul class="horarios-list">
+                                <?php foreach ($horarios_repeater as $horario) : 
+                                    $total_cupos = !empty($horario['numero_de_cupos']) ? intval($horario['numero_de_cupos']) : 0;
+                                    $cupos_ocupados = 0;
+                                    if ($total_cupos > 0) {
+                                        $cupos_ocupados = SGA_Utils::_get_cupos_ocupados($curso->post_title, $horario['dias_de_la_semana'] . ' ' . $horario['hora']);
+                                    }
                                     $modalidad = !empty($horario['modalidad']) ? $horario['modalidad'] : 'N/A';
                                     $modalidad_class = 'ga-pill-default';
                                     switch (strtolower($modalidad)) {
@@ -404,57 +426,109 @@ class SGA_Shortcodes {
                                         case 'virtual': $modalidad_class = 'ga-pill-virtual'; break;
                                         case 'híbrido': case 'hibrido': $modalidad_class = 'ga-pill-hibrido'; break;
                                     }
+                                ?>
+                                    <li>
+                                        <div class="horario-info">
+                                            <span class="horario-dia-hora"><?php echo esc_html($horario['dias_de_la_semana'] . ' ' . $horario['hora']); ?></span>
+                                            <span class="ga-pill <?php echo $modalidad_class; ?>"><?php echo esc_html($modalidad); ?></span>
+                                        </div>
+                                        <div class="horario-cupos">
+                                            <span>Cupos: </span>
+                                            <strong><?php echo ($total_cupos > 0) ? "{$cupos_ocupados} / {$total_cupos}" : 'Ilimitados'; ?></strong>
+                                        </div>
+                                    </li>
+                                <?php endforeach; ?>
+                                </ul>
+                            <?php else: ?>
+                                <p>No hay horarios definidos para este curso.</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php else : ?>
+                <p class="no-results">No se encontraron cursos.</p>
+            <?php endif; ?>
+        </div>
 
-                                    $horarios_html .= '<div class="horario-item">';
-                                    $horarios_html .= '<span class="ga-pill ga-pill-time">' . esc_html($horario_completo) . '</span>';
-                                    $horarios_html .= '<span class="ga-pill ' . $modalidad_class . '">' . esc_html($modalidad) . '</span>';
-                                    $horarios_html .= '</div>';
-
-                                    $total_cupos = !empty($horario['numero_de_cupos']) ? intval($horario['numero_de_cupos']) : 0;
-                                    if ($total_cupos > 0) {
-                                        $cupos_ocupados = SGA_Utils::_get_cupos_ocupados($curso->post_title, $horario_completo);
-                                        $cupos_array[] = "{$cupos_ocupados} / {$total_cupos}";
-                                    } else {
-                                        $cupos_array[] = 'Ilimitados';
-                                    }
-
-                                    if (!empty($horario['fecha_de_inicio'])) {
-                                        $fechas_inicio_array[] = $horario['fecha_de_inicio'];
-                                    }
-                                }
-                                $horarios_html .= '</div>';
-                                $cupos_display = implode('<br>', $cupos_array);
-                                $fecha_inicio_display = implode('<br>', array_unique($fechas_inicio_array));
-                            }
-
+        <div class="cursos-list-view" style="display: none; margin-top: 25px;">
+            <div class="tabla-wrapper">
+                <table class="wp-list-table widefat striped" id="tabla-cursos-lista">
+                    <thead>
+                        <tr>
+                            <th>Curso</th>
+                            <th>Detalles</th>
+                            <th>Horarios</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if ($cursos_activos && function_exists('get_field')) : ?>
+                        <?php foreach ($cursos_activos as $curso) : 
                             $escuelas = get_the_terms($curso->ID, 'category');
                             $escuela_display = 'N/A';
                             if ($escuelas && !is_wp_error($escuelas)) {
-                                $escuela_names = array();
-                                foreach ($escuelas as $escuela) $escuela_names[] = $escuela->name;
+                                $escuela_names = array_map(function($term) { return $term->name; }, $escuelas);
                                 $escuela_display = implode(', ', $escuela_names);
                             }
-                            ?>
-                            <tr>
-                                <td><?php echo esc_html($curso->post_title); ?></td>
-                                <td><?php echo $horarios_html; // WPCS: XSS ok. ?></td>
-                                <td><?php echo $cupos_display; // WPCS: XSS ok. ?></td>
-                                <td><?php echo esc_html($escuela_display); ?></td>
-                                <td><?php echo esc_html(get_field('precio_del_curso', $curso->ID)); ?></td>
-                                <td><?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></td>
-                                <td><?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></td>
-                                <td><?php echo $fecha_inicio_display; // WPCS: XSS ok. ?></td>
-                                <td class="actions-cell">
-                                    <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
-                                    <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
-                                </td>
-                            </tr>
+                        ?>
+                        <tr data-search-term="<?php echo esc_attr(strtolower($curso->post_title . ' ' . $escuela_display)); ?>">
+                            <td><strong><?php echo esc_html($curso->post_title); ?></strong></td>
+                            <td>
+                                <ul class="curso-details-list">
+                                    <li><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); ?></li>
+                                    <li><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></li>
+                                    <li><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></li>
+                                    <li><span>Escuela:</span> <?php echo esc_html($escuela_display); ?></li>
+                                </ul>
+                            </td>
+                            <td>
+                                <?php 
+                                $horarios_repeater = get_field('horarios_del_curso', $curso->ID);
+                                if ($horarios_repeater) : ?>
+                                    <ul class="horarios-list-inline">
+                                    <?php foreach ($horarios_repeater as $horario) : 
+                                        $total_cupos = !empty($horario['numero_de_cupos']) ? intval($horario['numero_de_cupos']) : 0;
+                                        $cupos_ocupados = 0;
+                                        if ($total_cupos > 0) {
+                                            $cupos_ocupados = SGA_Utils::_get_cupos_ocupados($curso->post_title, $horario['dias_de_la_semana'] . ' ' . $horario['hora']);
+                                        }
+                                         $modalidad = !empty($horario['modalidad']) ? $horario['modalidad'] : 'N/A';
+                                        $modalidad_class = 'ga-pill-default';
+                                        switch (strtolower($modalidad)) {
+                                            case 'presencial': $modalidad_class = 'ga-pill-presencial'; break;
+                                            case 'virtual': $modalidad_class = 'ga-pill-virtual'; break;
+                                            case 'híbrido': case 'hibrido': $modalidad_class = 'ga-pill-hibrido'; break;
+                                        }
+                                    ?>
+                                        <li>
+                                            <div class="horario-info">
+                                                <span class="horario-dia-hora"><?php echo esc_html($horario['dias_de_la_semana'] . ' ' . $horario['hora']); ?></span>
+                                                <span class="ga-pill <?php echo $modalidad_class; ?>"><?php echo esc_html($modalidad); ?></span>
+                                            </div>
+                                            <div class="horario-cupos">
+                                                <span>Cupos: </span>
+                                                <strong><?php echo ($total_cupos > 0) ? "{$cupos_ocupados} / {$total_cupos}" : 'Ilimitados'; ?></strong>
+                                            </div>
+                                        </li>
+                                    <?php endforeach; ?>
+                                    </ul>
+                                <?php else: ?>
+                                    <span>N/A</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="actions-cell">
+                                <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
+                                <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
+                            </td>
+                        </tr>
                         <?php endforeach; ?>
-                    <?php else : ?>
-                        <tr class="no-results"><td colspan="9">No se encontraron cursos.</td></tr>
+                    <?php else: ?>
+                        <tr class="no-results"><td colspan="4">No se encontraron cursos.</td></tr>
                     <?php endif; ?>
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
         <?php
     }
@@ -807,14 +881,49 @@ class SGA_Shortcodes {
             .button-primary:hover { background-color: var(--sga-primary) !important; transform: translateY(-2px); }
             .button-secondary { background-color: var(--sga-light) !important; color: var(--sga-text) !important; border-color: var(--sga-gray) !important; }
             .button-secondary:hover { background-color: var(--sga-gray) !important; }
+            .ga-check-column { width: 2.2em; }
             
-            /* Status Pills & Course Table */
-            .horarios-container { display: flex; flex-direction: column; gap: 8px; }
-            .horario-item { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+            /* Status Pills */
             .estado-inscrito { color: var(--sga-yellow); background-color: #fffbeb; padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: 12px; }
             .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 16px; color: var(--sga-white); }
             .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
             .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
+            
+            /* Course View Switcher */
+            .view-switcher { display: flex; gap: 5px; background-color: var(--sga-gray); padding: 4px; border-radius: 8px; margin-left: auto; }
+            .view-btn { background-color: transparent; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; color: var(--sga-text-light); transition: all 0.2s ease; }
+            .view-btn:hover { color: var(--sga-primary); background-color: #fff; }
+            .view-btn.active { background-color: var(--sga-white); color: var(--sga-secondary); box-shadow: var(--shadow-sm); }
+            .view-btn svg { width: 20px; height: 20px; display: block; }
+
+            /* Course Cards Redesign */
+            .cursos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; }
+            .curso-card { background-color: var(--sga-white); border: 1px solid var(--sga-gray); border-radius: 12px; box-shadow: var(--shadow-md); transition: all 0.3s ease; }
+            .curso-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); }
+            .curso-card-header { background-color: var(--sga-light); padding: 15px 20px; border-bottom: 1px solid var(--sga-gray); display: flex; justify-content: space-between; align-items: center; border-top-left-radius: 12px; border-top-right-radius: 12px; }
+            .curso-card-header h3 { margin: 0; font-size: 18px; color: var(--sga-primary); }
+            .curso-card-actions { display: flex; gap: 10px; }
+            .curso-card-body { padding: 20px; }
+            .curso-details-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; font-size: 14px; }
+            .curso-details-grid div { display: flex; flex-direction: column; }
+            .curso-details-grid span { color: var(--sga-text-light); font-size: 12px; margin-bottom: 2px; }
+            .horarios-section h4 { font-size: 16px; color: var(--sga-text); margin-top: 0; margin-bottom: 10px; border-top: 1px solid var(--sga-gray); padding-top: 15px; }
+            .horarios-list { list-style: none; margin: 0; padding: 0; }
+            .horarios-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--sga-gray); }
+            .horarios-list li:last-child { border-bottom: none; }
+            .horario-info { display: flex; align-items: center; gap: 8px; }
+            .horario-dia-hora { font-weight: 500; }
+            .horario-cupos span { color: var(--sga-text-light); }
+
+            /* Course List View */
+            .cursos-list-view { display: none; }
+            #tabla-cursos-lista .curso-details-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+            #tabla-cursos-lista .curso-details-list li { margin-bottom: 5px; }
+            #tabla-cursos-lista .curso-details-list li span { font-weight: 600; color: var(--sga-text); }
+            #tabla-cursos-lista .horarios-list-inline { list-style: none; margin: 0; padding: 0; }
+            #tabla-cursos-lista .horarios-list-inline li { padding: 8px 0; border-bottom: 1px dashed var(--sga-gray); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+            #tabla-cursos-lista .horarios-list-inline li:last-child { border-bottom: none; }
+
 
             /* Modal */
             .ga-modal { position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
@@ -864,192 +973,537 @@ class SGA_Shortcodes {
         ?>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-            jQuery(document).ready(function($){var ajaxurl="<?php echo admin_url('admin-ajax.php');?>",approvalData={},inscriptionsChart;function setDynamicDateTime(){if(!$("#dynamic-date").length)return;const e=new Date,t={weekday:"long",year:"numeric",month:"long",day:"numeric"},o={hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!0};let a=new Intl.DateTimeFormat("es-ES",t).format(e);a=a.charAt(0).toUpperCase()+a.slice(1);const n=e.toLocaleTimeString("es-ES",o);$("#dynamic-date").text(a),$("#dynamic-time").text(n)}setDynamicDateTime(),setInterval(setDynamicDateTime,1e3),$("#gestion-academica-app-container").on("click",".panel-nav-link",function(e){e.preventDefault();var t=$(this).data("view"),o=$(".panel-view.active");o.is("#panel-view-"+t)||o.fadeOut(200,function(){$(this).removeClass("active"),$("#panel-view-"+t).fadeIn(200).addClass("active"),"reportes"===t&&renderInscriptionsChart()})}),$("#tabla-pendientes").on("click",".aprobar-btn",function(){var e=$(this);approvalData={type:"single",nonce:e.data("nonce"),post_id:e.data("postid"),row_index:e.data("rowindex"),cedula:e.data("cedula"),nombre:e.data("nombre"),element:e},$("#ga-modal-confirmacion").fadeIn(200)}),$("#apply-bulk-action").on("click",function(){if("aprobar"!==$("#bulk-action-select").val())return void alert("Por favor, selecciona una acción válida.");var e=[];$("#tabla-pendientes .bulk-checkbox:checked").each(function(){var t=$(this);e.push({post_id:t.data("postid"),row_index:t.data("rowindex")})}),e.length?(approvalData={type:"bulk",nonce:"<?php echo wp_create_nonce("aprobar_bulk_nonce");?>",seleccionados:e,element:$(this)},$("#ga-modal-confirmacion").fadeIn(200)):alert("Por favor, selecciona al menos un estudiante.")}),$("#ga-modal-confirmar").on("click",function(){var e=$(this);e.text("Procesando...").prop("disabled",!0),$("#ga-modal-cancelar").prop("disabled",!0),"single"===approvalData.type?$.post(ajaxurl,{action:"aprobar_para_matriculacion",_ajax_nonce:approvalData.nonce,post_id:approvalData.post_id,row_index:approvalData.row_index,cedula:approvalData.cedula,nombre:approvalData.nombre}).done(function(e){e.success?(actualizarUIAprobacion(e.data),approvalData.element.closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})):alert("Hubo un error: "+(e.data||"Error desconocido")),closeModal()}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()}):"bulk"===approvalData.type&&$.post(ajaxurl,{action:"aprobar_seleccionados",_ajax_nonce:approvalData.nonce,seleccionados:approvalData.seleccionados}).done(function(e){if(e.success){if(e.data.approved&&e.data.approved.length>0&&e.data.approved.forEach(function(e){actualizarUIAprobacion(e),$('#tabla-pendientes .bulk-checkbox[data-postid="'+e.post_id+'"][data-rowindex="'+e.row_index+'"]').closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})}),e.data.failed&&e.data.failed.length>0){var t="No se pudo aprobar a "+e.data.failed.length+" estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.";alert(t),console.log("Estudiantes no aprobados:",e.data.failed)}}else alert("Hubo un error al procesar la solicitud: "+(e.data.message||"Error desconocido"));closeModal(),$("#select-all-pendientes").prop("checked",!1),$("#tabla-pendientes .bulk-checkbox").prop("checked",!1)}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()})});function closeModal(){$("#ga-modal-confirmacion").fadeOut(200),$("#ga-modal-confirmar").text("Confirmar y Enviar").prop("disabled",!1),$("#ga-modal-cancelar").prop("disabled",!1),approvalData={}}function actualizarUIAprobacion(e){var t='<tr data-curso="'+e.nombre_curso+'"><td><strong>'+e.matricula+"</strong></td><td>"+e.nombre+"</td><td>"+e.cedula+"</td><td>"+e.email+"</td><td>"+e.telefono+"</td><td>"+e.nombre_curso+"</td></tr>";$("#tabla-matriculados .no-results").remove(),$("#tabla-matriculados tbody").append(t)}function checkEmptyTable(e,t,o){0===$(e+" tbody tr:not(.no-results-search)").length&&!$(e+" .no-results").length&&$(e+" tbody").append('<tr class="no-results"><td colspan="'+t+'">'+o+"</td></tr>")}$("#ga-modal-cancelar, .ga-modal").on("click",function(e){(e.target==this||$(this).is("#ga-modal-cancelar"))&&closeModal()}),$("#select-all-pendientes").on("click",function(){$("#tabla-pendientes .bulk-checkbox").prop("checked",this.checked)});function actualizarFiltros(e,t,o){var a=$(t).val().toLowerCase(),n=o?$(o).val():"",r=0;$(e+" tbody tr").each(function(){var t=$(this);if(!t.hasClass("no-results")&&!t.hasClass("no-results-search")){var l=t.text().toLowerCase(),d=t.data("curso"),s=(""===a||l.includes(a))&&(!o||""===n||d===n);s?(t.show(),r++):t.hide()}}),$(e+" .no-results-search").remove(),0===r&&!$(e+" .no-results").is(":visible")&&$(e+" tbody").append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>')}function actualizarFiltrosLog(){var e=$("#buscador-log").val().toLowerCase(),t=$("#filtro-usuario-log").val(),o=$("#filtro-fecha-inicio").val(),a=$("#filtro-fecha-fin").val(),n=0;$("#tabla-log tbody tr").each(function(){var r=$(this);if(!r.hasClass("no-results")){var l=r.text().toLowerCase(),d=r.data("usuario"),s=r.data("fecha"),c=(""===e||l.includes(e))&&(""===t||d===t),i=!0;i=o&&a?s>=o&&s<=a:o?s>=o:a?s<=a:!0,c&&i?(r.show(),n++):r.hide()}}),$("#tabla-log .no-results-search").remove(),0===n&&!$("#tabla-log .no-results").is(":visible")&&$("#tabla-log tbody").append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>')}$("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change",function(){actualizarFiltros("#tabla-pendientes","#buscador-estudiantes-pendientes","#filtro-curso-pendientes")}),$("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change",function(){actualizarFiltros("#tabla-matriculados","#buscador-matriculados","#filtro-curso-matriculados")}),$("#buscador-general-estudiantes").on("keyup",function(){actualizarFiltros("#tabla-general-estudiantes","#buscador-general-estudiantes",null)}),$("#buscador-cursos").on("keyup",function(){actualizarFiltros("#tabla-cursos","#buscador-cursos",null)}),$("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change",function(){actualizarFiltrosLog()}),$("#exportar-btn").on("click",function(e){e.preventDefault();var t=$("#export-format-select").val(),o=$("#buscador-matriculados").val(),a=$("#filtro-curso-matriculados").val(),n="<?php echo wp_create_nonce("export_nonce");?>",r=new URL(ajaxurl);"excel"===t?r.searchParams.append("action","exportar_excel"):r.searchParams.append("action","exportar_moodle_csv"),r.searchParams.append("_wpnonce",n),r.searchParams.append("search_term",o),r.searchParams.append("course_filter",a),window.location.href=r.href}),$("#panel-view-cursos").on("click",".ver-matriculados-btn",function(e){e.preventDefault();var t=$(this).data("curso-nombre");$(".panel-view").removeClass("active").hide(),$("#panel-view-lista_matriculados").addClass("active").show(),$("#filtro-curso-matriculados").val(t).change(),$("#buscador-matriculados").val("")}),$("#buscador-pagos").on("keyup",function(){actualizarFiltros("#tabla-pagos","#buscador-pagos",null)});
-            $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
-                var studentId = $(this).data('estudiante-id');
-                var profileContainer = $("#sga-student-profile-content");
-                profileContainer.html('<div class="sga-profile-loading"><div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>Cargando perfil del estudiante...</div>');
-                $(".panel-view.active").fadeOut(200, function() {
-                    $(this).removeClass("active");
-                    $("#panel-view-perfil_estudiante").fadeIn(200).addClass("active");
-                });
-                $.post(ajaxurl, {
-                    action: 'sga_get_student_profile_data',
-                    _ajax_nonce: '<?php echo wp_create_nonce("sga_get_profile_nonce"); ?>',
-                    student_id: studentId
-                }).done(function(response) {
-                    if (response.success) {
-                        profileContainer.html(response.data.html);
-                    } else {
-                        profileContainer.html('<div class="sga-profile-error">Error al cargar el perfil: ' + response.data.message + '</div>');
-                    }
-                }).fail(function() {
-                    profileContainer.html('<div class="sga-profile-error">Error de comunicación con el servidor.</div>');
-                });
-            });
-            $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() {
-                $(".panel-view.active").fadeOut(200, function() {
-                    $(this).removeClass("active");
-                    $("#panel-view-estudiantes").fadeIn(200).addClass("active");
-                });
-            });
-            $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
-                var btn = $(this);
-                btn.text('Guardando...').prop('disabled', true);
-                var studentId = btn.data('student-id');
-                var profileData = {
-                    nombre_completo: $('#sga-profile-nombre_completo').val(),
-                    cedula: $('#sga-profile-cedula').val(),
-                    email: $('#sga-profile-email').val(),
-                    telefono: $('#sga-profile-telefono').val(),
-                    direccion: $('#sga-profile-direccion').val(),
-                    cursos: []
-                };
-                $('#sga-profile-cursos-tbody tr').each(function() {
-                    var row = $(this);
-                    profileData.cursos.push({
-                        row_index: row.data('row-index'),
-                        estado: row.find('.sga-profile-curso-estado').val()
-                    });
-                });
-                $.post(ajaxurl, {
-                    action: 'sga_update_student_profile_data',
-                    _ajax_nonce: '<?php echo wp_create_nonce("sga_update_profile_nonce"); ?>',
-                    student_id: studentId,
-                    profile_data: profileData
-                }).done(function(response) {
-                    if (response.success) {
-                        alert('Perfil actualizado correctamente.');
-                    } else {
-                        alert('Error al guardar: ' + response.data.message);
-                    }
-                    btn.text('Guardar Cambios').prop('disabled', false);
-                }).fail(function() {
-                    alert('Error de comunicación al guardar.');
-                    btn.text('Guardar Cambios').prop('disabled', false);
-                });
-            });
-            $('#sga-email-recipient-group').on('change', function() {
-                var selectedGroup = $(this).val();
-                if (selectedGroup === 'por_curso') {
-                    $('#sga-curso-selector-group').slideDown();
-                    $('#sga-estudiantes-especificos-group').slideUp();
-                } else if (selectedGroup === 'especificos') {
-                    $('#sga-curso-selector-group').slideUp();
-                    $('#sga-estudiantes-especificos-group').slideDown();
-                } else {
-                    $('#sga-curso-selector-group').slideUp();
-                    $('#sga-estudiantes-especificos-group').slideUp();
+            jQuery(document).ready(function($) {
+                var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
+                var approvalData = {};
+                var inscriptionsChart;
+
+                function setDynamicDateTime() {
+                    if (!$("#dynamic-date").length) return;
+                    const now = new Date();
+                    const dateFormatter = new Intl.DateTimeFormat('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    const timeFormatter = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                    let formattedDate = dateFormatter.format(now);
+                    formattedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+                    const formattedTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                    $("#dynamic-date").text(formattedDate);
+                    $("#dynamic-time").text(formattedTime);
                 }
-            });
-            $('#sga-estudiantes-search').on('keyup', function() {
-                var searchTerm = $(this).val().toLowerCase();
-                $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
-                    var itemText = $(this).data('search-term');
-                    if (itemText.includes(searchTerm)) {
-                        $(this).show();
-                    } else {
-                        $(this).hide();
-                    }
-                });
-            });
-            $('#sga-send-bulk-email-btn').on('click', function() {
-                var btn = $(this);
-                var statusDiv = $('#sga-email-status');
-                var editorContent = typeof tinymce !== 'undefined' && tinymce.get('sga-email-body') ? tinymce.get('sga-email-body').getContent() : $('#sga-email-body').val();
+                setDynamicDateTime();
+                setInterval(setDynamicDateTime, 1000);
 
-                if (!$('#sga-email-subject').val() || !editorContent) {
-                    alert('Por favor, completa el asunto y el mensaje.');
-                    return;
-                }
-
-                btn.prop('disabled', true).siblings('.spinner').addClass('is-active');
-                statusDiv.hide().removeClass('success error');
-                
-                var recipientGroup = $('#sga-email-recipient-group').val();
-                var postData = {
-                    action: 'sga_send_bulk_email',
-                    _ajax_nonce: '<?php echo wp_create_nonce("sga_send_bulk_email_nonce"); ?>',
-                    recipient_group: recipientGroup,
-                    curso: $('#sga-email-curso-select').val(),
-                    subject: $('#sga-email-subject').val(),
-                    body: editorContent,
-                };
-
-                if (recipientGroup === 'especificos') {
-                    var selectedStudents = [];
-                    $('.sga-specific-student-checkbox:checked').each(function() {
-                        selectedStudents.push($(this).val());
-                    });
-
-                    if (selectedStudents.length === 0) {
-                        alert('Por favor, selecciona al menos un estudiante.');
-                        btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                $("#gestion-academica-app-container").on("click", ".panel-nav-link", function(e) {
+                    e.preventDefault();
+                    var view = $(this).data("view");
+                    var activePanel = $(".panel-view.active");
+                    if (activePanel.is("#panel-view-" + view)) {
                         return;
                     }
-                    postData.student_ids = JSON.stringify(selectedStudents);
-                }
-
-                $.post(ajaxurl, postData).done(function(response) {
-                    if (response.success) {
-                        statusDiv.addClass('success').html(response.data.message).slideDown();
-                        $('#sga-email-subject').val('');
-                        if (typeof tinymce !== 'undefined' && tinymce.get('sga-email-body')) {
-                            tinymce.get('sga-email-body').setContent('');
-                        } else {
-                            $('#sga-email-body').val('');
+                    activePanel.fadeOut(200, function() {
+                        $(this).removeClass("active");
+                        $("#panel-view-" + view).fadeIn(200).addClass("active");
+                        if (view === 'reportes') {
+                            renderInscriptionsChart();
                         }
+                    });
+                });
+
+                $("#tabla-pendientes").on("click", ".aprobar-btn", function() {
+                    var btn = $(this);
+                    approvalData = {
+                        type: 'single',
+                        nonce: btn.data('nonce'),
+                        post_id: btn.data('postid'),
+                        row_index: btn.data('rowindex'),
+                        cedula: btn.data('cedula'),
+                        nombre: btn.data('nombre'),
+                        element: btn
+                    };
+                    $("#ga-modal-confirmacion").fadeIn(200);
+                });
+
+                $("#apply-bulk-action").on("click", function() {
+                    if ($("#bulk-action-select").val() !== 'aprobar') {
+                        alert('Por favor, selecciona una acción válida.');
+                        return;
+                    }
+                    var seleccionados = [];
+                    $("#tabla-pendientes .bulk-checkbox:checked").each(function() {
+                        var checkbox = $(this);
+                        seleccionados.push({
+                            post_id: checkbox.data('postid'),
+                            row_index: checkbox.data('rowindex')
+                        });
+                    });
+                    if (seleccionados.length > 0) {
+                        approvalData = {
+                            type: 'bulk',
+                            nonce: '<?php echo wp_create_nonce("aprobar_bulk_nonce"); ?>',
+                            seleccionados: seleccionados,
+                            element: $(this)
+                        };
+                        $("#ga-modal-confirmacion").fadeIn(200);
                     } else {
-                        statusDiv.addClass('error').html('Error: ' + response.data.message).slideDown();
-                    }
-                }).fail(function() {
-                    statusDiv.addClass('error').html('Error de comunicación con el servidor.').slideDown();
-                }).always(function() {
-                    btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
-                });
-            });
-
-            // Reports View Logic
-            $('#report_type').on('change', function() {
-                const reportType = $(this).val();
-                const courseFilter = $('#report-curso-filter-container');
-                if (reportType === 'matriculados' || reportType === 'pendientes') {
-                    courseFilter.slideDown();
-                } else {
-                    courseFilter.slideUp();
-                }
-            });
-
-            function renderInscriptionsChart() {
-                if (inscriptionsChart) {
-                    inscriptionsChart.destroy();
-                }
-                var ctx = document.getElementById('inscriptionsChart').getContext('2d');
-                // Dummy data for now. Replace with AJAX call.
-                const labels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul'];
-                const data = {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Inscripciones por Mes',
-                        data: [65, 59, 80, 81, 56, 55, 40],
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderColor: 'rgba(79, 70, 229, 1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }]
-                };
-                inscriptionsChart = new Chart(ctx, {
-                    type: 'line',
-                    data: data,
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true } }
+                        alert('Por favor, selecciona al menos un estudiante.');
                     }
                 });
-            }
-        });
+
+                $("#ga-modal-confirmar").on("click", function() {
+                    var btn = $(this);
+                    btn.text('Procesando...').prop('disabled', true);
+                    $("#ga-modal-cancelar").prop('disabled', true);
+
+                    if (approvalData.type === 'single') {
+                        $.post(ajaxurl, {
+                            action: 'aprobar_para_matriculacion',
+                            _ajax_nonce: approvalData.nonce,
+                            post_id: approvalData.post_id,
+                            row_index: approvalData.row_index,
+                            cedula: approvalData.cedula,
+                            nombre: approvalData.nombre
+                        }).done(function(response) {
+                            if (response.success) {
+                                actualizarUIAprobacion(response.data);
+                                approvalData.element.closest('tr').fadeOut(500, function() {
+                                    $(this).remove();
+                                    checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                });
+                            } else {
+                                alert('Hubo un error: ' + (response.data || 'Error desconocido'));
+                            }
+                            closeModal();
+                        }).fail(function(jqXHR, textStatus, errorThrown) {
+                            console.error("AJAX Error:", textStatus, errorThrown);
+                            alert('Hubo un error de comunicación con el servidor.');
+                            closeModal();
+                        });
+                    } else if (approvalData.type === 'bulk') {
+                        $.post(ajaxurl, {
+                            action: 'aprobar_seleccionados',
+                            _ajax_nonce: approvalData.nonce,
+                            seleccionados: approvalData.seleccionados
+                        }).done(function(response) {
+                            if (response.success) {
+                                if (response.data.approved && response.data.approved.length > 0) {
+                                    response.data.approved.forEach(function(estudiante) {
+                                        actualizarUIAprobacion(estudiante);
+                                        $('#tabla-pendientes .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
+                                            $(this).remove();
+                                            checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                        });
+                                    });
+                                }
+                                if (response.data.failed && response.data.failed.length > 0) {
+                                    var errorMsg = 'No se pudo aprobar a ' + response.data.failed.length + ' estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.';
+                                    alert(errorMsg);
+                                    console.log("Estudiantes no aprobados:", response.data.failed);
+                                }
+                            } else {
+                                alert('Hubo un error al procesar la solicitud: ' + (response.data.message || 'Error desconocido'));
+                            }
+                            closeModal();
+                            $("#select-all-pendientes").prop("checked", false);
+                            $("#tabla-pendientes .bulk-checkbox").prop("checked", false);
+                        }).fail(function(jqXHR, textStatus, errorThrown) {
+                            console.error("AJAX Error:", textStatus, errorThrown);
+                            alert('Hubo un error de comunicación con el servidor.');
+                            closeModal();
+                        });
+                    }
+                });
+
+                function closeModal() {
+                    $("#ga-modal-confirmacion").fadeOut(200);
+                    $("#ga-modal-confirmar").text('Confirmar y Enviar').prop('disabled', false);
+                    $("#ga-modal-cancelar").prop('disabled', false);
+                    approvalData = {};
+                }
+
+                function actualizarUIAprobacion(data) {
+                    var newRow = '<tr data-curso="' + data.nombre_curso + '">' +
+                        '<td><strong>' + data.matricula + '</strong></td>' +
+                        '<td>' + data.nombre + '</td>' +
+                        '<td>' + data.cedula + '</td>' +
+                        '<td>' + data.email + '</td>' +
+                        '<td>' + data.telefono + '</td>' +
+                        '<td>' + data.nombre_curso + '</td>' +
+                        '</tr>';
+                    $("#tabla-matriculados .no-results").remove();
+                    $("#tabla-matriculados tbody").append(newRow);
+                }
+
+                function checkEmptyTable(tableId, colspan, message) {
+                    if ($(tableId + ' tbody tr:not(.no-results-search)').length === 0 && !$(tableId + ' .no-results').length) {
+                        $(tableId + ' tbody').append('<tr class="no-results"><td colspan="' + colspan + '">' + message + '</td></tr>');
+                    }
+                }
+
+                $("#ga-modal-cancelar, .ga-modal").on("click", function(e) {
+                    if (e.target == this || $(this).is("#ga-modal-cancelar")) {
+                        closeModal();
+                    }
+                });
+
+                $("#select-all-pendientes").on("click", function() {
+                    $("#tabla-pendientes .bulk-checkbox").prop('checked', this.checked);
+                });
+
+                function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
+                    var searchTerm = $(searchInputSelector).val().toLowerCase();
+                    var courseFilter = courseFilterSelector ? $(courseFilterSelector).val() : '';
+                    var rowsFound = 0;
+
+                    $(tableSelector + ' tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
+                            return;
+                        }
+
+                        var rowText = row.text().toLowerCase();
+                        var rowCourse = row.data('curso');
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesCourse = (!courseFilterSelector || courseFilter === '' || rowCourse === courseFilter);
+
+                        if (matchesSearch && matchesCourse) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+
+                    $(tableSelector + ' .no-results-search').remove();
+                    if (rowsFound === 0 && !$(tableSelector + ' .no-results').is(':visible')) {
+                        $(tableSelector + ' tbody').append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
+                
+                function filterLogTable() {
+                    var searchTerm = $('#buscador-log').val().toLowerCase();
+                    var userFilter = $('#filtro-usuario-log').val();
+                    var dateFrom = $('#filtro-fecha-inicio').val();
+                    var dateTo = $('#filtro-fecha-fin').val();
+                    var rowsFound = 0;
+
+                    $('#tabla-log tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results')) {
+                            return;
+                        }
+                        var rowText = row.text().toLowerCase();
+                        var rowUser = row.data('usuario');
+                        var rowDate = row.data('fecha');
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesUser = (userFilter === '' || rowUser === userFilter);
+                        var matchesDate = true;
+                        
+                        if(dateFrom && dateTo) {
+                            matchesDate = rowDate >= dateFrom && rowDate <= dateTo;
+                        } else if (dateFrom) {
+                            matchesDate = rowDate >= dateFrom;
+                        } else if (dateTo) {
+                            matchesDate = rowDate <= dateTo;
+                        }
+
+                        if (matchesSearch && matchesUser && matchesDate) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+                    
+                    $('#tabla-log .no-results-search').remove();
+                    if (rowsFound === 0 && !$('#tabla-log .no-results').is(':visible')) {
+                         $('#tabla-log tbody').append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
+
+                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change", function() { filterTable('#tabla-pendientes', '#buscador-estudiantes-pendientes', '#filtro-curso-pendientes'); });
+                $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
+                $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
+                
+                $("#buscador-cursos").on("keyup", function() {
+                    var searchTerm = $(this).val().toLowerCase();
+                    $('.curso-card, #tabla-cursos-lista tbody tr').each(function() {
+                        var element = $(this);
+                        var elementText = element.data('search-term');
+                        if (elementText.includes(searchTerm)) {
+                            element.show();
+                        } else {
+                            element.hide();
+                        }
+                    });
+                });
+
+                $("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change", function() { filterLogTable(); });
+
+                $("#exportar-btn").on("click", function(e) {
+                    e.preventDefault();
+                    var format = $('#export-format-select').val();
+                    var searchTerm = $('#buscador-matriculados').val();
+                    var courseFilter = $('#filtro-curso-matriculados').val();
+                    var nonce = '<?php echo wp_create_nonce("export_nonce"); ?>';
+                    var url = new URL(ajaxurl);
+                    url.searchParams.append('action', format === 'excel' ? 'exportar_excel' : 'exportar_moodle_csv');
+                    url.searchParams.append('_wpnonce', nonce);
+                    url.searchParams.append('search_term', searchTerm);
+                    url.searchParams.append('course_filter', courseFilter);
+                    window.location.href = url.href;
+                });
+
+                $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) {
+                    e.preventDefault();
+                    var courseName = $(this).data('curso-nombre');
+                    $('.panel-view').removeClass('active').hide();
+                    $('#panel-view-lista_matriculados').addClass('active').show();
+                    $('#filtro-curso-matriculados').val(courseName).change();
+                    $('#buscador-matriculados').val('');
+                });
+                
+                $("#buscador-pagos").on("keyup", function() { filterTable('#tabla-pagos', '#buscador-pagos', null); });
+
+                $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
+                    var studentId = $(this).data('estudiante-id');
+                    var profileContainer = $("#sga-student-profile-content");
+                    profileContainer.html('<div class="sga-profile-loading"><div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>Cargando perfil del estudiante...</div>');
+                    
+                    $(".panel-view.active").fadeOut(200, function() {
+                        $(this).removeClass("active");
+                        $("#panel-view-perfil_estudiante").fadeIn(200).addClass("active");
+                    });
+
+                    $.post(ajaxurl, {
+                        action: 'sga_get_student_profile_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_get_profile_nonce"); ?>',
+                        student_id: studentId
+                    }).done(function(response) {
+                        if (response.success) {
+                            profileContainer.html(response.data.html);
+                        } else {
+                            profileContainer.html('<div class="sga-profile-error">Error al cargar el perfil: ' + response.data.message + '</div>');
+                        }
+                    }).fail(function() {
+                        profileContainer.html('<div class="sga-profile-error">Error de comunicación con el servidor.</div>');
+                    });
+                });
+
+                $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() {
+                    $(".panel-view.active").fadeOut(200, function() {
+                        $(this).removeClass("active");
+                        $("#panel-view-estudiantes").fadeIn(200).addClass("active");
+                    });
+                });
+
+                $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
+                    var btn = $(this);
+                    btn.text('Guardando...').prop('disabled', true);
+                    var studentId = btn.data('student-id');
+                    var profileData = {
+                        nombre_completo: $('#sga-profile-nombre_completo').val(),
+                        cedula: $('#sga-profile-cedula').val(),
+                        email: $('#sga-profile-email').val(),
+                        telefono: $('#sga-profile-telefono').val(),
+                        direccion: $('#sga-profile-direccion').val(),
+                        cursos: []
+                    };
+                    $('#sga-profile-cursos-tbody tr').each(function() {
+                        var row = $(this);
+                        profileData.cursos.push({
+                            row_index: row.data('row-index'),
+                            estado: row.find('.sga-profile-curso-estado').val()
+                        });
+                    });
+
+                    $.post(ajaxurl, {
+                        action: 'sga_update_student_profile_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_update_profile_nonce"); ?>',
+                        student_id: studentId,
+                        profile_data: profileData
+                    }).done(function(response) {
+                        if (response.success) {
+                            alert('Perfil actualizado correctamente.');
+                        } else {
+                            alert('Error al guardar: ' + response.data.message);
+                        }
+                        btn.text('Guardar Cambios').prop('disabled', false);
+                    }).fail(function() {
+                        alert('Error de comunicación al guardar.');
+                        btn.text('Guardar Cambios').prop('disabled', false);
+                    });
+                });
+
+                $('#sga-email-recipient-group').on('change', function() {
+                    var selectedGroup = $(this).val();
+                    if (selectedGroup === 'por_curso') {
+                        $('#sga-curso-selector-group').slideDown();
+                        $('#sga-estudiantes-especificos-group').slideUp();
+                    } else if (selectedGroup === 'especificos') {
+                        $('#sga-curso-selector-group').slideUp();
+                        $('#sga-estudiantes-especificos-group').slideDown();
+                    } else {
+                        $('#sga-curso-selector-group').slideUp();
+                        $('#sga-estudiantes-especificos-group').slideUp();
+                    }
+                });
+
+                $('#sga-estudiantes-search').on('keyup', function() {
+                    var searchTerm = $(this).val().toLowerCase();
+                    $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
+                        var itemText = $(this).data('search-term');
+                        if (itemText.includes(searchTerm)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                });
+
+                $('#sga-send-bulk-email-btn').on('click', function() {
+                    var btn = $(this);
+                    var statusDiv = $('#sga-email-status');
+                    var editorContent = typeof tinymce !== 'undefined' && tinymce.get('sga-email-body') ? tinymce.get('sga-email-body').getContent() : $('#sga-email-body').val();
+
+                    if (!$('#sga-email-subject').val() || !editorContent) {
+                        alert('Por favor, completa el asunto y el mensaje.');
+                        return;
+                    }
+
+                    btn.prop('disabled', true).siblings('.spinner').addClass('is-active');
+                    statusDiv.hide().removeClass('success error');
+                    
+                    var recipientGroup = $('#sga-email-recipient-group').val();
+                    var postData = {
+                        action: 'sga_send_bulk_email',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_send_bulk_email_nonce"); ?>',
+                        recipient_group: recipientGroup,
+                        curso: $('#sga-email-curso-select').val(),
+                        subject: $('#sga-email-subject').val(),
+                        body: editorContent,
+                    };
+
+                    if (recipientGroup === 'especificos') {
+                        var selectedStudents = [];
+                        $('.sga-specific-student-checkbox:checked').each(function() {
+                            selectedStudents.push($(this).val());
+                        });
+
+                        if (selectedStudents.length === 0) {
+                            alert('Por favor, selecciona al menos un estudiante.');
+                            btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                            return;
+                        }
+                        postData.student_ids = JSON.stringify(selectedStudents);
+                    }
+
+                    $.post(ajaxurl, postData).done(function(response) {
+                        if (response.success) {
+                            statusDiv.addClass('success').html(response.data.message).slideDown();
+                            $('#sga-email-subject').val('');
+                            if (typeof tinymce !== 'undefined' && tinymce.get('sga-email-body')) {
+                                tinymce.get('sga-email-body').setContent('');
+                            } else {
+                                $('#sga-email-body').val('');
+                            }
+                        } else {
+                            statusDiv.addClass('error').html('Error: ' + response.data.message).slideDown();
+                        }
+                    }).fail(function() {
+                        statusDiv.addClass('error').html('Error de comunicación con el servidor.').slideDown();
+                    }).always(function() {
+                        btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                    });
+                });
+
+                // Reports View Logic
+                $('#report_type').on('change', function() {
+                    const reportType = $(this).val();
+                    const courseFilter = $('#report-curso-filter-container');
+                    if (reportType === 'matriculados' || reportType === 'pendientes') {
+                        courseFilter.slideDown();
+                    } else {
+                        courseFilter.slideUp();
+                    }
+                });
+                
+                $('.view-switcher').on('click', '.view-btn', function(e) {
+                    e.preventDefault();
+                    var $this = $(this);
+                    if ($this.hasClass('active')) {
+                        return;
+                    }
+
+                    var targetView = $this.data('view');
+                    
+                    $('.view-btn').removeClass('active');
+                    $this.addClass('active');
+
+                    if (targetView === 'grid') {
+                        $('.cursos-list-view').fadeOut(200, function() {
+                            $('.cursos-grid').fadeIn(200);
+                        });
+                    } else {
+                        $('.cursos-grid').fadeOut(200, function() {
+                            $('.cursos-list-view').fadeIn(200);
+                        });
+                    }
+                });
+
+                function renderInscriptionsChart() {
+                    if (inscriptionsChart) {
+                        inscriptionsChart.destroy();
+                    }
+                    var ctx = document.getElementById('inscriptionsChart').getContext('2d');
+                    var chartContainer = $('.chart-container');
+                    
+                    chartContainer.html('<canvas id="inscriptionsChart"></canvas><div class="chart-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);"><span class="spinner is-active"></span></div>');
+                    ctx = document.getElementById('inscriptionsChart').getContext('2d');
+
+                    $.post(ajaxurl, {
+                        action: 'sga_get_report_chart_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_chart_nonce"); ?>'
+                    }).done(function(response) {
+                        chartContainer.find('.chart-loading').remove();
+                        if(response.success) {
+                            const data = {
+                                labels: response.data.labels,
+                                datasets: [{
+                                    label: 'Inscripciones por Mes',
+                                    data: response.data.data,
+                                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                                    borderColor: 'rgba(79, 70, 229, 1)',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    fill: true
+                                }]
+                            };
+                            inscriptionsChart = new Chart(ctx, {
+                                type: 'line',
+                                data: data,
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    scales: { 
+                                        y: { 
+                                            beginAtZero: true,
+                                            ticks: {
+                                                stepSize: 1 
+                                            }
+                                        } 
+                                    }
+                                }
+                            });
+                        } else {
+                            chartContainer.html('<p style="text-align:center;color:var(--sga-red);">No se pudieron cargar los datos del gráfico.</p>');
+                        }
+                    }).fail(function() {
+                        chartContainer.find('.chart-loading').remove();
+                        chartContainer.html('<p style="text-align:center;color:var(--sga-red);">Error al contactar al servidor para los datos del gráfico.</p>');
+                    });
+                }
+            });
         </script>
         <?php
     }
