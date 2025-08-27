@@ -187,37 +187,50 @@ class SGA_Ajax {
         $curso_especifico = sanitize_text_field($_POST['curso']);
         $subject = sanitize_text_field($_POST['subject']);
         $body_html = wp_kses_post(stripslashes_deep($_POST['body']));
+        $specific_student_ids = isset($_POST['student_ids']) && is_array($_POST['student_ids']) ? array_map('intval', $_POST['student_ids']) : [];
 
         $recipients = [];
-        $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
 
-        if ($estudiantes && function_exists('get_field')) {
-            foreach ($estudiantes as $estudiante) {
-                $email = get_field('email', $estudiante->ID);
-                if (!is_email($email)) continue;
-
-                $cursos_inscritos = get_field('cursos_inscritos', $estudiante->ID) ?: [];
-                $is_matriculado = false;
-                $is_pendiente = false;
-                $is_in_curso = false;
-
-                foreach ($cursos_inscritos as $curso) {
-                    if ($curso['estado'] === 'Matriculado') $is_matriculado = true;
-                    if ($curso['estado'] === 'Inscrito') $is_pendiente = true;
-                    if ($recipient_group === 'por_curso' && $curso['nombre_curso'] === $curso_especifico) {
-                        $is_in_curso = true;
+        if ($recipient_group === 'especificos') {
+            if (!empty($specific_student_ids)) {
+                foreach ($specific_student_ids as $student_id) {
+                    $email = get_field('email', $student_id);
+                    if (is_email($email) && !in_array($email, $recipients)) {
+                        $recipients[] = $email;
                     }
                 }
+            }
+        } else {
+            $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
 
-                $add_email = false;
-                switch ($recipient_group) {
-                    case 'todos': $add_email = true; break;
-                    case 'matriculados': if ($is_matriculado) $add_email = true; break;
-                    case 'pendientes': if ($is_pendiente) $add_email = true; break;
-                    case 'por_curso': if ($is_in_curso) $add_email = true; break;
-                }
-                if ($add_email && !in_array($email, $recipients)) {
-                    $recipients[] = $email;
+            if ($estudiantes && function_exists('get_field')) {
+                foreach ($estudiantes as $estudiante) {
+                    $email = get_field('email', $estudiante->ID);
+                    if (!is_email($email)) continue;
+
+                    $cursos_inscritos = get_field('cursos_inscritos', $estudiante->ID) ?: [];
+                    $is_matriculado = false;
+                    $is_pendiente = false;
+                    $is_in_curso = false;
+
+                    foreach ($cursos_inscritos as $curso) {
+                        if ($curso['estado'] === 'Matriculado') $is_matriculado = true;
+                        if ($curso['estado'] === 'Inscrito') $is_pendiente = true;
+                        if ($recipient_group === 'por_curso' && $curso['nombre_curso'] === $curso_especifico) {
+                            $is_in_curso = true;
+                        }
+                    }
+
+                    $add_email = false;
+                    switch ($recipient_group) {
+                        case 'todos': $add_email = true; break;
+                        case 'matriculados': if ($is_matriculado) $add_email = true; break;
+                        case 'pendientes': if ($is_pendiente) $add_email = true; break;
+                        case 'por_curso': if ($is_in_curso) $add_email = true; break;
+                    }
+                    if ($add_email && !in_array($email, $recipients)) {
+                        $recipients[] = $email;
+                    }
                 }
             }
         }
@@ -240,3 +253,4 @@ class SGA_Ajax {
         wp_send_json_success(['message' => "Proceso completado. Se enviaron {$sent_count} correos."]);
     }
 }
+
