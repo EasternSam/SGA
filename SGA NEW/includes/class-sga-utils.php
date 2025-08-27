@@ -454,4 +454,50 @@ class SGA_Utils {
         self::_log_activity($log_title, "El reporte '{$subject}' fue procesado para {$recipient}.");
         return $sent;
     }
+
+    /**
+     * Reemplaza etiquetas dinámicas en una cadena de texto con datos del estudiante.
+     * @param string $content El contenido con las etiquetas.
+     * @param int $student_id El ID del estudiante.
+     * @param string $context_group El grupo de destinatarios (ej. 'por_curso').
+     * @param string $context_course_name El nombre del curso si el contexto lo requiere.
+     * @return string El contenido con las etiquetas reemplazadas.
+     */
+    public static function _replace_dynamic_tags($content, $student_id, $context_group = '', $context_course_name = '') {
+        $student_post = get_post($student_id);
+        if (!$student_post) return $content;
+
+        $cedula = get_field('cedula', $student_id);
+
+        $replacements = [
+            '[nombre_estudiante]' => $student_post->post_title,
+            '[cedula]' => $cedula ? $cedula : '',
+        ];
+
+        // Etiquetas que dependen del contexto del curso
+        $matricula = 'N/A';
+        $nombre_curso = 'N/A';
+
+        if ($context_group === 'por_curso' && !empty($context_course_name)) {
+            $cursos_inscritos = get_field('cursos_inscritos', $student_id);
+            if ($cursos_inscritos) {
+                foreach ($cursos_inscritos as $curso) {
+                    if ($curso['nombre_curso'] === $context_course_name) {
+                        $matricula = !empty($curso['matricula']) ? $curso['matricula'] : 'Pendiente';
+                        $nombre_curso = $curso['nombre_curso'];
+                        break; 
+                    }
+                }
+            }
+        }
+        
+        $replacements['[nombre_curso]'] = $nombre_curso;
+        $replacements['[matricula]'] = $matricula;
+
+        foreach ($replacements as $tag => $value) {
+            $content = str_replace($tag, $value, $content);
+        }
+
+        return $content;
+    }
 }
