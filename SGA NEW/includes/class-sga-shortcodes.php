@@ -691,7 +691,6 @@ class SGA_Shortcodes {
                     curso: $('#sga-email-curso-select').val(),
                     subject: $('#sga-email-subject').val(),
                     body: editorContent,
-                    student_ids: []
                 };
 
                 if (recipientGroup === 'especificos') {
@@ -705,7 +704,7 @@ class SGA_Shortcodes {
                         btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
                         return;
                     }
-                    postData.student_ids = selectedStudents;
+                    postData.student_ids = JSON.stringify(selectedStudents);
                 }
 
                 $.post(ajaxurl, postData).done(function(response) {
@@ -731,3 +730,4 @@ class SGA_Shortcodes {
         <?php
     }
 }
+" in the Canv
