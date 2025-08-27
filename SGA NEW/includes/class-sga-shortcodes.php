@@ -508,6 +508,7 @@ class SGA_Shortcodes {
 
     public function render_view_comunicacion() {
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        $all_students = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Comunicación y Correo Masivo</h1>
@@ -520,6 +521,7 @@ class SGA_Shortcodes {
                         <option value="matriculados">Estudiantes Matriculados</option>
                         <option value="pendientes">Estudiantes Pendientes de Aprobación</option>
                         <option value="por_curso">Estudiantes por Curso Específico</option>
+                        <option value="especificos">Estudiantes Específicos (Selección Manual)</option>
                         <option value="manual" style="display: none;">Selección Manual</option>
                     </select>
                     <input type="hidden" id="sga-manual-recipient-ids" name="manual_ids">
@@ -531,6 +533,22 @@ class SGA_Shortcodes {
                             <option value="<?php echo esc_attr($curso->post_title); ?>"><?php echo esc_html($curso->post_title); ?></option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+                <div class="sga-form-group" id="sga-estudiantes-especificos-group" style="display: none;">
+                    <label for="sga-estudiantes-search"><strong>Seleccionar Estudiantes:</strong></label>
+                    <input type="text" id="sga-estudiantes-search" placeholder="Buscar estudiante por nombre o cédula...">
+                    <div id="sga-estudiantes-checkbox-list" style="height: 200px; overflow-y: auto; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; margin-top: 10px;">
+                        <?php foreach ($all_students as $student):
+                            $cedula = get_field('cedula', $student->ID);
+                        ?>
+                            <div class="sga-student-item" data-search-term="<?php echo esc_attr(strtolower($student->post_title . ' ' . $cedula)); ?>">
+                                <label>
+                                    <input type="checkbox" class="sga-specific-student-checkbox" value="<?php echo esc_attr($student->ID); ?>">
+                                    <?php echo esc_html($student->post_title); ?> (Cédula: <?php echo esc_html($cedula); ?>)
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
                 <div class="sga-form-group">
                     <label for="sga-email-subject"><strong>Asunto:</strong></label>
@@ -629,11 +647,28 @@ class SGA_Shortcodes {
                 });
             });
             $('#sga-email-recipient-group').on('change', function() {
-                if ($(this).val() === 'por_curso') {
+                var selectedGroup = $(this).val();
+                if (selectedGroup === 'por_curso') {
                     $('#sga-curso-selector-group').slideDown();
+                    $('#sga-estudiantes-especificos-group').slideUp();
+                } else if (selectedGroup === 'especificos') {
+                    $('#sga-curso-selector-group').slideUp();
+                    $('#sga-estudiantes-especificos-group').slideDown();
                 } else {
                     $('#sga-curso-selector-group').slideUp();
+                    $('#sga-estudiantes-especificos-group').slideUp();
                 }
+            });
+            $('#sga-estudiantes-search').on('keyup', function() {
+                var searchTerm = $(this).val().toLowerCase();
+                $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
+                    var itemText = $(this).data('search-term');
+                    if (itemText.includes(searchTerm)) {
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
             });
             $('#sga-send-bulk-email-btn').on('click', function() {
                 var btn = $(this);
@@ -647,15 +682,33 @@ class SGA_Shortcodes {
 
                 btn.prop('disabled', true).siblings('.spinner').addClass('is-active');
                 statusDiv.hide().removeClass('success error');
-
-                $.post(ajaxurl, {
+                
+                var recipientGroup = $('#sga-email-recipient-group').val();
+                var postData = {
                     action: 'sga_send_bulk_email',
                     _ajax_nonce: '<?php echo wp_create_nonce("sga_send_bulk_email_nonce"); ?>',
-                    recipient_group: $('#sga-email-recipient-group').val(),
+                    recipient_group: recipientGroup,
                     curso: $('#sga-email-curso-select').val(),
                     subject: $('#sga-email-subject').val(),
-                    body: editorContent
-                }).done(function(response) {
+                    body: editorContent,
+                    student_ids: []
+                };
+
+                if (recipientGroup === 'especificos') {
+                    var selectedStudents = [];
+                    $('.sga-specific-student-checkbox:checked').each(function() {
+                        selectedStudents.push($(this).val());
+                    });
+
+                    if (selectedStudents.length === 0) {
+                        alert('Por favor, selecciona al menos un estudiante.');
+                        btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                        return;
+                    }
+                    postData.student_ids = selectedStudents;
+                }
+
+                $.post(ajaxurl, postData).done(function(response) {
                     if (response.success) {
                         statusDiv.addClass('success').html(response.data.message).slideDown();
                         $('#sga-email-subject').val('');
