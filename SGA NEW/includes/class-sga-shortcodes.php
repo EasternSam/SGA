@@ -25,6 +25,9 @@ class SGA_Shortcodes {
         ?>
         <div id="ga-modal-confirmacion" class="ga-modal" style="display:none;">
             <div class="ga-modal-content">
+                <div class="ga-modal-icon-wrapper">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                </div>
                 <h4>Confirmar Aprobación</h4>
                 <p>Se enviará un correo de notificación al estudiante informando que ha sido matriculado.</p>
                 <div class="ga-modal-actions">
@@ -37,15 +40,15 @@ class SGA_Shortcodes {
         <div id="gestion-academica-app-container">
             <div class="gestion-academica-wrapper">
                 <div id="panel-view-principal" class="panel-view active"><?php $this->render_view_principal(); ?></div>
-                <div id="panel-view-matriculacion" class="panel-view" style="display: none;"><?php $this->render_view_matriculacion(); ?></div>
-                <div id="panel-view-enviar_a_matriculacion" class="panel-view" style="display: none;"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
-                <div id="panel-view-lista_matriculados" class="panel-view" style="display: none;"><?php $this->render_view_lista_matriculados(); ?></div>
-                <div id="panel-view-estudiantes" class="panel-view" style="display: none;"><?php $this->render_view_lista_estudiantes(); ?></div>
-                <div id="panel-view-cursos" class="panel-view" style="display: none;"><?php $this->render_view_lista_cursos(); ?></div>
-                <div id="panel-view-registro_pagos" class="panel-view" style="display: none;"><?php $this->render_view_registro_pagos(); ?></div>
-                <div id="panel-view-log" class="panel-view" style="display: none;"><?php $this->render_view_log(); ?></div>
-                <div id="panel-view-perfil_estudiante" class="panel-view" style="display: none;"><?php $this->render_view_perfil_estudiante(); ?></div>
-                <div id="panel-view-comunicacion" class="panel-view" style="display: none;"><?php $this->render_view_comunicacion(); ?></div>
+                <div id="panel-view-matriculacion" class="panel-view"><?php $this->render_view_matriculacion(); ?></div>
+                <div id="panel-view-enviar_a_matriculacion" class="panel-view"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
+                <div id="panel-view-lista_matriculados" class="panel-view"><?php $this->render_view_lista_matriculados(); ?></div>
+                <div id="panel-view-estudiantes" class="panel-view"><?php $this->render_view_lista_estudiantes(); ?></div>
+                <div id="panel-view-cursos" class="panel-view"><?php $this->render_view_lista_cursos(); ?></div>
+                <div id="panel-view-registro_pagos" class="panel-view"><?php $this->render_view_registro_pagos(); ?></div>
+                <div id="panel-view-log" class="panel-view"><?php $this->render_view_log(); ?></div>
+                <div id="panel-view-perfil_estudiante" class="panel-view"><?php $this->render_view_perfil_estudiante(); ?></div>
+                <div id="panel-view-comunicacion" class="panel-view"><?php $this->render_view_comunicacion(); ?></div>
             </div>
         </div>
         <?php
@@ -57,8 +60,6 @@ class SGA_Shortcodes {
      * Renderiza el shortcode de la página de pagos.
      */
     public function render_pagos_page() {
-        // La instancia de la clase de Pagos se crea en SGA_Main,
-        // así que podemos llamar a sus métodos directamente.
         $payments_handler = new SGA_Payments();
         return $payments_handler->render_pagos_page();
     }
@@ -89,35 +90,79 @@ class SGA_Shortcodes {
         $current_user = wp_get_current_user();
         ?>
         <div class="panel-header-info">
-            <div class="header-item user-info">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                <span><?php echo esc_html($current_user->display_name); ?></span>
+            <div class="user-welcome">
+                <p>Bienvenido de nuevo,</p>
+                <h3><?php echo esc_html($current_user->display_name); ?></h3>
             </div>
-            <div class="header-item">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                 <span id="dynamic-date"></span>
-            </div>
-            <div class="header-item">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span id="dynamic-time"></span>
+            <div class="datetime-widget">
+                <div class="date-display" id="dynamic-date"></div>
+                <div class="time-display" id="dynamic-time"></div>
             </div>
         </div>
 
-        <h1 class="panel-title">GESTIÓN ACADÉMICA</h1>
+        <h1 class="panel-title">Panel Principal</h1>
 
         <div class="panel-stats-grid">
-            <div class="stat-card"><span><?php echo $total_estudiantes; ?></span>Estudiantes Totales</div>
-            <div class="stat-card"><span><?php echo $inscripciones_pendientes; ?></span>Inscripciones Pendientes</div>
-            <div class="stat-card"><span><?php echo $total_cursos; ?></span>Cursos Activos</div>
+            <div class="stat-card">
+                <div class="stat-icon students">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $total_estudiantes; ?></span>
+                    <span class="stat-label">Estudiantes Totales</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $inscripciones_pendientes; ?></span>
+                    <span class="stat-label">Inscripciones Pendientes</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon courses">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $total_cursos; ?></span>
+                    <span class="stat-label">Cursos Activos</span>
+                </div>
+            </div>
         </div>
 
         <div class="panel-grid main-menu">
-            <a href="#" data-view="matriculacion" class="panel-card panel-nav-link"><h2>SISTEMA DE MATRICULACIÓN</h2></a>
-            <a href="#" data-view="estudiantes" class="panel-card panel-nav-link"><h2>GESTIÓN DE ESTUDIANTES</h2></a>
-            <a href="#" data-view="cursos" class="panel-card panel-nav-link"><h2>GESTIÓN DE CURSOS</h2></a>
-            <a href="#" data-view="registro_pagos" class="panel-card panel-nav-link"><h2>REGISTRO DE PAGOS</h2></a>
-            <a href="#" data-view="comunicacion" class="panel-card panel-nav-link"><h2>COMUNICACIÓN</h2></a>
-            <a href="#" data-view="log" class="panel-card panel-nav-link"><h2>REGISTRO DE ACTIVIDAD</h2></a>
+            <a href="#" data-view="matriculacion" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4z"/><path d="M20.6 20.4c-.4-3.3-3.8-5.9-8.6-5.9s-8.2 2.6-8.6 5.9"/><path d="M18 18.2c.4-.2.9-.4 1.3-.7"/><path d="M22 13.8c0-.6-.1-1.2-.3-1.8"/><path d="M11.3 2.2c-.4.2-.8.4-1.2.7"/><path d="M2 13.8c0 .6.1 1.2.3 1.8"/><path d="M4.7 17.5c-.4.3-.8.5-1.3.7"/><path d="M12.7 21.8c.4-.2.8-.4 1.2-.7"/></svg></div>
+                <h2>Matriculación</h2>
+                <p>Aprobar y gestionar matrículas</p>
+            </a>
+            <a href="#" data-view="estudiantes" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <h2>Estudiantes</h2>
+                <p>Ver y editar perfiles</p>
+            </a>
+            <a href="#" data-view="cursos" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+                <h2>Cursos</h2>
+                <p>Administrar cursos y horarios</p>
+            </a>
+            <a href="#" data-view="registro_pagos" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+                <h2>Pagos</h2>
+                <p>Consultar historial de pagos</p>
+            </a>
+            <a href="#" data-view="comunicacion" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+                <h2>Comunicación</h2>
+                <p>Enviar correos masivos</p>
+            </a>
+            <a href="#" data-view="log" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
+                <h2>Actividad</h2>
+                <p>Ver registros del sistema</p>
+            </a>
         </div>
         <?php
     }
@@ -125,11 +170,23 @@ class SGA_Shortcodes {
     public function render_view_matriculacion() {
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
-        <h1 class="panel-title">SISTEMA DE MATRICULACIÓN</h1>
+        <h1 class="panel-title">Sistema de Matriculación</h1>
         <div class="panel-grid">
-            <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link"><h2>APROBAR INSCRIPCIONES</h2></a>
-            <a href="#" data-view="lista_matriculados" class="panel-card panel-nav-link"><h2>LISTA DE MATRICULADOS</h2></a>
-            <a href="<?php echo esc_url(site_url('/cursos/')); ?>" target="_blank" class="panel-card"><h2>NUEVA INSCRIPCIÓN</h2></a>
+            <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></div>
+                <h2>Aprobar Inscripciones</h2>
+                <p>Validar y matricular nuevos estudiantes</p>
+            </a>
+            <a href="#" data-view="lista_matriculados" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+                <h2>Lista de Matriculados</h2>
+                <p>Consultar y exportar estudiantes activos</p>
+            </a>
+            <a href="<?php echo esc_url(site_url('/cursos/')); ?>" target="_blank" class="panel-card">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
+                <h2>Nueva Inscripción</h2>
+                <p>Inscribir un estudiante manualmente</p>
+            </a>
         </div>
         <?php
     }
@@ -139,14 +196,16 @@ class SGA_Shortcodes {
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
-        <h1 class="panel-title">APROBAR INSCRIPCIONES PENDIENTES</h1>
+        <h1 class="panel-title">Aprobar Inscripciones Pendientes</h1>
 
         <div class="filtros-tabla">
-            <select name="bulk-action" id="bulk-action-select">
-                <option value="-1">Acciones en lote</option>
-                <option value="aprobar">Aprobar seleccionados</option>
-            </select>
-            <button id="apply-bulk-action" class="button">Aplicar</button>
+            <div class="bulk-actions-wrapper">
+                <select name="bulk-action" id="bulk-action-select">
+                    <option value="-1">Acciones en lote</option>
+                    <option value="aprobar">Aprobar seleccionados</option>
+                </select>
+                <button id="apply-bulk-action" class="button">Aplicar</button>
+            </div>
             <input type="text" id="buscador-estudiantes-pendientes" placeholder="Buscar por nombre, cédula o curso...">
             <select id="filtro-curso-pendientes">
                 <option value="">Todos los cursos</option>
@@ -154,7 +213,7 @@ class SGA_Shortcodes {
                     <option value="<?php echo esc_attr($curso_filtro->post_title); ?>"><?php echo esc_html($curso_filtro->post_title); ?></option>
                 <?php endforeach; ?>
             </select>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=sga-aprobar-inscripciones')); ?>" class="button" target="_blank" style="margin-left: auto;">Gestión Avanzada</a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=sga-aprobar-inscripciones')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
         </div>
 
         <div class="tabla-wrapper">
@@ -213,11 +272,13 @@ class SGA_Shortcodes {
                     <option value="<?php echo esc_attr($curso_filtro->post_title); ?>"><?php echo esc_html($curso_filtro->post_title); ?></option>
                 <?php endforeach; ?>
             </select>
-            <select id="export-format-select">
-                <option value="excel">Exportar a Excel</option>
-                <option value="moodle">Exportar para Moodle (CSV)</option>
-            </select>
-            <button id="exportar-btn" class="button">Exportar</button>
+            <div class="export-actions-wrapper">
+                <select id="export-format-select">
+                    <option value="excel">Exportar a Excel</option>
+                    <option value="moodle">Exportar para Moodle (CSV)</option>
+                </select>
+                <button id="exportar-btn" class="button">Exportar</button>
+            </div>
         </div>
 
         <div class="tabla-wrapper">
@@ -267,7 +328,7 @@ class SGA_Shortcodes {
                 <option value="enviar_correo">Enviar correo a seleccionados</option>
             </select>
             <button id="apply-bulk-action-estudiantes" class="button">Aplicar</button>
-            <input type="text" id="buscador-general-estudiantes" placeholder="Buscar por nombre, cédula o email..." style="margin-left: auto;">
+            <input type="text" id="buscador-general-estudiantes" placeholder="Buscar por nombre, cédula o email...">
         </div>
         <div class="tabla-wrapper">
             <table class="wp-list-table widefat striped" id="tabla-general-estudiantes">
@@ -308,11 +369,8 @@ class SGA_Shortcodes {
 
         <div class="filtros-tabla">
             <input type="text" id="buscador-cursos" placeholder="Buscar por nombre de curso...">
-        </div>
-
-        <div class="panel-grid two-cols">
-            <a href="<?php echo esc_url(admin_url('post-new.php?post_type=curso')); ?>" target="_blank" class="panel-card"><h2>NUEVO CURSO</h2></a>
-            <a href="<?php echo esc_url(admin_url('edit.php?post_type=curso')); ?>" target="_blank" class="panel-card"><h2>EDITAR CURSOS</h2></a>
+             <a href="<?php echo esc_url(admin_url('post-new.php?post_type=curso')); ?>" target="_blank" class="button button-primary">Nuevo Curso</a>
+            <a href="<?php echo esc_url(admin_url('edit.php?post_type=curso')); ?>" target="_blank" class="button button-secondary">Editar Cursos</a>
         </div>
 
         <div class="tabla-wrapper" style="margin-top: 25px;">
@@ -333,6 +391,7 @@ class SGA_Shortcodes {
                             $fecha_inicio_display = '';
 
                             if ($horarios_repeater) {
+                                $horarios_html = '<div class="horarios-container">';
                                 $fechas_inicio_array = [];
                                 $cupos_array = [];
                                 foreach ($horarios_repeater as $horario) {
@@ -345,7 +404,7 @@ class SGA_Shortcodes {
                                         case 'híbrido': case 'hibrido': $modalidad_class = 'ga-pill-hibrido'; break;
                                     }
 
-                                    $horarios_html .= '<div style="margin-bottom: 5px; display: flex; flex-wrap: wrap; gap: 6px;">';
+                                    $horarios_html .= '<div class="horario-item">';
                                     $horarios_html .= '<span class="ga-pill ga-pill-time">' . esc_html($horario_completo) . '</span>';
                                     $horarios_html .= '<span class="ga-pill ' . $modalidad_class . '">' . esc_html($modalidad) . '</span>';
                                     $horarios_html .= '</div>';
@@ -362,6 +421,7 @@ class SGA_Shortcodes {
                                         $fechas_inicio_array[] = $horario['fecha_de_inicio'];
                                     }
                                 }
+                                $horarios_html .= '</div>';
                                 $cupos_display = implode('<br>', $cupos_array);
                                 $fecha_inicio_display = implode('<br>', array_unique($fechas_inicio_array));
                             }
@@ -383,7 +443,7 @@ class SGA_Shortcodes {
                                 <td><?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></td>
                                 <td><?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></td>
                                 <td><?php echo $fecha_inicio_display; // WPCS: XSS ok. ?></td>
-                                <td style="display: flex; gap: 5px;">
+                                <td class="actions-cell">
                                     <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
                                     <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
                                 </td>
@@ -460,7 +520,7 @@ class SGA_Shortcodes {
 
         <div class="filtros-tabla">
             <input type="text" id="buscador-pagos" placeholder="Buscar por estudiante, concepto o ID de transacción...">
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-left: auto;">
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="sga_print_payment_history">
                 <?php wp_nonce_field('sga_print_history_nonce', '_wpnonce_print_history'); ?>
                 <button type="submit" class="button button-primary">Imprimir Historial Completo</button>
@@ -501,7 +561,10 @@ class SGA_Shortcodes {
     public function render_view_perfil_estudiante() {
         ?>
         <div id="sga-student-profile-content">
-            <div class="sga-profile-loading">Cargando perfil del estudiante...</div>
+            <div class="sga-profile-loading">
+                <div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>
+                Cargando perfil del estudiante...
+            </div>
         </div>
         <?php
     }
@@ -537,7 +600,7 @@ class SGA_Shortcodes {
                 <div class="sga-form-group" id="sga-estudiantes-especificos-group" style="display: none;">
                     <label for="sga-estudiantes-search"><strong>Seleccionar Estudiantes:</strong></label>
                     <input type="text" id="sga-estudiantes-search" placeholder="Buscar estudiante por nombre o cédula...">
-                    <div id="sga-estudiantes-checkbox-list" style="height: 200px; overflow-y: auto; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; margin-top: 10px;">
+                    <div id="sga-estudiantes-checkbox-list">
                         <?php foreach ($all_students as $student):
                             $cedula = get_field('cedula', $student->ID);
                         ?>
@@ -585,9 +648,108 @@ class SGA_Shortcodes {
     public function render_panel_styles() {
         ?>
         <style>
-            :root{--ga-bg-color:#fff;--ga-text-primary:#1e293b;--ga-text-secondary:#64748b;--ga-border-color:#e2e8f0;--ga-primary-color:#0052cc;--ga-primary-hover:#0041a3;--ga-green-color:#16a34a;--ga-red-color:#dc2626}#gestion-academica-app-container{padding:20px}#gestion-academica-app-container .gestion-academica-wrapper{background-color:var(--ga-bg-color);color:var(--ga-text-primary);padding:25px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;width:100%;border:1px solid var(--ga-border-color)}#gestion-academica-app-container .panel-title{display:flex;align-items:center;font-size:22px;margin:25px 0;padding-top:20px;text-transform:uppercase;letter-spacing:1px;color:var(--ga-text-primary);font-weight:600;border-top:1px solid var(--ga-border-color)}#gestion-academica-app-container .panel-header-info{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;margin-bottom:20px;padding-bottom:20px;color:var(--ga-text-secondary)}#gestion-academica-app-container .header-item{display:flex;align-items:center;gap:8px;font-size:14px}#gestion-academica-app-container .header-item.user-info{margin-right:auto}#gestion-academica-app-container .header-item svg{width:20px;height:20px;stroke-width:1.5}#gestion-academica-app-container .panel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}#gestion-academica-app-container .panel-grid.two-cols{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}#gestion-academica-app-container .panel-card{background-color:#f8fafc;border:1px solid var(--ga-border-color);border-radius:8px;padding:25px;text-align:center;text-decoration:none;color:var(--ga-text-primary);transition:all .2s ease-in-out;cursor:pointer}#gestion-academica-app-container .panel-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(30,41,59,.1);border-color:var(--ga-primary-color)}#gestion-academica-app-container .panel-card h2{margin:0;font-size:16px;font-weight:600}#gestion-academica-app-container .back-link{color:var(--ga-primary-color);text-decoration:none;display:inline-block;margin-bottom:25px;font-weight:500;cursor:pointer}#gestion-academica-app-container .tabla-wrapper{overflow-x:auto;width:100%;border:1px solid var(--ga-border-color);border-radius:8px}#gestion-academica-app-container .wp-list-table{background:#fff;margin:0;width:100%;border-collapse:collapse}#gestion-academica-app-container .wp-list-table thead th{background-color:var(--ga-primary-color);color:#fff;font-weight:600;border:none;text-align:left;padding:12px 15px}#gestion-academica-app-container .wp-list-table tbody tr:nth-child(2n){background-color:#f8fafc}#gestion-academica-app-container .wp-list-table td{padding:12px 15px;vertical-align:middle}#gestion-academica-app-container .wp-list-table th.ga-check-column,#gestion-academica-app-container .wp-list-table td.ga-check-column{width:2.5em;padding:12px 10px;text-align:center}#gestion-academica-app-container .filtros-tabla{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:25px;padding:20px;background-color:#f8fafc;border-radius:8px;border:1px solid var(--ga-border-color)}#gestion-academica-app-container .filtros-tabla>*{margin:0}#gestion-academica-app-container .filtros-tabla input[type=text],#gestion-academica-app-container .filtros-tabla input[type=date]{flex:1 1 200px;padding:10px 15px;border-radius:6px;border:1px solid #cbd5e1;background-color:#fff}#gestion-academica-app-container .filtros-tabla select,#gestion-academica-app-container .filtros-tabla button{padding:10px 15px;border-radius:6px;border:1px solid #cbd5e1;background-color:#fff;cursor:pointer;flex-shrink:0}#gestion-academica-app-container .filtros-tabla button{background-color:var(--ga-primary-color);color:#fff;border-color:var(--ga-primary-color)}#gestion-academica-app-container .filtros-tabla button#exportar-btn{background-color:var(--ga-green-color);border-color:var(--ga-green-color)}#gestion-academica-app-container .panel-view{display:none}#gestion-academica-app-container .panel-view.active{display:block}#gestion-academica-app-container .panel-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:40px}#gestion-academica-app-container .stat-card{background-color:#fff;padding:25px;border-radius:8px;text-align:center;border:1px solid var(--ga-border-color)}#gestion-academica-app-container .stat-card span{display:block;font-size:2.5em;font-weight:700;color:var(--ga-primary-color)}#gestion-academica-app-container .estado-inscrito{color:#f59e0b;background-color:#fffbeb;padding:3px 8px;border-radius:12px;font-weight:500;font-size:12px}#gestion-academica-app-container .estado-matriculado{color:#15803d;background-color:#f0fdf4;padding:3px 8px;border-radius:12px;font-weight:500;font-size:12px}.ga-modal{position:fixed;z-index:10000;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}.ga-modal-content{background-color:#fff;padding:25px;border-radius:8px;width:90%;max-width:400px;box-shadow:0 5px 15px rgba(0,0,0,.3)}.ga-modal-content h4{margin-top:0;font-size:18px;color:var(--ga-text-primary)}.ga-modal-actions{margin-top:20px;display:flex;justify-content:flex-end;gap:10px} .ga-pill{display:inline-block;padding:4px 10px;font-size:12px;font-weight:500;line-height:1.5;text-align:center;white-space:nowrap;vertical-align:baseline;border-radius:16px;color:#fff} .ga-pill-time{background-color:var(--ga-text-secondary);color:#fff} .ga-pill-presencial{background-color:#0ea5e9;color:#fff} .ga-pill-virtual{background-color:#8b5cf6;color:#fff} .ga-pill-hibrido{background-color:#db2777;color:#fff} .ga-pill-default{background-color:#64748b;color:#fff}
-            .sga-profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}.sga-profile-card{background-color:#f8fafc;border:1px solid var(--ga-border-color);border-radius:8px;padding:20px}.sga-profile-card h3{margin-top:0;border-bottom:1px solid var(--ga-border-color);padding-bottom:10px;font-size:16px}.sga-profile-form-group{margin-bottom:15px}.sga-profile-form-group label{display:block;font-weight:500;margin-bottom:5px;font-size:14px}.sga-profile-form-group input,.sga-profile-form-group select{width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px}.sga-profile-actions{margin-top:20px;display:flex;gap:10px}.sga-comunicacion-form .sga-form-group{margin-bottom:20px}.sga-comunicacion-form input[type=text],.sga-comunicacion-form select{width:100%;padding:10px 15px;border-radius:6px;border:1px solid #cbd5e1}#sga-email-status{margin-top:20px;padding:15px;border-radius:6px;display:none}#sga-email-status.success{background-color:#dcfce7;color:#166534;border:1px solid #bbf7d0}#sga-email-status.error{background-color:#fee2e2;color:#991b1b;border:1px solid #fecaca}
-            .sga-dynamic-tags-info{background-color:#f8fafc;border:1px solid var(--ga-border-color);border-radius:6px;padding:10px 15px;margin-bottom:15px;font-size:13px}.sga-dynamic-tags-info p{margin:0 0 5px 0}.sga-dynamic-tags-info ul{margin:0;padding-left:20px}.sga-dynamic-tags-info code{background-color:#e2e8f0;padding:2px 5px;border-radius:4px;font-family:monospace}
+            :root {
+                --sga-primary: #141f53; --sga-primary-dark: #0f173d; --sga-secondary: #4f46e5;
+                --sga-light: #f8fafc; --sga-gray: #e2e8f0; --sga-text: #334155;
+                --sga-text-light: #64748b; --sga-white: #ffffff; --sga-green: #10b981;
+                --sga-yellow: #f59e0b; --sga-red: #ef4444; --sga-blue: #3b82f6;
+                --sga-purple: #8b5cf6; --sga-pink: #ec4899;
+                --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+                --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+                --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+            #gestion-academica-app-container { padding: 20px; }
+            .gestion-academica-wrapper { background-color: var(--sga-white); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: var(--shadow-lg); }
+            .panel-view { display: none; padding: 30px 40px; animation: fadeIn 0.5s ease-out; }
+            .panel-view.active { display: block; }
+            
+            /* Header */
+            .panel-header-info { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--sga-gray); }
+            .user-welcome p { margin: 0; color: var(--sga-text-light); font-size: 14px; }
+            .user-welcome h3 { margin: 0; color: var(--sga-primary); font-size: 20px; font-weight: 600; }
+            .datetime-widget { text-align: right; }
+            .date-display { font-size: 14px; font-weight: 500; color: var(--sga-text); }
+            .time-display { font-size: 12px; color: var(--sga-text-light); }
+            .panel-title { font-size: 24px; margin: 25px 0; color: var(--sga-text); font-weight: 700; letter-spacing: -0.5px; }
+            .back-link { color: var(--sga-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 25px; font-weight: 600; transition: color 0.2s; }
+            .back-link:hover { color: var(--sga-primary); }
+
+            /* Stats Cards */
+            .panel-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px; }
+            .stat-card { background-color: var(--sga-light); border-radius: 12px; padding: 20px; display: flex; align-items: center; gap: 16px; border: 1px solid var(--sga-gray); transition: all 0.3s ease; }
+            .stat-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); border-color: var(--sga-secondary); }
+            .stat-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--sga-white); }
+            .stat-icon.students { background: linear-gradient(135deg, var(--sga-blue), #60a5fa); }
+            .stat-icon.pending { background: linear-gradient(135deg, var(--sga-yellow), #fbbf24); }
+            .stat-icon.courses { background: linear-gradient(135deg, var(--sga-green), #34d399); }
+            .stat-icon svg { width: 24px; height: 24px; }
+            .stat-info .stat-number { font-size: 28px; font-weight: 700; color: var(--sga-text); display: block; line-height: 1; }
+            .stat-info .stat-label { font-size: 14px; color: var(--sga-text-light); }
+
+            /* Main Menu Cards */
+            .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; }
+            .panel-card { background-color: var(--sga-white); border: 1px solid var(--sga-gray); border-radius: 12px; padding: 25px; text-align: center; text-decoration: none; color: var(--sga-text); transition: all .3s ease; cursor: pointer; position: relative; overflow: hidden; }
+            .panel-card:before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, var(--sga-secondary), var(--sga-primary)); transform: scaleX(0); transition: transform 0.4s ease; transform-origin: left; }
+            .panel-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); }
+            .panel-card:hover:before { transform: scaleX(1); }
+            .panel-card-icon { margin: 0 auto 15px; width: 50px; height: 50px; border-radius: 50%; background-color: var(--sga-light); display: flex; align-items: center; justify-content: center; color: var(--sga-secondary); transition: all .3s ease; }
+            .panel-card:hover .panel-card-icon { background-color: var(--sga-secondary); color: var(--sga-white); transform: rotate(10deg) scale(1.1); }
+            .panel-card h2 { margin: 0 0 5px 0; font-size: 18px; font-weight: 600; color: var(--sga-primary); }
+            .panel-card p { margin: 0; font-size: 14px; color: var(--sga-text-light); }
+
+            /* Tables & Filters */
+            .tabla-wrapper { overflow-x: auto; width: 100%; border: 1px solid var(--sga-gray); border-radius: 12px; box-shadow: var(--shadow-sm); }
+            .wp-list-table { background: var(--sga-white); margin: 0; width: 100%; border-collapse: collapse; }
+            .wp-list-table thead th { background-color: var(--sga-light); color: var(--sga-text); font-weight: 600; border: none; text-align: left; padding: 12px 15px; border-bottom: 2px solid var(--sga-gray); }
+            .wp-list-table tbody tr { transition: background-color 0.2s; }
+            .wp-list-table tbody tr:hover { background-color: #f1f5f9; }
+            .wp-list-table td { padding: 12px 15px; vertical-align: middle; border-bottom: 1px solid var(--sga-gray); }
+            .wp-list-table td.actions-cell { display: flex; gap: 8px; align-items: center; }
+            .wp-list-table tbody tr:last-child td { border-bottom: none; }
+            .filtros-tabla { display: flex; flex-wrap: wrap; align-items: center; gap: 15px; margin-bottom: 25px; padding: 20px; background-color: var(--sga-light); border-radius: 12px; }
+            .filtros-tabla input[type=text], .filtros-tabla input[type=date], .filtros-tabla select { padding: 10px 15px; border-radius: 8px; border: 1px solid var(--sga-gray); background-color: var(--sga-white); transition: all 0.2s; }
+            .filtros-tabla input:focus, .filtros-tabla select:focus { border-color: var(--sga-secondary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); outline: none; }
+            .filtros-tabla input[type=text] { flex-grow: 1; }
+            .button, .button-primary, .button-secondary { border-radius: 8px !important; padding: 8px 16px !important; font-weight: 600 !important; transition: all 0.2s !important; border: 1px solid transparent !important; line-height: 1.5 !important; height: auto !important; }
+            .button-primary { background-color: var(--sga-secondary) !important; color: var(--sga-white) !important; }
+            .button-primary:hover { background-color: var(--sga-primary) !important; transform: translateY(-2px); }
+            .button-secondary { background-color: var(--sga-light) !important; color: var(--sga-text) !important; border-color: var(--sga-gray) !important; }
+            .button-secondary:hover { background-color: var(--sga-gray) !important; }
+            
+            /* Status Pills & Course Table */
+            .horarios-container { display: flex; flex-direction: column; gap: 8px; }
+            .horario-item { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+            .estado-inscrito { color: var(--sga-yellow); background-color: #fffbeb; padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: 12px; }
+            .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 16px; color: var(--sga-white); }
+            .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
+            .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
+
+            /* Modal */
+            .ga-modal { position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
+            .ga-modal-content { background-color: var(--sga-white); padding: 30px; border-radius: 12px; width: 90%; max-width: 420px; box-shadow: var(--shadow-lg); text-align: center; animation: fadeIn 0.3s; }
+            .ga-modal-icon-wrapper { width: 50px; height: 50px; margin: 0 auto 20px; background-color: var(--sga-green); color: var(--sga-white); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+            .ga-modal-content h4 { margin-top: 0; font-size: 18px; color: var(--sga-text); }
+            .ga-modal-actions { margin-top: 25px; display: flex; justify-content: center; gap: 10px; }
+            
+            /* Student Profile View */
+            #panel-view-perfil_estudiante .sga-profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; }
+            #panel-view-perfil_estudiante .sga-profile-card { background-color: var(--sga-light); border: 1px solid var(--sga-gray); border-radius: 12px; padding: 25px; }
+            #panel-view-perfil_estudiante .sga-profile-card h3 { margin-top: 0; border-bottom: 1px solid var(--sga-gray); padding-bottom: 10px; font-size: 18px; font-weight: 600; color: var(--sga-primary); }
+            #panel-view-perfil_estudiante .sga-profile-form-group { margin-bottom: 20px; }
+            #panel-view-perfil_estudiante .sga-profile-form-group label { display: block; font-weight: 500; margin-bottom: 8px; font-size: 14px; color: var(--sga-text-light); }
+            #panel-view-perfil_estudiante .sga-profile-form-group input, #panel-view-perfil_estudiante .sga-profile-form-group select { width: 100%; padding: 10px 15px; border: 1px solid var(--sga-gray); border-radius: 8px; background-color: var(--sga-white); transition: all 0.2s; }
+            #panel-view-perfil_estudiante .sga-profile-form-group input:focus, #panel-view-perfil_estudiante .sga-profile-form-group select:focus { border-color: var(--sga-secondary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); outline: none; }
+            #panel-view-perfil_estudiante .sga-profile-actions { margin-top: 30px; display: flex; justify-content: flex-end; }
+
+            /* Communication View */
+            .sga-dynamic-tags-info { background-color: #f1f5f9; border-radius: 8px; padding: 15px; margin-bottom: 15px; font-size: 13px; border: 1px solid var(--sga-gray); }
+            .sga-dynamic-tags-info p { margin: 0 0 10px 0; font-weight: 600; color: var(--sga-text); }
+            .sga-dynamic-tags-info ul { margin: 0; padding-left: 20px; }
+            .sga-dynamic-tags-info code { background-color: var(--sga-gray); padding: 3px 6px; border-radius: 4px; font-family: monospace; color: var(--sga-primary); }
+            #sga-estudiantes-checkbox-list { height: 200px; overflow-y: auto; border: 1px solid var(--sga-gray); padding: 10px; border-radius: 8px; margin-top: 10px; background-color: var(--sga-white); }
+            .sga-student-item label { display: block; padding: 5px; border-radius: 4px; transition: background-color 0.2s; cursor: pointer; }
+            .sga-student-item label:hover { background-color: #f1f5f9; }
         </style>
         <?php
     }
@@ -595,13 +757,15 @@ class SGA_Shortcodes {
     public function render_panel_navigation_js() {
         ?>
         <script>
-            jQuery(document).ready(function($){var ajaxurl="<?php echo admin_url('admin-ajax.php');?>",approvalData={};function setDynamicDateTime(){if(!$("#dynamic-date").length)return;const e=new Date,t={weekday:"long",year:"numeric",month:"long",day:"numeric"},o={hour:"2-digit",minute:"2-digit",hour12:!0};let a=new Intl.DateTimeFormat("es-ES",t).format(e);a=a.charAt(0).toUpperCase()+a.slice(1);const n=e.toLocaleTimeString("en-US",o);$("#dynamic-date").text(a),$("#dynamic-time").text(n)}setDynamicDateTime(),setInterval(setDynamicDateTime,6e4),$("#gestion-academica-app-container").on("click",".panel-nav-link",function(e){e.preventDefault();var t="#panel-view-"+$(this).data("view");$("#gestion-academica-app-container .panel-view").removeClass("active").hide(),$(t).addClass("active").show()}),$("#tabla-pendientes").on("click",".aprobar-btn",function(){var e=$(this);approvalData={type:"single",nonce:e.data("nonce"),post_id:e.data("postid"),row_index:e.data("rowindex"),cedula:e.data("cedula"),nombre:e.data("nombre"),element:e},$("#ga-modal-confirmacion").show()}),$("#apply-bulk-action").on("click",function(){if("aprobar"!==$("#bulk-action-select").val())return void alert("Por favor, selecciona una acción válida.");var e=[];$("#tabla-pendientes .bulk-checkbox:checked").each(function(){var t=$(this);e.push({post_id:t.data("postid"),row_index:t.data("rowindex")})}),e.length?(approvalData={type:"bulk",nonce:"<?php echo wp_create_nonce("aprobar_bulk_nonce");?>",seleccionados:e,element:$(this)},$("#ga-modal-confirmacion").show()):alert("Por favor, selecciona al menos un estudiante.")}),$("#ga-modal-confirmar").on("click",function(){var e=$(this);e.text("Procesando...").prop("disabled",!0),$("#ga-modal-cancelar").prop("disabled",!0),"single"===approvalData.type?$.post(ajaxurl,{action:"aprobar_para_matriculacion",_ajax_nonce:approvalData.nonce,post_id:approvalData.post_id,row_index:approvalData.row_index,cedula:approvalData.cedula,nombre:approvalData.nombre}).done(function(e){e.success?(actualizarUIAprobacion(e.data),approvalData.element.closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})):alert("Hubo un error: "+(e.data||"Error desconocido")),closeModal()}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()}):"bulk"===approvalData.type&&$.post(ajaxurl,{action:"aprobar_seleccionados",_ajax_nonce:approvalData.nonce,seleccionados:approvalData.seleccionados}).done(function(e){if(e.success){if(e.data.approved&&e.data.approved.length>0&&e.data.approved.forEach(function(e){actualizarUIAprobacion(e),$('#tabla-pendientes .bulk-checkbox[data-postid="'+e.post_id+'"][data-rowindex="'+e.row_index+'"]').closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})}),e.data.failed&&e.data.failed.length>0){var t="No se pudo aprobar a "+e.data.failed.length+" estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.";alert(t),console.log("Estudiantes no aprobados:",e.data.failed)}}else alert("Hubo un error al procesar la solicitud: "+(e.data.message||"Error desconocido"));closeModal(),$("#select-all-pendientes").prop("checked",!1),$("#tabla-pendientes .bulk-checkbox").prop("checked",!1)}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()})});function closeModal(){$("#ga-modal-confirmacion").hide(),$("#ga-modal-confirmar").text("Confirmar y Enviar").prop("disabled",!1),$("#ga-modal-cancelar").prop("disabled",!1),approvalData={}}function actualizarUIAprobacion(e){var t='<tr data-curso="'+e.nombre_curso+'"><td><strong>'+e.matricula+"</strong></td><td>"+e.nombre+"</td><td>"+e.cedula+"</td><td>"+e.email+"</td><td>"+e.telefono+"</td><td>"+e.nombre_curso+"</td></tr>";$("#tabla-matriculados .no-results").remove(),$("#tabla-matriculados tbody").append(t)}function checkEmptyTable(e,t,o){0===$(e+" tbody tr:not(.no-results-search)").length&&!$(e+" .no-results").length&&$(e+" tbody").append('<tr class="no-results"><td colspan="'+t+'">'+o+"</td></tr>")}$("#ga-modal-cancelar").on("click",closeModal),$("#select-all-pendientes").on("click",function(){$("#tabla-pendientes .bulk-checkbox").prop("checked",this.checked)});function actualizarFiltros(e,t,o){var a=$(t).val().toLowerCase(),n=o?$(o).val():"",r=0;$(e+" tbody tr").each(function(){var t=$(this);if(!t.hasClass("no-results")&&!t.hasClass("no-results-search")){var l=t.text().toLowerCase(),d=t.data("curso"),s=(""===a||l.includes(a))&&(!o||""===n||d===n);s?(t.show(),r++):t.hide()}}),$(e+" .no-results-search").remove(),0===r&&!$(e+" .no-results").is(":visible")&&$(e+" tbody").append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>')}function actualizarFiltrosLog(){var e=$("#buscador-log").val().toLowerCase(),t=$("#filtro-usuario-log").val(),o=$("#filtro-fecha-inicio").val(),a=$("#filtro-fecha-fin").val(),n=0;$("#tabla-log tbody tr").each(function(){var r=$(this);if(!r.hasClass("no-results")){var l=r.text().toLowerCase(),d=r.data("usuario"),s=r.data("fecha"),c=(""===e||l.includes(e))&&(""===t||d===t),i=!0;i=o&&a?s>=o&&s<=a:o?s>=o:a?s<=a:!0,c&&i?(r.show(),n++):r.hide()}}),$("#tabla-log .no-results-search").remove(),0===n&&!$("#tabla-log .no-results").is(":visible")&&$("#tabla-log tbody").append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>')}$("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change",function(){actualizarFiltros("#tabla-pendientes","#buscador-estudiantes-pendientes","#filtro-curso-pendientes")}),$("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change",function(){actualizarFiltros("#tabla-matriculados","#buscador-matriculados","#filtro-curso-matriculados")}),$("#buscador-general-estudiantes").on("keyup",function(){actualizarFiltros("#tabla-general-estudiantes","#buscador-general-estudiantes",null)}),$("#buscador-cursos").on("keyup",function(){actualizarFiltros("#tabla-cursos","#buscador-cursos",null)}),$("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change",function(){actualizarFiltrosLog()}),$("#exportar-btn").on("click",function(e){e.preventDefault();var t=$("#export-format-select").val(),o=$("#buscador-matriculados").val(),a=$("#filtro-curso-matriculados").val(),n="<?php echo wp_create_nonce("export_nonce");?>",r=new URL(ajaxurl);"excel"===t?r.searchParams.append("action","exportar_excel"):r.searchParams.append("action","exportar_moodle_csv"),r.searchParams.append("_wpnonce",n),r.searchParams.append("search_term",o),r.searchParams.append("course_filter",a),window.location.href=r.href}),$("#panel-view-cursos").on("click",".ver-matriculados-btn",function(e){e.preventDefault();var t=$(this).data("curso-nombre");$(".panel-view").removeClass("active").hide(),$("#panel-view-lista_matriculados").addClass("active").show(),$("#filtro-curso-matriculados").val(t).change(),$("#buscador-matriculados").val("")}),$("#buscador-pagos").on("keyup",function(){actualizarFiltros("#tabla-pagos","#buscador-pagos",null)});
+            jQuery(document).ready(function($){var ajaxurl="<?php echo admin_url('admin-ajax.php');?>",approvalData={};function setDynamicDateTime(){if(!$("#dynamic-date").length)return;const e=new Date,t={weekday:"long",year:"numeric",month:"long",day:"numeric"},o={hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!0};let a=new Intl.DateTimeFormat("es-ES",t).format(e);a=a.charAt(0).toUpperCase()+a.slice(1);const n=e.toLocaleTimeString("es-ES",o);$("#dynamic-date").text(a),$("#dynamic-time").text(n)}setDynamicDateTime(),setInterval(setDynamicDateTime,1e3),$("#gestion-academica-app-container").on("click",".panel-nav-link",function(e){e.preventDefault();var t=$(this).data("view"),o=$(".panel-view.active");o.is("#panel-view-"+t)||o.fadeOut(200,function(){$(this).removeClass("active"),$("#panel-view-"+t).fadeIn(200).addClass("active")})}),$("#tabla-pendientes").on("click",".aprobar-btn",function(){var e=$(this);approvalData={type:"single",nonce:e.data("nonce"),post_id:e.data("postid"),row_index:e.data("rowindex"),cedula:e.data("cedula"),nombre:e.data("nombre"),element:e},$("#ga-modal-confirmacion").fadeIn(200)}),$("#apply-bulk-action").on("click",function(){if("aprobar"!==$("#bulk-action-select").val())return void alert("Por favor, selecciona una acción válida.");var e=[];$("#tabla-pendientes .bulk-checkbox:checked").each(function(){var t=$(this);e.push({post_id:t.data("postid"),row_index:t.data("rowindex")})}),e.length?(approvalData={type:"bulk",nonce:"<?php echo wp_create_nonce("aprobar_bulk_nonce");?>",seleccionados:e,element:$(this)},$("#ga-modal-confirmacion").fadeIn(200)):alert("Por favor, selecciona al menos un estudiante.")}),$("#ga-modal-confirmar").on("click",function(){var e=$(this);e.text("Procesando...").prop("disabled",!0),$("#ga-modal-cancelar").prop("disabled",!0),"single"===approvalData.type?$.post(ajaxurl,{action:"aprobar_para_matriculacion",_ajax_nonce:approvalData.nonce,post_id:approvalData.post_id,row_index:approvalData.row_index,cedula:approvalData.cedula,nombre:approvalData.nombre}).done(function(e){e.success?(actualizarUIAprobacion(e.data),approvalData.element.closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})):alert("Hubo un error: "+(e.data||"Error desconocido")),closeModal()}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()}):"bulk"===approvalData.type&&$.post(ajaxurl,{action:"aprobar_seleccionados",_ajax_nonce:approvalData.nonce,seleccionados:approvalData.seleccionados}).done(function(e){if(e.success){if(e.data.approved&&e.data.approved.length>0&&e.data.approved.forEach(function(e){actualizarUIAprobacion(e),$('#tabla-pendientes .bulk-checkbox[data-postid="'+e.post_id+'"][data-rowindex="'+e.row_index+'"]').closest("tr").fadeOut(500,function(){$(this).remove(),checkEmptyTable("#tabla-pendientes",9,"No hay estudiantes pendientes de aprobación.")})}),e.data.failed&&e.data.failed.length>0){var t="No se pudo aprobar a "+e.data.failed.length+" estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.";alert(t),console.log("Estudiantes no aprobados:",e.data.failed)}}else alert("Hubo un error al procesar la solicitud: "+(e.data.message||"Error desconocido"));closeModal(),$("#select-all-pendientes").prop("checked",!1),$("#tabla-pendientes .bulk-checkbox").prop("checked",!1)}).fail(function(e,t,o){console.error("AJAX Error:",t,o),alert("Hubo un error de comunicación con el servidor."),closeModal()})});function closeModal(){$("#ga-modal-confirmacion").fadeOut(200),$("#ga-modal-confirmar").text("Confirmar y Enviar").prop("disabled",!1),$("#ga-modal-cancelar").prop("disabled",!1),approvalData={}}function actualizarUIAprobacion(e){var t='<tr data-curso="'+e.nombre_curso+'"><td><strong>'+e.matricula+"</strong></td><td>"+e.nombre+"</td><td>"+e.cedula+"</td><td>"+e.email+"</td><td>"+e.telefono+"</td><td>"+e.nombre_curso+"</td></tr>";$("#tabla-matriculados .no-results").remove(),$("#tabla-matriculados tbody").append(t)}function checkEmptyTable(e,t,o){0===$(e+" tbody tr:not(.no-results-search)").length&&!$(e+" .no-results").length&&$(e+" tbody").append('<tr class="no-results"><td colspan="'+t+'">'+o+"</td></tr>")}$("#ga-modal-cancelar, .ga-modal").on("click",function(e){(e.target==this||$(this).is("#ga-modal-cancelar"))&&closeModal()}),$("#select-all-pendientes").on("click",function(){$("#tabla-pendientes .bulk-checkbox").prop("checked",this.checked)});function actualizarFiltros(e,t,o){var a=$(t).val().toLowerCase(),n=o?$(o).val():"",r=0;$(e+" tbody tr").each(function(){var t=$(this);if(!t.hasClass("no-results")&&!t.hasClass("no-results-search")){var l=t.text().toLowerCase(),d=t.data("curso"),s=(""===a||l.includes(a))&&(!o||""===n||d===n);s?(t.show(),r++):t.hide()}}),$(e+" .no-results-search").remove(),0===r&&!$(e+" .no-results").is(":visible")&&$(e+" tbody").append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>')}function actualizarFiltrosLog(){var e=$("#buscador-log").val().toLowerCase(),t=$("#filtro-usuario-log").val(),o=$("#filtro-fecha-inicio").val(),a=$("#filtro-fecha-fin").val(),n=0;$("#tabla-log tbody tr").each(function(){var r=$(this);if(!r.hasClass("no-results")){var l=r.text().toLowerCase(),d=r.data("usuario"),s=r.data("fecha"),c=(""===e||l.includes(e))&&(""===t||d===t),i=!0;i=o&&a?s>=o&&s<=a:o?s>=o:a?s<=a:!0,c&&i?(r.show(),n++):r.hide()}}),$("#tabla-log .no-results-search").remove(),0===n&&!$("#tabla-log .no-results").is(":visible")&&$("#tabla-log tbody").append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>')}$("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change",function(){actualizarFiltros("#tabla-pendientes","#buscador-estudiantes-pendientes","#filtro-curso-pendientes")}),$("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change",function(){actualizarFiltros("#tabla-matriculados","#buscador-matriculados","#filtro-curso-matriculados")}),$("#buscador-general-estudiantes").on("keyup",function(){actualizarFiltros("#tabla-general-estudiantes","#buscador-general-estudiantes",null)}),$("#buscador-cursos").on("keyup",function(){actualizarFiltros("#tabla-cursos","#buscador-cursos",null)}),$("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change",function(){actualizarFiltrosLog()}),$("#exportar-btn").on("click",function(e){e.preventDefault();var t=$("#export-format-select").val(),o=$("#buscador-matriculados").val(),a=$("#filtro-curso-matriculados").val(),n="<?php echo wp_create_nonce("export_nonce");?>",r=new URL(ajaxurl);"excel"===t?r.searchParams.append("action","exportar_excel"):r.searchParams.append("action","exportar_moodle_csv"),r.searchParams.append("_wpnonce",n),r.searchParams.append("search_term",o),r.searchParams.append("course_filter",a),window.location.href=r.href}),$("#panel-view-cursos").on("click",".ver-matriculados-btn",function(e){e.preventDefault();var t=$(this).data("curso-nombre");$(".panel-view").removeClass("active").hide(),$("#panel-view-lista_matriculados").addClass("active").show(),$("#filtro-curso-matriculados").val(t).change(),$("#buscador-matriculados").val("")}),$("#buscador-pagos").on("keyup",function(){actualizarFiltros("#tabla-pagos","#buscador-pagos",null)});
             $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
                 var studentId = $(this).data('estudiante-id');
                 var profileContainer = $("#sga-student-profile-content");
-                profileContainer.html('<div class="sga-profile-loading">Cargando perfil del estudiante...</div>');
-                $("#panel-view-estudiantes").removeClass("active").hide();
-                $("#panel-view-perfil_estudiante").addClass("active").show();
+                profileContainer.html('<div class="sga-profile-loading"><div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>Cargando perfil del estudiante...</div>');
+                $(".panel-view.active").fadeOut(200, function() {
+                    $(this).removeClass("active");
+                    $("#panel-view-perfil_estudiante").fadeIn(200).addClass("active");
+                });
                 $.post(ajaxurl, {
                     action: 'sga_get_student_profile_data',
                     _ajax_nonce: '<?php echo wp_create_nonce("sga_get_profile_nonce"); ?>',
@@ -617,8 +781,10 @@ class SGA_Shortcodes {
                 });
             });
             $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() {
-                $("#panel-view-perfil_estudiante").removeClass("active").hide();
-                $("#panel-view-estudiantes").addClass("active").show();
+                $(".panel-view.active").fadeOut(200, function() {
+                    $(this).removeClass("active");
+                    $("#panel-view-estudiantes").fadeIn(200).addClass("active");
+                });
             });
             $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
                 var btn = $(this);
