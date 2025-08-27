@@ -186,9 +186,9 @@ class SGA_Ajax {
         $recipient_group = sanitize_key($_POST['recipient_group']);
         $curso_especifico = sanitize_text_field($_POST['curso']);
         $subject = sanitize_text_field($_POST['subject']);
-        $body_html = wp_kses_post(stripslashes_deep($_POST['body']));
+        $body_template = wp_kses_post(stripslashes_deep($_POST['body']));
         
-        $recipients = [];
+        $recipients_data = [];
 
         if ($recipient_group === 'especificos') {
             $specific_student_ids_json = isset($_POST['student_ids']) ? stripslashes($_POST['student_ids']) : '[]';
@@ -201,8 +201,8 @@ class SGA_Ajax {
             if (!empty($specific_student_ids)) {
                 foreach ($specific_student_ids as $student_id) {
                     $email = get_field('email', $student_id);
-                    if (is_email($email) && !in_array($email, $recipients)) {
-                        $recipients[] = $email;
+                    if (is_email($email)) {
+                        $recipients_data[$student_id] = $email;
                     }
                 }
             }
@@ -234,28 +234,29 @@ class SGA_Ajax {
                         case 'pendientes': if ($is_pendiente) $add_email = true; break;
                         case 'por_curso': if ($is_in_curso) $add_email = true; break;
                     }
-                    if ($add_email && !in_array($email, $recipients)) {
-                        $recipients[] = $email;
+                    if ($add_email) {
+                        $recipients_data[$estudiante->ID] = $email;
                     }
                 }
             }
         }
 
-        if (empty($recipients)) {
+        if (empty($recipients_data)) {
             wp_send_json_error(['message' => 'No se encontraron destinatarios para los criterios seleccionados.']);
         }
-
-        $email_template = SGA_Utils::_get_email_template($subject, $body_html);
-        $headers = ['Content-Type: text/html; charset=UTF-8'];
         
         $sent_count = 0;
-        foreach ($recipients as $recipient) {
-            if (wp_mail($recipient, $subject, $email_template, $headers)) {
+        foreach ($recipients_data as $student_id => $recipient_email) {
+            $personalized_body = SGA_Utils::_replace_dynamic_tags($body_template, $student_id, $recipient_group, $curso_especifico);
+            $email_template = SGA_Utils::_get_email_template($subject, $personalized_body);
+            $headers = ['Content-Type: text/html; charset=UTF-8'];
+            
+            if (wp_mail($recipient_email, $subject, $email_template, $headers)) {
                 $sent_count++;
             }
         }
 
-        SGA_Utils::_log_activity('Correo Masivo Enviado', "Se enviaron {$sent_count} de " . count($recipients) . " correos al grupo '{$recipient_group}'.");
+        SGA_Utils::_log_activity('Correo Masivo Enviado', "Se enviaron {$sent_count} de " . count($recipients_data) . " correos al grupo '{$recipient_group}'.");
         wp_send_json_success(['message' => "Proceso completado. Se enviaron {$sent_count} correos."]);
     }
 }
