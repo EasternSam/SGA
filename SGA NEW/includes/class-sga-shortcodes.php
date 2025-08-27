@@ -730,4 +730,4 @@ class SGA_Shortcodes {
         <?php
     }
 }
-" in the Canv
+
