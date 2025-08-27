@@ -19,9 +19,70 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
+        add_action('wp_ajax_sga_get_report_chart_data', array($this, 'ajax_get_report_chart_data')); // <-- AÑADIDO
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
+    }
+
+    /**
+     * AJAX: Obtiene los datos para el gráfico de reportes de los últimos 7 meses.
+     */
+    public function ajax_get_report_chart_data() {
+        check_ajax_referer('sga_chart_nonce');
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+    
+        $monthly_counts = [];
+        $labels = [];
+        $data = [];
+        
+        // Asegura que el locale esté disponible para los nombres de los meses en español.
+        $date_format_obj = new IntlDateFormatter('es_ES', IntlDateFormatter::FULL, IntlDateFormatter::FULL, null, null, 'MMM');
+    
+        // Prepara los contenedores para los últimos 7 meses (incluyendo el actual)
+        for ($i = 6; $i >= 0; $i--) {
+            $date = new DateTime("first day of -$i months");
+            $key = $date->format('Y-m');
+            $monthly_counts[$key] = 0;
+            $labels[] = ucfirst($date_format_obj->format($date));
+        }
+    
+        $estudiantes_query = get_posts(array(
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'fields' => 'ids'
+        ));
+    
+        if ($estudiantes_query && function_exists('get_field')) {
+            foreach ($estudiantes_query as $estudiante_id) {
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                if ($cursos) {
+                    foreach ($cursos as $curso) {
+                        // Contar tanto 'Inscrito' como 'Matriculado' como una inscripción
+                        if (isset($curso['fecha_inscripcion']) && !empty($curso['fecha_inscripcion'])) {
+                            try {
+                                $inscripcion_date = new DateTime($curso['fecha_inscripcion']);
+                                $inscripcion_key = $inscripcion_date->format('Y-m');
+                                if (array_key_exists($inscripcion_key, $monthly_counts)) {
+                                    $monthly_counts[$inscripcion_key]++;
+                                }
+                            } catch (Exception $e) {
+                                // Ignorar fechas con formato inválido para no romper el proceso
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        // Llena el array de datos en el orden correcto
+        foreach ($monthly_counts as $count) {
+            $data[] = $count;
+        }
+    
+        wp_send_json_success(['labels' => $labels, 'data' => $data]);
     }
 
     /**
