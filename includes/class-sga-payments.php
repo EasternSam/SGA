@@ -23,6 +23,8 @@ class SGA_Payments {
         
         $options = get_option('sga_payment_options');
         $active_gateway = $options['active_gateway'] ?? 'azul';
+        $cardnet_env = '';
+        $cardnet_public_key = '';
 
         if ($active_gateway === 'cardnet') {
             $cardnet_env = $options['cardnet_environment'] ?? 'sandbox';
@@ -234,14 +236,23 @@ class SGA_Payments {
             const pwTokenInput = document.getElementById('PWToken');
             let selectedItem = null;
             let cardnetInitialized = false;
+            let serviceSelected = false;
 
-            // --- Event Listeners for Dropdowns ---
+            function updateButtonState() {
+                if (activeGateway === 'cardnet') {
+                    proceedButton.disabled = !(serviceSelected && cardnetInitialized);
+                } else {
+                    proceedButton.disabled = !serviceSelected;
+                }
+            }
+
             tipoPagoSelect.addEventListener('change', function() {
                 const selectedType = this.value;
                 servicioSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
                 montoInput.value = '';
-                proceedButton.disabled = true;
                 selectedItem = null;
+                serviceSelected = false;
+                updateButtonState();
 
                 if (selectedType && paymentItems[selectedType]) {
                     paymentItems[selectedType].forEach(item => {
@@ -261,19 +272,31 @@ class SGA_Payments {
                 const selectedId = this.value;
                 
                 selectedItem = null;
-                proceedButton.disabled = true;
                 montoInput.value = '';
+                serviceSelected = false;
 
                 if (selectedId && selectedType && paymentItems[selectedType]) {
                     selectedItem = paymentItems[selectedType].find(item => item.id === selectedId);
                     if (selectedItem) {
                         montoInput.value = selectedItem.amount_local;
-                        proceedButton.disabled = false;
+                        serviceSelected = true;
+                        
+                        if (activeGateway === 'cardnet' && typeof PWCheckout !== 'undefined') {
+                            PWCheckout.SetProperties({
+                                "name": "<?php echo esc_js(get_bloginfo('name')); ?>",
+                                "description": selectedItem.description,
+                                "currency": "DOP",
+                                "amount": selectedItem.amount_numeric,
+                                "form_id": "sga-payment-form",
+                                "checkout_card": 1,
+                                "autoSubmit": "false"
+                            });
+                        }
                     }
                 }
+                updateButtonState();
             });
 
-            // --- Gateway Logic ---
             function submitPaymentFormToServer() {
                 if (!selectedItem) return;
                 
@@ -300,50 +323,26 @@ class SGA_Payments {
                 paymentForm.submit();
             }
 
-            function initializeCardnet() {
-                if (typeof PWCheckout !== 'undefined' && !cardnetInitialized) {
-                    PWCheckout.Bind("tokenCreated", function(token) {
-                        if (token && token.TokenId) {
-                            pwTokenInput.value = token.TokenId;
-                            submitPaymentFormToServer();
-                        } else {
-                            alert('Error al obtener el token de la tarjeta. Por favor, intente de nuevo.');
-                        }
-                    });
-                    cardnetInitialized = true;
-                }
-            }
-
             if (activeGateway === 'cardnet') {
                 const checkCardnetLibrary = setInterval(function() {
                     if (typeof PWCheckout !== 'undefined') {
                         clearInterval(checkCardnetLibrary);
-                        initializeCardnet();
+                        
+                        PWCheckout.Bind("tokenCreated", function(token) {
+                            if (token && token.TokenId) {
+                                pwTokenInput.value = token.TokenId;
+                                submitPaymentFormToServer();
+                            } else {
+                                alert('Error al obtener el token de la tarjeta. Por favor, intente de nuevo.');
+                            }
+                        });
+
+                        PWCheckout.AddActionButton('sga-proceed-payment');
+
+                        cardnetInitialized = true;
+                        updateButtonState();
                     }
                 }, 100);
-
-                proceedButton.addEventListener('click', function() {
-                    if (!cardnetInitialized) {
-                        console.error('SGA Error: Cardnet PWCheckout library not loaded yet.');
-                        alert('Error: La pasarela de pago aún no está lista. Por favor, espere un momento e intente de nuevo.');
-                        return;
-                    }
-
-                    if (selectedItem) {
-                        PWCheckout.SetProperties({
-                            "name": "<?php echo esc_js(get_bloginfo('name')); ?>",
-                            "description": selectedItem.description,
-                            "currency": "DOP",
-                            "form_id": "sga-payment-form",
-                            "checkout_card": 1,
-                            "autoSubmit": "false",
-                            "amount": selectedItem.amount_numeric
-                        });
-                        PWCheckout.OpenIframe();
-                    } else {
-                        alert('Por favor, selecciona un servicio válido.');
-                    }
-                });
 
             } else { // Azul Gateway
                 proceedButton.addEventListener('click', function() {
