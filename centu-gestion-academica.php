@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Sistema de Gestión Académica CENTU
- * Description: Panel a medida para gestionar inscripciones, cursos, matriculación, pagos (Azul) y reportes avanzados en PDF.
- * Version: 12.2
+ * Description: Panel a medida para gestionar inscripciones, cursos, matriculación, pagos (Azul, Cardnet) y reportes avanzados en PDF.
+ * Version: 13.0
  * Author: Samuel Diaz Pilier
  * Author URI: https://90s.agency/sam
  * @requires PHP 7.1+
@@ -13,7 +13,7 @@
 if (!defined('ABSPATH')) exit; // Salir si se accede directamente.
 
 // --- 1. Definir Constantes del Plugin ---
-define('SGA_PLUGIN_VERSION', '12.0');
+define('SGA_PLUGIN_VERSION', '13.0');
 define('SGA_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('SGA_PLUGIN_URL', plugin_dir_url(__FILE__));
 

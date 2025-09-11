@@ -5,13 +5,14 @@ if (!defined('ABSPATH')) exit;
 /**
  * Clase SGA_Payments
  *
- * Gestiona todo lo relacionado con la pasarela de pagos Azul,
+ * Gestiona todo lo relacionado con las pasarelas de pago (Azul, Cardnet),
  * incluyendo el renderizado de la página de pagos y el manejo de la respuesta.
  */
 class SGA_Payments {
 
     public function __construct() {
         add_action('init', array($this, 'handle_azul_response'));
+        add_action('init', array($this, 'handle_cardnet_response'));
     }
 
     /**
@@ -19,6 +20,20 @@ class SGA_Payments {
      */
     public function render_pagos_page() {
         ob_start();
+        
+        $options = get_option('sga_payment_options');
+        $active_gateway = $options['active_gateway'] ?? 'azul';
+
+        if ($active_gateway === 'cardnet') {
+            $cardnet_env = $options['cardnet_environment'] ?? 'sandbox';
+            $cardnet_public_key = $options['cardnet_public_key'] ?? '';
+            $pwcheckout_url = $cardnet_env === 'production' 
+                ? "https://servicios.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js?key={$cardnet_public_key}"
+                : "https://lab.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js?key={$cardnet_public_key}";
+            
+            echo '<script type="text/javascript" src="' . esc_url($pwcheckout_url) . '"></script>';
+        }
+
         ?>
         <style>
             .sga-pagos-container { max-width: 900px; margin: 40px auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -164,7 +179,8 @@ class SGA_Payments {
                         <div class="sga-form-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
                         </div>
-                        <form id="sga-azul-payment-form" method="post">
+                        <form id="sga-payment-form" method="post">
+                             <input type="hidden" name="PWToken" id="PWToken" />
                             <div class="sga-form-group">
                                 <label for="sga_tipo_pago">Tipo de Pagos <span>*</span></label>
                                 <select id="sga_tipo_pago">
@@ -190,7 +206,7 @@ class SGA_Payments {
                                     <span class="help-icon" title="El monto se calcula automáticamente al seleccionar un servicio.">?</span>
                                 </div>
                             </div>
-                            <button type="submit" id="sga-proceed-payment" class="sga-submit-button" disabled>
+                            <button type="button" id="sga-proceed-payment" class="sga-submit-button" disabled>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7z"/><path d="M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1z"/></svg>
                                 <span>Pagar con Tarjeta</span>
                             </button>
@@ -209,13 +225,17 @@ class SGA_Payments {
         <script>
         document.addEventListener('DOMContentLoaded', function() {
             const paymentItems = <?php echo json_encode($payment_items); ?>;
+            const activeGateway = '<?php echo $active_gateway; ?>';
             const tipoPagoSelect = document.getElementById('sga_tipo_pago');
             const servicioSelect = document.getElementById('sga_servicio');
             const montoInput = document.getElementById('sga_monto');
             const proceedButton = document.getElementById('sga-proceed-payment');
-            const paymentForm = document.getElementById('sga-azul-payment-form');
+            const paymentForm = document.getElementById('sga-payment-form');
+            const pwTokenInput = document.getElementById('PWToken');
             let selectedItem = null;
+            let cardnetInitialized = false;
 
+            // --- Event Listeners for Dropdowns ---
             tipoPagoSelect.addEventListener('change', function() {
                 const selectedType = this.value;
                 servicioSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
@@ -240,118 +260,239 @@ class SGA_Payments {
                 const selectedType = tipoPagoSelect.value;
                 const selectedId = this.value;
                 
+                selectedItem = null;
+                proceedButton.disabled = true;
+                montoInput.value = '';
+
                 if (selectedId && selectedType && paymentItems[selectedType]) {
                     selectedItem = paymentItems[selectedType].find(item => item.id === selectedId);
                     if (selectedItem) {
                         montoInput.value = selectedItem.amount_local;
                         proceedButton.disabled = false;
-                    } else {
-                        montoInput.value = '';
-                        proceedButton.disabled = true;
                     }
-                } else {
-                    montoInput.value = '';
-                    proceedButton.disabled = true;
-                    selectedItem = null;
                 }
             });
 
-            paymentForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                if (!selectedItem) {
-                    alert('Por favor, selecciona un servicio válido.');
-                    return;
-                }
+            // --- Gateway Logic ---
+            function submitPaymentFormToServer() {
+                if (!selectedItem) return;
                 
-                const fields = {
+                const commonFields = {
                     'CustomOrderId': selectedItem.custom_id,
                     'Amount': selectedItem.amount_numeric,
-                    'Itbis': '0.00'
+                    'Itbis': '0.00',
+                    'OrderNumber': 'SGA-' + Date.now(),
+                    'sga_action': 'initiate_payment'
                 };
 
-                for (const key in fields) {
-                    const hiddenInput = document.createElement('input');
-                    hiddenInput.type = 'hidden';
-                    hiddenInput.name = key;
-                    hiddenInput.value = fields[key];
-                    paymentForm.appendChild(hiddenInput);
+                for (const key in commonFields) {
+                    let input = paymentForm.querySelector(`[name="${key}"]`);
+                    if (!input) {
+                        input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        paymentForm.appendChild(input);
+                    }
+                    input.value = commonFields[key];
                 }
-                
-                const orderNumber = 'SGA-' + Date.now();
-                
-                const orderInput = document.createElement('input');
-                orderInput.type = 'hidden';
-                orderInput.name = 'OrderNumber';
-                orderInput.value = orderNumber;
-                paymentForm.appendChild(orderInput);
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'sga_action';
-                actionInput.value = 'redirect_to_azul';
-                paymentForm.appendChild(actionInput);
                 
                 paymentForm.action = window.location.href;
                 paymentForm.submit();
-            });
+            }
+
+            function initializeCardnet() {
+                if (typeof PWCheckout !== 'undefined' && !cardnetInitialized) {
+                    PWCheckout.Bind("tokenCreated", function(token) {
+                        if (token && token.TokenId) {
+                            pwTokenInput.value = token.TokenId;
+                            submitPaymentFormToServer();
+                        } else {
+                            alert('Error al obtener el token de la tarjeta. Por favor, intente de nuevo.');
+                        }
+                    });
+                    cardnetInitialized = true;
+                }
+            }
+
+            if (activeGateway === 'cardnet') {
+                const checkCardnetLibrary = setInterval(function() {
+                    if (typeof PWCheckout !== 'undefined') {
+                        clearInterval(checkCardnetLibrary);
+                        initializeCardnet();
+                    }
+                }, 100);
+
+                proceedButton.addEventListener('click', function() {
+                    if (!cardnetInitialized) {
+                        console.error('SGA Error: Cardnet PWCheckout library not loaded yet.');
+                        alert('Error: La pasarela de pago aún no está lista. Por favor, espere un momento e intente de nuevo.');
+                        return;
+                    }
+
+                    if (selectedItem) {
+                        PWCheckout.SetProperties({
+                            "name": "<?php echo esc_js(get_bloginfo('name')); ?>",
+                            "description": selectedItem.description,
+                            "currency": "DOP",
+                            "form_id": "sga-payment-form",
+                            "checkout_card": 1,
+                            "autoSubmit": "false",
+                            "amount": selectedItem.amount_numeric
+                        });
+                        PWCheckout.OpenIframe();
+                    } else {
+                        alert('Por favor, selecciona un servicio válido.');
+                    }
+                });
+
+            } else { // Azul Gateway
+                proceedButton.addEventListener('click', function() {
+                    if (!selectedItem) {
+                        alert('Por favor, selecciona un servicio válido.');
+                        return;
+                    }
+                    submitPaymentFormToServer();
+                });
+            }
         });
         </script>
         <?php
         
-        if (isset($_POST['sga_action']) && $_POST['sga_action'] === 'redirect_to_azul') {
+        // This part handles the form submission to initiate payment
+        if (isset($_POST['sga_action']) && $_POST['sga_action'] === 'initiate_payment') {
             $options = get_option('sga_payment_options');
-            $merchant_id = $options['azul_merchant_id'] ?? '';
-            $auth_key = $options['azul_auth_key'] ?? '';
-            $environment = $options['azul_environment'] ?? 'sandbox';
+            $active_gateway = $options['active_gateway'] ?? 'azul';
+            $payment_data = [
+                'OrderNumber'     => sanitize_text_field($_POST['OrderNumber']),
+                'Amount'          => number_format(floatval($_POST['Amount']), 2, '.', ''),
+                'Itbis'           => number_format(floatval($_POST['Itbis']), 2, '.', ''),
+                'CustomOrderId'   => sanitize_text_field($_POST['CustomOrderId']),
+                'TrxToken'        => sanitize_text_field($_POST['PWToken'] ?? ''),
+            ];
 
-            if (empty($merchant_id) || empty($auth_key)) {
-                echo '<div id="sga-payment-message" class="error" style="display:block;">El sistema de pagos no está configurado correctamente. Por favor, contacte a la administración.</div>';
-                return ob_get_clean();
+            if ($active_gateway === 'azul') {
+                $this->_redirect_to_azul($payment_data, $options);
+            } elseif ($active_gateway === 'cardnet') {
+                $this->_process_cardnet_purchase($payment_data, $options);
+            } else {
+                echo '<div id="sga-payment-message" class="error" style="display:block;">No se ha configurado una pasarela de pago válida.</div>';
             }
-
-            $order_number = sanitize_text_field($_POST['OrderNumber']);
-            $amount = number_format(floatval($_POST['Amount']), 2, '.', '');
-            $itbis = number_format(floatval($_POST['Itbis']), 2, '.', '');
-            $custom_order_id = sanitize_text_field($_POST['CustomOrderId']);
-
-            $hash_string = $merchant_id . $auth_key . $order_number . $amount . $itbis;
-            $auth_hash = hash('sha512', $hash_string);
-            
-            $gateway_url = $environment === 'live' 
-                ? 'https://pagos.azul.com.do/payment/main' 
-                : 'https://pruebas.azul.com.do/payment/main';
-
-            $response_url = add_query_arg('sga_azul_response', '1', site_url('/'));
-
-            ?>
-            <div id="sga-payment-message" class="processing" style="display:block;">Redirigiendo a la pasarela de pago segura de Azul...</div>
-            <form id="azul-redirect-form" action="<?php echo esc_url($gateway_url); ?>" method="post">
-                <input type="hidden" name="MerchantId" value="<?php echo esc_attr($merchant_id); ?>">
-                <input type="hidden" name="OrderNumber" value="<?php echo esc_attr($order_number); ?>">
-                <input type="hidden" name="Amount" value="<?php echo esc_attr($amount); ?>">
-                <input type="hidden" name="Itbis" value="<?php echo esc_attr($itbis); ?>">
-                <input type="hidden" name="AuthHash" value="<?php echo esc_attr($auth_hash); ?>">
-                <input type="hidden" name="ResponseUrl" value="<?php echo esc_url($response_url); ?>">
-                <input type="hidden" name="CustomOrderId" value="<?php echo esc_attr($custom_order_id); ?>">
-                <input type="hidden" name="UseCustomField1" value="1">
-                <input type="hidden" name="CustomField1" value="<?php echo esc_attr($custom_order_id); ?>">
-            </form>
-            <script>
-                document.getElementById('azul-redirect-form').submit();
-            </script>
-            <?php
         }
 
         return ob_get_clean();
     }
 
     /**
+     * Prepares and sends the user to the Azul payment gateway.
+     */
+    private function _redirect_to_azul($payment_data, $options) {
+        $merchant_id = $options['azul_merchant_id'] ?? '';
+        $auth_key = $options['azul_auth_key'] ?? '';
+        $environment = $options['azul_environment'] ?? 'sandbox';
+
+        if (empty($merchant_id) || empty($auth_key)) {
+            echo '<div id="sga-payment-message" class="error" style="display:block;">La pasarela de pago Azul no está configurada. Contacte a la administración.</div>';
+            return;
+        }
+        
+        $hash_string = $merchant_id . $auth_key . $payment_data['OrderNumber'] . $payment_data['Amount'] . $payment_data['Itbis'];
+        $auth_hash = hash('sha512', $hash_string);
+        
+        $gateway_url = $environment === 'live' 
+            ? 'https://pagos.azul.com.do/payment/main' 
+            : 'https://pruebas.azul.com.do/payment/main';
+
+        $response_url = add_query_arg('sga_azul_response', '1', site_url('/'));
+
+        ?>
+        <div id="sga-payment-message" class="processing" style="display:block;">Redirigiendo a la pasarela de pago segura de Azul...</div>
+        <form id="azul-redirect-form" action="<?php echo esc_url($gateway_url); ?>" method="post">
+            <input type="hidden" name="MerchantId" value="<?php echo esc_attr($merchant_id); ?>">
+            <input type="hidden" name="OrderNumber" value="<?php echo esc_attr($payment_data['OrderNumber']); ?>">
+            <input type="hidden" name="Amount" value="<?php echo esc_attr($payment_data['Amount']); ?>">
+            <input type="hidden" name="Itbis" value="<?php echo esc_attr($payment_data['Itbis']); ?>">
+            <input type="hidden" name="AuthHash" value="<?php echo esc_attr($auth_hash); ?>">
+            <input type="hidden" name="ResponseUrl" value="<?php echo esc_url($response_url); ?>">
+            <input type="hidden" name="CustomOrderId" value="<?php echo esc_attr($payment_data['CustomOrderId']); ?>">
+            <input type="hidden" name="UseCustomField1" value="1">
+            <input type="hidden" name="CustomField1" value="<?php echo esc_attr($payment_data['CustomOrderId']); ?>">
+        </form>
+        <script> document.getElementById('azul-redirect-form').submit(); </script>
+        <?php
+    }
+
+    /**
+     * Processes Cardnet purchase via server-to-server API call using the token.
+     */
+    private function _process_cardnet_purchase($payment_data, $options) {
+        $private_key = $options['cardnet_private_key'] ?? '';
+        $environment = $options['cardnet_environment'] ?? 'sandbox';
+
+        if (empty($private_key) || empty($payment_data['TrxToken'])) {
+            wp_redirect(add_query_arg(['payment_status' => 'failed', 'message' => 'Configuración de Cardnet incompleta o token no recibido.'], site_url('/pagos/')));
+            exit;
+        }
+
+        $api_url = $environment === 'production' 
+            ? 'https://servicios.cardnet.com.do/servicios/tokens/v1/api/Purchase'
+            : 'https://lab.cardnet.com.do/servicios/tokens/v1/api/Purchase';
+        
+        // Cardnet expects amount as integer (cents)
+        $amount_in_cents = intval(floatval($payment_data['Amount']) * 100);
+
+        $request_body = json_encode([
+            'TrxToken' => $payment_data['TrxToken'],
+            'Order' => $payment_data['OrderNumber'],
+            'Amount' => $amount_in_cents,
+            'Currency' => 'DOP',
+            'Capture' => true,
+            'DataDo' => [
+                'Invoice' => $payment_data['OrderNumber']
+            ]
+        ]);
+
+        $response = wp_remote_post($api_url, [
+            'method'    => 'POST',
+            'headers'   => [
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Basic ' . base64_encode($private_key . ':')
+            ],
+            'body'      => $request_body,
+            'timeout'   => 45,
+        ]);
+        
+        if (is_wp_error($response)) {
+            SGA_Utils::_log_activity('Error de Conexión Cardnet', 'Fallo al conectar con la API Purchase. Orden: ' . $payment_data['OrderNumber'] . ' Error: ' . $response->get_error_message());
+            wp_redirect(add_query_arg(['payment_status' => 'failed', 'message' => 'Error de conexión con la pasarela.'], site_url('/pagos/')));
+            exit;
+        }
+
+        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        $_POST['TransactionId'] = $payment_data['OrderNumber'];
+        $_POST['Amount'] = $payment_data['Amount'];
+        $_POST['CustomField1'] = $payment_data['CustomOrderId'];
+        
+        if (isset($response_body['Transaction']['Status']) && $response_body['Transaction']['Status'] === 'Approved') {
+            $_POST['ResponseCode'] = '00';
+            $_POST['AuthorizationCode'] = $response_body['Transaction']['ApprovalCode'] ?? 'N/A';
+            $_POST['ResponseMessage'] = 'Aprobada';
+        } else {
+            $_POST['ResponseCode'] = $response_body['Transaction']['Steps'][0]['ResponseCode'] ?? '99';
+            $_POST['AuthorizationCode'] = '';
+            $_POST['ResponseMessage'] = $response_body['Transaction']['Steps'][0]['ResponseMessage'] ?? 'Rechazada';
+        }
+        
+        // Manually trigger the handler
+        $this->handle_cardnet_response(true);
+    }
+
+
+    /**
      * Maneja la respuesta POST de la pasarela de Azul.
      */
     public function handle_azul_response() {
-        if (!isset($_GET['sga_azul_response'])) {
-            return;
-        }
+        if (!isset($_GET['sga_azul_response'])) return;
 
         $order_number = $_POST['OrderNumber'] ?? '';
         $amount = $_POST['Amount'] ?? '';
@@ -377,60 +518,92 @@ class SGA_Payments {
         }
 
         if ($response_code === '00') {
-            $parts = explode(':', $custom_order_id);
-            $payment_type = $parts[0];
-            $student_id = null;
-            $description = '';
-
-            if ($payment_type === 'inscription') {
-                $student_id = intval($parts[1]);
-                $row_index = intval($parts[2]);
-                $cursos = get_field('cursos_inscritos', $student_id);
-                $curso_aprobado = isset($cursos[$row_index]) ? $cursos[$row_index] : null;
-                if($curso_aprobado) {
-                    $description = 'Inscripción: ' . $curso_aprobado['nombre_curso'];
-                }
-            } elseif ($payment_type === 'general') {
-                $concepto_id = intval($parts[1]);
-                $student_id = intval($parts[2]);
-                $concepto_post = get_post($concepto_id);
-                if($concepto_post) {
-                    $description = $concepto_post->post_title;
-                }
-            }
-
-            if ($student_id) {
-                $student_post = get_post($student_id);
-                $payment_data = [
-                    'transaction_id' => $azul_transaction_id,
-                    'amount'         => number_format(floatval($amount), 2),
-                    'currency'       => 'DOP',
-                    'description'    => $description,
-                    'gateway'        => 'Azul',
-                    'student_id'     => $student_id,
-                    'student_name'   => $student_post->post_title,
-                    'student_email'  => get_field('email', $student_id),
-                    'student_cedula' => get_field('cedula', $student_id),
-                ];
-
-                $this->_handle_successful_payment($payment_data);
-
-                if ($payment_type === 'inscription') {
-                    SGA_Utils::_aprobar_estudiante($student_id, $row_index, $payment_data['student_cedula'], $payment_data['student_name'], true, $payment_data);
-                }
-            }
-            
+            $this->process_successful_transaction($custom_order_id, $azul_transaction_id, $amount, 'Azul');
             $redirect_url = add_query_arg(['payment_status' => 'success', 'order' => $order_number], site_url('/pagos/'));
-            wp_redirect($redirect_url);
-            exit;
-
         } else {
             SGA_Utils::_log_activity('Pago Rechazado Azul', 'Orden: ' . $order_number . ' - Mensaje: ' . $response_message);
             $redirect_url = add_query_arg(['payment_status' => 'failed', 'message' => urlencode($response_message)], site_url('/pagos/'));
-            wp_redirect($redirect_url);
-            exit;
+        }
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
+    /**
+     * Maneja la respuesta de la pasarela de Cardnet.
+     */
+    public function handle_cardnet_response($is_server_call = false) {
+        if (!isset($_GET['sga_cardnet_response']) && !$is_server_call) return;
+        
+        $response_code = $_POST['ResponseCode'] ?? '';
+        $order_number = $_POST['TransactionId'] ?? '';
+        $amount = $_POST['Amount'] ?? '';
+        $authorization_code = $_POST['AuthorizationCode'] ?? '';
+        $custom_order_id = $_POST['CustomField1'] ?? '';
+        $response_message = $_POST['ResponseMessage'] ?? 'Error desconocido';
+
+        if ($response_code === '00') {
+            $this->process_successful_transaction($custom_order_id, $authorization_code, $amount, 'Cardnet');
+            $redirect_url = add_query_arg(['payment_status' => 'success', 'order' => $order_number], site_url('/pagos/'));
+        } else {
+            SGA_Utils::_log_activity('Pago Rechazado Cardnet', 'Orden: ' . $order_number . ' - Mensaje: ' . $response_message . ' (' . $response_code . ')');
+            $redirect_url = add_query_arg(['payment_status' => 'failed', 'message' => urlencode($response_message)], site_url('/pagos/'));
+        }
+        
+        wp_redirect($redirect_url);
+        exit;
+    }
+
+
+    /**
+     * Procesa una transacción exitosa (común para todas las pasarelas).
+     */
+    private function process_successful_transaction($custom_order_id, $transaction_id, $amount, $gateway_name) {
+        $parts = explode(':', $custom_order_id);
+        if (count($parts) < 2) return;
+
+        $payment_type = $parts[0];
+        $student_id = null;
+        $description = '';
+
+        if ($payment_type === 'inscription' && isset($parts[1], $parts[2])) {
+            $student_id = intval($parts[1]);
+            $row_index = intval($parts[2]);
+            $cursos = get_field('cursos_inscritos', $student_id);
+            $curso_aprobado = $cursos[$row_index] ?? null;
+            if ($curso_aprobado) {
+                $description = 'Inscripción: ' . $curso_aprobado['nombre_curso'];
+            }
+        } elseif ($payment_type === 'general' && isset($parts[1], $parts[2])) {
+            $concepto_id = intval($parts[1]);
+            $student_id = intval($parts[2]);
+            $concepto_post = get_post($concepto_id);
+            if ($concepto_post) {
+                $description = $concepto_post->post_title;
+            }
+        }
+
+        if ($student_id) {
+            $student_post = get_post($student_id);
+            $payment_data = [
+                'transaction_id' => $transaction_id,
+                'amount'         => number_format(floatval($amount), 2),
+                'currency'       => 'DOP',
+                'description'    => $description,
+                'gateway'        => $gateway_name,
+                'student_id'     => $student_id,
+                'student_name'   => $student_post->post_title,
+                'student_email'  => get_field('email', $student_id),
+                'student_cedula' => get_field('cedula', $student_id),
+            ];
+
+            $this->_handle_successful_payment($payment_data);
+
+            if ($payment_type === 'inscription') {
+                SGA_Utils::_aprobar_estudiante($student_id, $row_index, $payment_data['student_cedula'], $payment_data['student_name'], true, $payment_data);
+            }
         }
     }
+
 
     /**
      * Procesa un pago exitoso: registra el CPT y envía el recibo.
@@ -524,3 +697,4 @@ class SGA_Payments {
         <?php
     }
 }
+

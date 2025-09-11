@@ -91,10 +91,20 @@ class SGA_Admin {
      */
     public function sanitize_payment_options($input) {
         $sanitized_input = [];
+        // General
+        if (isset($input['local_currency_symbol'])) $sanitized_input['local_currency_symbol'] = sanitize_text_field($input['local_currency_symbol']);
+        if (isset($input['active_gateway'])) $sanitized_input['active_gateway'] = in_array($input['active_gateway'], ['azul', 'cardnet']) ? $input['active_gateway'] : 'azul';
+
+        // Azul
         if (isset($input['azul_merchant_id'])) $sanitized_input['azul_merchant_id'] = sanitize_text_field($input['azul_merchant_id']);
         if (isset($input['azul_auth_key'])) $sanitized_input['azul_auth_key'] = sanitize_text_field($input['azul_auth_key']);
         if (isset($input['azul_environment'])) $sanitized_input['azul_environment'] = in_array($input['azul_environment'], ['sandbox', 'live']) ? $input['azul_environment'] : 'sandbox';
-        if (isset($input['local_currency_symbol'])) $sanitized_input['local_currency_symbol'] = sanitize_text_field($input['local_currency_symbol']);
+        
+        // Cardnet
+        if (isset($input['cardnet_public_key'])) $sanitized_input['cardnet_public_key'] = sanitize_text_field($input['cardnet_public_key']);
+        if (isset($input['cardnet_private_key'])) $sanitized_input['cardnet_private_key'] = sanitize_text_field($input['cardnet_private_key']);
+        if (isset($input['cardnet_environment'])) $sanitized_input['cardnet_environment'] = in_array($input['cardnet_environment'], ['sandbox', 'production']) ? $input['cardnet_environment'] : 'sandbox';
+
         return $sanitized_input;
     }
 
@@ -105,24 +115,38 @@ class SGA_Admin {
         if (!current_user_can('manage_options')) wp_die(__('No tienes permisos para acceder a esta página.'));
         $options = get_option('sga_payment_options', [
             'local_currency_symbol' => 'DOP',
+            'active_gateway' => 'cardnet',
             'azul_merchant_id' => '',
             'azul_auth_key' => '',
             'azul_environment' => 'sandbox',
+            'cardnet_public_key' => 'J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ',
+            'cardnet_private_key' => '9kYH2uY5zoTD-WBMEoc0KNRQYrC7crPRJ7zPegg3suXguw_8L-rZDQ',
+            'cardnet_environment' => 'sandbox',
         ]);
         ?>
         <div class="wrap">
             <h1>Ajustes de Pagos Online</h1>
-            <p>Configura las credenciales para aceptar pagos y para la integración con sistemas de facturación.</p>
+            <p>Configura las credenciales para aceptar pagos y selecciona la pasarela activa.</p>
             <form method="post" action="options.php">
                 <?php settings_fields('sga_payment_options_group'); ?>
                 
-                <h2>Ajustes Generales de Moneda</h2>
+                <h2>Configuración General</h2>
                 <table class="form-table">
                     <tr valign="top">
                         <th scope="row"><label for="local_currency_symbol">Símbolo Moneda Local</label></th>
                         <td>
-                            <input type="text" id="local_currency_symbol" name="sga_payment_options[local_currency_symbol]" value="<?php echo esc_attr($options['local_currency_symbol']); ?>" class="small-text" placeholder="DOP" />
+                            <input type="text" id="local_currency_symbol" name="sga_payment_options[local_currency_symbol]" value="<?php echo esc_attr($options['local_currency_symbol'] ?? 'DOP'); ?>" class="small-text" placeholder="DOP" />
                             <p class="description">El símbolo de la moneda en la que están los precios de tus cursos (ej. DOP, RD$).</p>
+                        </td>
+                    </tr>
+                     <tr valign="top">
+                        <th scope="row"><label for="active_gateway">Pasarela de Pago Activa</label></th>
+                        <td>
+                            <select id="active_gateway" name="sga_payment_options[active_gateway]">
+                                <option value="azul" <?php selected($options['active_gateway'] ?? 'azul', 'azul'); ?>>Azul</option>
+                                <option value="cardnet" <?php selected($options['active_gateway'] ?? 'azul', 'cardnet'); ?>>Cardnet</option>
+                            </select>
+                            <p class="description">Selecciona la pasarela de pago que se usará en el portal de pagos.</p>
                         </td>
                     </tr>
                 </table>
@@ -156,7 +180,36 @@ class SGA_Admin {
                     </tr>
                 </table>
                 <hr>
-                
+
+                <h2>Pasarela de Pago: Cardnet</h2>
+                <p>Configura las credenciales para la pasarela de pago Cardnet (Tokenización).</p>
+                <table class="form-table">
+                     <tr valign="top">
+                        <th scope="row"><label for="cardnet_environment">Entorno de Cardnet</label></th>
+                        <td>
+                            <select id="cardnet_environment" name="sga_payment_options[cardnet_environment]">
+                                <option value="sandbox" <?php selected($options['cardnet_environment'] ?? 'sandbox', 'sandbox'); ?>>Desarrollo (Pruebas)</option>
+                                <option value="production" <?php selected($options['cardnet_environment'] ?? 'sandbox', 'production'); ?>>Producción</option>
+                            </select>
+                            <p class="description">Usa 'Desarrollo' para probar. Cambia a 'Producción' para aceptar pagos reales.</p>
+                        </td>
+                    </tr>
+                     <tr valign="top">
+                        <th scope="row"><label for="cardnet_public_key">Cardnet Public Account Key</label></th>
+                        <td>
+                            <input type="text" id="cardnet_public_key" name="sga_payment_options[cardnet_public_key]" value="<?php echo esc_attr($options['cardnet_public_key'] ?? ''); ?>" class="regular-text" />
+                            <p class="description">Llave pública para el formulario de checkout (PWCheckout.js). La de pruebas es: J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row"><label for="cardnet_private_key">Cardnet Private Account Key</label></th>
+                        <td>
+                            <input type="password" id="cardnet_private_key" name="sga_payment_options[cardnet_private_key]" value="<?php echo esc_attr($options['cardnet_private_key'] ?? ''); ?>" class="regular-text" />
+                            <p class="description">Llave privada (Private Account Key) para las llamadas a la API (server-to-server). La de pruebas es: 9kYH2uY5zoTD-WBMEoc0KNRQYrC7crPRJ7zPegg3suXguw_8L-rZDQ</p>
+                        </td>
+                    </tr>
+                </table>
+
                 <?php submit_button('Guardar Cambios'); ?>
             </form>
         </div>
@@ -368,3 +421,4 @@ class SGA_Admin {
         <?php
     }
 }
+
