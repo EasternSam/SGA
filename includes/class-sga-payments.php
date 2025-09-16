@@ -21,6 +21,53 @@ class SGA_Payments {
     public function render_pagos_page() {
         ob_start();
         
+        // --- INICIO: Bloque de confirmación de pago ---
+        if (isset($_GET['payment_status'])) {
+            ?>
+            <style>
+                .sga-pagos-container { max-width: 900px; margin: 40px auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+                .sga-payment-form-container { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); padding: 25px 35px 35px 35px; }
+                .sga-form-icon { width: 80px; height: 80px; margin: 20px auto 15px; background-color: #141f53; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: 4px solid #fff; }
+                .sga-form-icon svg { color: white; width: 40px; height: 40px; }
+                .sga-submit-button { display: inline-block; width: auto; text-decoration: none; margin-top: 20px; padding: 12px 24px; font-size: 16px; background-color: #141f53; color: white; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.3s; font-weight: 600; }
+                .sga-submit-button:hover { background-color: #0041a3; }
+            </style>
+            <?php
+            if ($_GET['payment_status'] === 'success' && isset($_GET['order'])) {
+                ?>
+                <div class="sga-pagos-container">
+                    <div class="sga-payment-form-container" style="text-align: center;">
+                        <div class="sga-form-icon" style="background-color: #10b981;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        </div>
+                        <h2 style="margin-top: 20px;">¡Pago Completado Exitosamente!</h2>
+                        <p style="font-size: 16px; color: #555;">Gracias por tu pago. Hemos procesado tu transacción correctamente.</p>
+                        <p style="font-size: 14px; color: #555;">Tu número de orden es: <strong><?php echo esc_html($_GET['order']); ?></strong></p>
+                        <p style="font-size: 14px; color: #555;">Recibirás un correo electrónico con el recibo y los detalles de tu matrícula en breve.</p>
+                        <a href="<?php echo esc_url(site_url('/')); ?>" class="sga-submit-button">Volver al Inicio</a>
+                    </div>
+                </div>
+                <?php
+            } else if ($_GET['payment_status'] === 'failed' && isset($_GET['message'])) {
+                ?>
+                <div class="sga-pagos-container">
+                    <div class="sga-payment-form-container" style="text-align: center;">
+                        <div class="sga-form-icon" style="background-color: #ef4444;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </div>
+                        <h2 style="margin-top: 20px;">Error en el Pago</h2>
+                        <p style="font-size: 16px; color: #555;">Lamentablemente, no pudimos procesar tu pago.</p>
+                        <p style="font-size: 14px; color: #721c24; background-color: #f8d7da; padding: 10px; border-radius: 8px;"><strong>Razón:</strong> <?php echo esc_html(urldecode($_GET['message'])); ?></p>
+                        <p style="font-size: 14px; color: #555;">Por favor, verifica la información de tu tarjeta e inténtalo de nuevo.</p>
+                        <a href="<?php echo esc_url(get_permalink()); ?>" class="sga-submit-button">Intentar de Nuevo</a>
+                    </div>
+                </div>
+                <?php
+            }
+            return ob_get_clean();
+        }
+        // --- FIN: Bloque de confirmación de pago ---
+
         $options = get_option('sga_payment_options');
         $active_gateway = $options['active_gateway'] ?? 'azul';
         $cardnet_env = '';
@@ -450,6 +497,11 @@ class SGA_Payments {
             ]
         ]);
 
+        SGA_Utils::_log_activity(
+            'Cardnet Purchase Request', 
+            'Enviando solicitud a Cardnet. Orden: ' . $payment_data['OrderNumber'] . ' | Cuerpo: ' . $request_body
+        );
+
         $response = wp_remote_post($api_url, [
             'method'    => 'POST',
             'headers'   => [
@@ -466,16 +518,30 @@ class SGA_Payments {
             exit;
         }
 
-        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+        $response_code_http = wp_remote_retrieve_response_code($response);
+        $response_body_raw = wp_remote_retrieve_body($response);
+        $response_body = json_decode($response_body_raw, true);
+
+        SGA_Utils::_log_activity(
+            'Cardnet Purchase Response',
+            'Respuesta recibida de Cardnet. Orden: ' . $payment_data['OrderNumber'] . ' | Código HTTP: ' . $response_code_http . ' | Cuerpo: ' . $response_body_raw
+        );
         
         $_POST['TransactionId'] = $payment_data['OrderNumber'];
         $_POST['Amount'] = $payment_data['Amount'];
         $_POST['CustomField1'] = $payment_data['CustomOrderId'];
         
-        if (isset($response_body['Transaction']['Status']) && $response_body['Transaction']['Status'] === 'Approved') {
+        $is_successful = (isset($response_body['Transaction']['TransactionStatusId']) && $response_body['Transaction']['TransactionStatusId'] === 1);
+
+        SGA_Utils::_log_activity(
+            'Cardnet Verification',
+            'Verificando estado. Orden: ' . $payment_data['OrderNumber'] . ' | ¿Fue exitoso?: ' . ($is_successful ? 'Sí' : 'No')
+        );
+
+        if ($is_successful) {
             $_POST['ResponseCode'] = '00';
             $_POST['AuthorizationCode'] = $response_body['Transaction']['ApprovalCode'] ?? 'N/A';
-            $_POST['ResponseMessage'] = 'Aprobada';
+            $_POST['ResponseMessage'] = $response_body['Transaction']['Steps'][0]['ResponseMessage'] ?? 'Aprobada';
         } else {
             $_POST['ResponseCode'] = $response_body['Transaction']['Steps'][0]['ResponseCode'] ?? '99';
             $_POST['AuthorizationCode'] = '';

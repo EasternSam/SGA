@@ -119,7 +119,7 @@ class SGA_Admin {
             'azul_merchant_id' => '',
             'azul_auth_key' => '',
             'azul_environment' => 'sandbox',
-            'cardnet_public_key' => 'J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ',
+            'cardnet_public_key' => 'mfH9CqiAFjFQh_gQR_1TQG_I56ONV7HQ',
             'cardnet_private_key' => '9kYH2uY5zoTD-WBMEoc0KNRQYrC7crPRJ7zPegg3suXguw_8L-rZDQ',
             'cardnet_environment' => 'sandbox',
         ]);
@@ -198,7 +198,7 @@ class SGA_Admin {
                         <th scope="row"><label for="cardnet_public_key">Cardnet Public Account Key</label></th>
                         <td>
                             <input type="text" id="cardnet_public_key" name="sga_payment_options[cardnet_public_key]" value="<?php echo esc_attr($options['cardnet_public_key'] ?? ''); ?>" class="regular-text" />
-                            <p class="description">Llave pública para el formulario de checkout (PWCheckout.js). La de pruebas es: J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ</p>
+                            <p class="description">Llave pública para el formulario de checkout (PWCheckout.js). La de pruebas es: mfH9CqiAFjFQh_gQR_1TQG_I56ONV7HQ</p>
                         </td>
                     </tr>
                     <tr valign="top">
