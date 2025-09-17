@@ -19,6 +19,13 @@ class SGA_Payments {
      * Renderiza el contenido de la página de pagos [sga_pagina_pagos].
      */
     public function render_pagos_page() {
+        $options = get_option('sga_payment_options');
+        $payments_enabled = isset($options['enable_online_payments']) && $options['enable_online_payments'] == 1;
+
+        if (!$payments_enabled) {
+            return '<div class="sga-pagos-container" style="text-align: center; padding: 40px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fff;"><h2>Portal de Pagos Deshabilitado</h2><p>Los pagos en línea no están habilitados en este momento. Por favor, contacta a la administración para más información.</p></div>';
+        }
+
         ob_start();
         
         // --- INICIO: Bloque de confirmación de pago ---
@@ -664,7 +671,14 @@ class SGA_Payments {
             $this->_handle_successful_payment($payment_data);
 
             if ($payment_type === 'inscription') {
-                SGA_Utils::_aprobar_estudiante($student_id, $row_index, $payment_data['student_cedula'], $payment_data['student_name'], true, $payment_data);
+                SGA_Utils::_aprobar_estudiante(
+                    $student_id, 
+                    $row_index, 
+                    $payment_data['student_cedula'], 
+                    $payment_data['student_name'], 
+                    'Aprobación automática por pago online.',
+                    $payment_data
+                );
             }
         }
     }
@@ -762,4 +776,3 @@ class SGA_Payments {
         <?php
     }
 }
-

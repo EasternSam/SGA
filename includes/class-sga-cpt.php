@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 /**
  * Clase SGA_CPT
  *
- * Gestiona la creaci贸n y configuraci贸n de todos los Custom Post Types (CPTs)
+ * Gestiona la creación y configuración de todos los Custom Post Types (CPTs)
  * y las meta boxes asociadas.
  */
 class SGA_CPT {
@@ -27,7 +27,7 @@ class SGA_CPT {
             'menu_icon' => 'dashicons-id-alt',
             'supports' => array('title', 'custom-fields'),
             'rewrite' => false,
-            'show_in_menu' => 'sga_main_menu',
+            'show_in_menu' => false,
             'capability_type' => 'estudiante',
             'capabilities' => array(
                 'edit_post' => 'edit_estudiante',
@@ -54,7 +54,7 @@ class SGA_CPT {
                 'menu_icon' => 'dashicons-welcome-learn-more',
                 'supports' => array('title', 'editor', 'thumbnail', 'custom-fields'),
                 'rewrite' => array('slug' => 'cursos'),
-                'show_in_menu' => 'sga_main_menu',
+                'show_in_menu' => false,
                 'taxonomies' => array('category'),
             ));
         }
@@ -66,7 +66,7 @@ class SGA_CPT {
             'menu_icon' => 'dashicons-list-view',
             'supports' => array('title', 'editor'),
             'rewrite' => false,
-            'show_in_menu' => 'sga_main_menu',
+            'show_in_menu' => false,
             'capability_type' => 'post',
             'capabilities' => array('create_posts' => 'do_not_allow'),
         ));
@@ -78,7 +78,7 @@ class SGA_CPT {
             'menu_icon' => 'dashicons-money-alt',
             'supports' => array('title', 'custom-fields'),
             'rewrite' => false,
-            'show_in_menu' => 'sga_main_menu',
+            'show_in_menu' => false,
             'capability_type' => 'post',
             'capabilities' => array('create_posts' => 'do_not_allow'),
         ));
@@ -90,13 +90,13 @@ class SGA_CPT {
             'menu_icon' => 'dashicons-cart',
             'supports' => array('title'),
             'rewrite' => false,
-            'show_in_menu' => 'sga_main_menu',
+            'show_in_menu' => false,
             'description' => 'Crea conceptos de pago generales como diplomas, carnets, etc.'
         ));
     }
 
     /**
-     * A帽ade la meta box para el precio en 'sga_concepto_pago'.
+     * Añade la meta box para el precio en 'sga_concepto_pago'.
      */
     public function sga_add_price_metabox() {
         add_meta_box(
@@ -142,3 +142,4 @@ class SGA_CPT {
         }
     }
 }
+

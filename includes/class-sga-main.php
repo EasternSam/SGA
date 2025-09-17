@@ -27,6 +27,7 @@ class SGA_Main {
         new SGA_Payments();
         new SGA_Reports();
         new SGA_Integration();
+        new SGA_API(); // <-- Clase de la API REST
     }
     
     /**

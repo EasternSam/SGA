@@ -15,8 +15,9 @@ class SGA_Utils {
      * @param string $title Título del registro.
      * @param string $content Contenido o detalle del registro.
      * @param int|null $user_id ID del usuario que realiza la acción. Si es null, usa el usuario actual. Si es 0, es el sistema.
+     * @param bool $is_api Indica si el registro es específico de la API para facilitar el filtrado.
      */
-    public static function _log_activity($title, $content = '', $user_id = null) {
+    public static function _log_activity($title, $content = '', $user_id = null, $is_api = false) {
         if (is_null($user_id)) $user_id = get_current_user_id();
         $post_id = wp_insert_post(array(
             'post_title' => $title,
@@ -26,6 +27,9 @@ class SGA_Utils {
         ));
         if ($post_id && !is_wp_error($post_id)) {
             update_post_meta($post_id, '_log_user_id', $user_id);
+            if ($is_api) {
+                update_post_meta($post_id, '_is_api_log', '1');
+            }
         }
     }
 
@@ -104,46 +108,71 @@ class SGA_Utils {
             self::_log_activity('Error de Correo', "Intento de envío de correo de pago pendiente a dirección inválida: " . esc_html($student_email));
             return;
         }
+        
+        $payment_options = get_option('sga_payment_options');
+        $payments_enabled = isset($payment_options['enable_payments']) && $payment_options['enable_payments'] == 1;
 
-        $precio_display = 'No especificado';
-        $curso_post_query = get_posts(array('post_type' => 'curso', 'title' => $course_name, 'posts_per_page' => 1, 'post_status' => 'publish'));
-        if ($curso_post_query && function_exists('get_field')) {
-            $precio_del_curso = get_field('precio_del_curso', $curso_post_query[0]->ID);
-            if ($precio_del_curso) {
-                $precio_display = $precio_del_curso;
+        if ($payments_enabled) {
+            $precio_display = 'No especificado';
+            $curso_post_query = get_posts(array('post_type' => 'curso', 'title' => $course_name, 'posts_per_page' => 1, 'post_status' => 'publish'));
+            if ($curso_post_query && function_exists('get_field')) {
+                $precio_del_curso = get_field('precio_del_curso', $curso_post_query[0]->ID);
+                if ($precio_del_curso) {
+                    $precio_display = $precio_del_curso;
+                }
             }
+
+            $subject = 'Hemos recibido tu solicitud de inscripción';
+            $email_title = 'Inscripción Pendiente de Pago';
+            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
+            $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y la hemos puesto en espera hasta que se complete el pago de la inscripción. A continuación, encontrarás los detalles de tu solicitud.</p>';
+            $content_html .= '<h2>Siguiente Paso: Realizar el Pago</h2>';
+            $content_html .= '<p class="last">Para completar tu inscripción y asegurar tu cupo, por favor realiza el pago a través de nuestro portal seguro. Una vez completado el pago, tu matrícula será procesada automáticamente.</p>';
+
+            $payment_page_url = site_url('/pagos/');
+            $payment_url_with_cedula = add_query_arg('identificador', urlencode($student_cedula), $payment_page_url);
+            $payment_url_with_cedula = add_query_arg('tipo_id', 'cedula', $payment_url_with_cedula);
+
+            $summary_table_title = 'Resumen de tu Solicitud';
+            $summary_data = [
+                'Estudiante' => $student_name,
+                'Cédula' => $student_cedula,
+                'Curso Solicitado' => $course_name,
+                'Horario' => $horario,
+                'Monto a Pagar' => $precio_display,
+            ];
+
+            $button_data = [
+                'url' => $payment_url_with_cedula,
+                'text' => 'Pagar Ahora'
+            ];
+            
+            $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data, $button_data);
+            self::_log_activity('Correo Enviado', "Correo de pago pendiente enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
+
+        } else {
+             // Payments are disabled, send manual payment instructions
+            $subject = 'Hemos recibido tu solicitud de inscripción';
+            $email_title = 'Solicitud de Inscripción Recibida';
+            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
+            $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y nuestro equipo la está procesando. A continuación, encontrarás los detalles de tu solicitud.</p>';
+            $content_html .= '<h2>Siguientes Pasos</h2>';
+            $content_html .= '<p class="last">Nuestro equipo de admisiones se pondrá en contacto contigo a la brevedad para confirmar los detalles y guiarte con los siguientes pasos para completar tu matriculación. Tu cupo está reservado temporalmente.</p>';
+
+            $summary_table_title = 'Resumen de tu Solicitud';
+            $summary_data = [
+                'Estudiante' => $student_name,
+                'Cédula' => $student_cedula,
+                'Curso Solicitado' => $course_name,
+                'Horario' => $horario,
+            ];
+
+            $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data);
+            self::_log_activity('Correo Enviado', "Correo de inscripción (pagos manuales) enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
         }
 
-        $subject = 'Hemos recibido tu solicitud de inscripción';
-        $email_title = 'Inscripción Pendiente de Pago';
-        $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
-        $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y la hemos puesto en espera hasta que se complete el pago de la inscripción. A continuación, encontrarás los detalles de tu solicitud.</p>';
-        $content_html .= '<h2>Siguiente Paso: Realizar el Pago</h2>';
-        $content_html .= '<p class="last">Para completar tu inscripción y asegurar tu cupo, por favor realiza el pago a través de nuestro portal seguro. Una vez completado el pago, tu matrícula será procesada automáticamente.</p>';
-
-        $payment_page_url = site_url('/pagos/');
-        $payment_url_with_cedula = add_query_arg('identificador', urlencode($student_cedula), $payment_page_url);
-        $payment_url_with_cedula = add_query_arg('tipo_id', 'cedula', $payment_url_with_cedula);
-
-        $summary_table_title = 'Resumen de tu Solicitud';
-        $summary_data = [
-            'Estudiante' => $student_name,
-            'Cédula' => $student_cedula,
-            'Curso Solicitado' => $course_name,
-            'Horario' => $horario,
-            'Monto a Pagar' => $precio_display,
-        ];
-
-        $button_data = [
-            'url' => $payment_url_with_cedula,
-            'text' => 'Pagar Ahora'
-        ];
-
-        $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data, $button_data);
         $headers = ['Content-Type: text/html; charset=UTF-8'];
         wp_mail($student_email, $subject, $body, $headers);
-
-        self::_log_activity('Correo Enviado', "Correo de pago pendiente enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
     }
     
     /**
@@ -157,13 +186,21 @@ class SGA_Utils {
         $es_primera_matricula = true;
 
         if (function_exists('get_field')) {
-            $todos_los_cursos = get_field('cursos_inscritos', $post_id);
-            if ($todos_los_cursos) {
-                foreach ($todos_los_cursos as $curso) {
-                    if (!empty($curso['matricula'])) {
-                        $matricula = $curso['matricula'];
-                        $es_primera_matricula = false;
-                        break;
+            // Check if student already has a matricula from the internal system saved
+            $matricula_externa = get_post_meta($post_id, '_matricula_externa', true);
+            if (!empty($matricula_externa)) {
+                $matricula = $matricula_externa;
+                $es_primera_matricula = false;
+            } else {
+                // Check other courses in this system
+                $todos_los_cursos = get_field('cursos_inscritos', $post_id);
+                if ($todos_los_cursos) {
+                    foreach ($todos_los_cursos as $curso) {
+                        if (!empty($curso['matricula'])) {
+                            $matricula = $curso['matricula'];
+                            $es_primera_matricula = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -214,7 +251,7 @@ class SGA_Utils {
 
         $log_content = "{$nombre} (Cédula: {$cedula}) fue matriculado en '{$curso_aprobado['nombre_curso']}' con la matrícula {$matricula}.";
         if ($is_automatic_payment) {
-            $log_content .= " Aprobación automática por pago online.";
+            $log_content .= " Aprobación automática por pago online o webhook.";
             if (!empty($payment_details['amount']) && !empty($payment_details['currency'])) {
                 $log_content .= " Monto: " . $payment_details['amount'] . " " . $payment_details['currency'] . ".";
             }
@@ -237,10 +274,10 @@ class SGA_Utils {
     }
 
     /**
-     * Obtiene una lista de estudiantes matriculados filtrada por término de búsqueda y curso.
+     * Obtiene una lista de estudiantes filtrada por término de búsqueda, curso y estado.
      * @return array Lista de estudiantes que coinciden.
      */
-    public static function _get_filtered_students($search_term, $course_filter) {
+    public static function _get_filtered_students($search_term = '', $course_filter = '', $status_filter = 'Matriculado') {
         $filtered_students = [];
         $estudiantes = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         if ($estudiantes && function_exists('get_field')) {
@@ -248,7 +285,9 @@ class SGA_Utils {
                 $cursos = get_field('cursos_inscritos', $estudiante->ID);
                 if ($cursos) {
                     foreach ($cursos as $curso) {
-                        if (isset($curso['estado']) && $curso['estado'] == 'Matriculado') {
+                        $is_status_match = empty($status_filter) || (isset($curso['estado']) && $curso['estado'] == $status_filter);
+                        
+                        if ($is_status_match) {
                             $cedula = get_field('cedula', $estudiante->ID);
                             $email = get_field('email', $estudiante->ID);
                             $telefono = get_field('telefono', $estudiante->ID);

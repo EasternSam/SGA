@@ -20,6 +20,9 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
         add_action('wp_ajax_sga_get_report_chart_data', array($this, 'ajax_get_report_chart_data')); // <-- AÑADIDO
+        add_action('wp_ajax_sga_test_api_connection', array($this, 'ajax_test_api_connection'));
+        add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
+
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
@@ -319,5 +322,73 @@ class SGA_Ajax {
 
         SGA_Utils::_log_activity('Correo Masivo Enviado', "Se enviaron {$sent_count} de " . count($recipients_data) . " correos al grupo '{$recipient_group}'.");
         wp_send_json_success(['message' => "Proceso completado. Se enviaron {$sent_count} correos."]);
+    }
+
+    /**
+     * AJAX: Simula un webhook entrante desde el sistema interno para matricular a un estudiante.
+     */
+    public function ajax_test_incoming_webhook() {
+        check_ajax_referer('sga_test_api_nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+
+        $cedula = sanitize_text_field($_POST['cedula']);
+        $curso = sanitize_text_field($_POST['curso']);
+
+        if (empty($cedula) || empty($curso)) {
+            wp_send_json_error(['message' => 'La cédula y el nombre del curso son obligatorios.']);
+        }
+
+        $integration_options = get_option('sga_integration_options', []);
+        $api_secret = $integration_options['api_secret_key'] ?? '';
+
+        $endpoint_url = get_rest_url(null, 'sga/v1/update-student-status/');
+
+        $body = json_encode([
+            'cedula' => $cedula,
+            'status' => 'pagado',
+            'curso_nombre' => $curso
+        ]);
+
+        $response = wp_remote_post($endpoint_url, [
+            'method'    => 'POST',
+            'headers'   => [
+                'Content-Type' => 'application/json',
+                'X-SGA-Signature' => $api_secret,
+                // Agregamos una cookie para que la API sepa que es una petición autenticada desde el admin
+                'Cookie' => implode('; ', array_map(function($k, $v) { return "$k=$v"; }, array_keys($_COOKIE), $_COOKIE))
+            ],
+            'body'      => $body,
+            'timeout'   => 30,
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => 'Error de WP_Error: ' . $response->get_error_message()]);
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+
+        wp_send_json_success([
+            'message' => 'Simulación completada.',
+            'response_code' => $response_code,
+            'response_body' => json_decode($response_body)
+        ]);
+    }
+
+    /**
+     * AJAX: Prueba la conexión con las URLs de la API del sistema interno.
+     */
+    public function ajax_test_api_connection() {
+        check_ajax_referer('sga_test_api_nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+
+        SGA_Integration::_send_webhook_test();
+        SGA_Integration::_query_student_test();
+
+        wp_send_json_success(['message' => 'Prueba de conexión iniciada.']);
     }
 }

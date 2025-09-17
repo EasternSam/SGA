@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Gestión Académica CENTU
  * Description: Panel a medida para gestionar inscripciones, cursos, matriculación, pagos (Azul, Cardnet) y reportes avanzados en PDF.
- * Version: 13.0
+ * Version: 13.5
  * Author: Samuel Diaz Pilier
  * Author URI: https://90s.agency/sam
  * @requires PHP 7.1+
@@ -13,7 +13,7 @@
 if (!defined('ABSPATH')) exit; // Salir si se accede directamente.
 
 // --- 1. Definir Constantes del Plugin ---
-define('SGA_PLUGIN_VERSION', '13.0');
+define('SGA_PLUGIN_VERSION', '13.5');
 define('SGA_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('SGA_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -37,6 +37,7 @@ require_once SGA_PLUGIN_PATH . 'includes/class-sga-shortcodes.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-payments.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-reports.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-integration.php';
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-api.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-main.php';
 
 // --- 4. Registrar Hooks de Activación y Desactivación ---
@@ -53,3 +54,4 @@ function sga_run_plugin() {
 }
 // Enganchar la función de inicio al hook 'plugins_loaded' de WordPress.
 add_action('plugins_loaded', 'sga_run_plugin');
+

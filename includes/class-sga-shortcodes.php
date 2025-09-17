@@ -149,11 +149,16 @@ class SGA_Shortcodes {
                 <h2>Cursos</h2>
                 <p>Administrar cursos y horarios</p>
             </a>
+            <?php
+            $options = get_option('sga_payment_options');
+            if (isset($options['enable_online_payments']) && $options['enable_online_payments'] == 1) :
+            ?>
             <a href="#" data-view="registro_pagos" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
                 <h2>Pagos</h2>
                 <p>Consultar historial de pagos</p>
             </a>
+            <?php endif; ?>
             <a href="#" data-view="comunicacion" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
                 <h2>Comunicación</h2>
