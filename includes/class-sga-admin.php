@@ -125,6 +125,7 @@ class SGA_Admin {
         if (isset($input['webhook_url'])) $sanitized_input['webhook_url'] = esc_url_raw($input['webhook_url']);
         if (isset($input['student_query_url'])) $sanitized_input['student_query_url'] = esc_url_raw($input['student_query_url']);
         if (isset($input['api_secret_key'])) $sanitized_input['api_secret_key'] = sanitize_text_field($input['api_secret_key']);
+        $sanitized_input['disable_auto_enroll'] = isset($input['disable_auto_enroll']) ? 1 : 0;
         return $sanitized_input;
     }
     
@@ -226,7 +227,7 @@ class SGA_Admin {
      */
     private function render_integration_settings_tab() {
         $options = get_option('sga_integration_options', [
-            'webhook_url' => '', 'student_query_url' => '', 'api_secret_key' => ''
+            'webhook_url' => '', 'student_query_url' => '', 'api_secret_key' => '', 'disable_auto_enroll' => 0
         ]);
         ?>
         <h2>Integración con Sistema Interno (Webhooks y API)</h2>
@@ -251,6 +252,16 @@ class SGA_Admin {
                 <td>
                     <input type="password" id="api_secret_key" name="sga_integration_options[api_secret_key]" value="<?php echo esc_attr($options['api_secret_key'] ?? ''); ?>" class="regular-text" />
                     <p class="description">**Función:** Asegura toda la comunicación entre el SGA y tu sistema interno.<br>Esta clave se enviará en la cabecera <code>X-SGA-Signature</code> en cada petición.</p>
+                </td>
+            </tr>
+             <tr valign="top">
+                <th scope="row">Matriculación Automática por Webhook</th>
+                <td>
+                    <label for="disable_auto_enroll">
+                        <input type="checkbox" id="disable_auto_enroll" name="sga_integration_options[disable_auto_enroll]" value="1" <?php checked(1, $options['disable_auto_enroll'] ?? 0, true); ?> />
+                        Desactivar matriculación automática
+                    </label>
+                    <p class="description">Si se marca esta casilla, las peticiones del sistema interno para confirmar un pago no matricularán al estudiante automáticamente. La inscripción seguirá como "pendiente" y requerirá aprobación manual desde este panel.</p>
                 </td>
             </tr>
         </table>
@@ -460,6 +471,9 @@ class SGA_Admin {
         $cursos_disponibles_en_pendientes = [];
         $estudiantes_query = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
 
+        $integration_options = get_option('sga_integration_options', []);
+        $matriculacion_desactivada = !empty($integration_options['disable_auto_enroll']) && $integration_options['disable_auto_enroll'] == 1;
+
         if ($estudiantes_query && function_exists('get_field')) {
             foreach ($estudiantes_query as $estudiante) {
                 $cursos = get_field('cursos_inscritos', $estudiante->ID);
@@ -485,7 +499,9 @@ class SGA_Admin {
         ksort($cursos_disponibles_en_pendientes);
         ?>
         <div class="wrap">
-            <h1 class="wp-heading-inline">Aprobar Inscripciones Pendientes</h1>
+            <h1 class="wp-heading-inline">
+                <?php echo $matriculacion_desactivada ? 'Seguimiento de Inscripciones (Llamadas)' : 'Aprobar Inscripciones Pendientes'; ?>
+            </h1>
             <?php
             if (isset($_GET['approved'])) {
                 $count = intval($_GET['approved']);
@@ -517,7 +533,13 @@ class SGA_Admin {
                 </div>
             </form>
 
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <?php 
+            $form_tag_open = $matriculacion_desactivada ? '<div>' : '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+            $form_tag_close = $matriculacion_desactivada ? '</div>' : '</form>';
+            echo $form_tag_open;
+            ?>
+            
+                <?php if (!$matriculacion_desactivada): ?>
                 <input type="hidden" name="action" value="sga_approve_bulk">
                 <?php wp_nonce_field('sga_approve_bulk_nonce', '_wpnonce_bulk_approve'); ?>
                 <div class="tablenav top">
@@ -531,11 +553,20 @@ class SGA_Admin {
                     </div>
                     <br class="clear">
                 </div>
+                <?php endif; ?>
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
                         <tr>
+                            <?php if (!$matriculacion_desactivada): ?>
                             <td id="cb" class="manage-column column-cb check-column"><input id="cb-select-all-1" type="checkbox"></td>
-                            <th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th><th>Acción</th>
+                            <?php endif; ?>
+                            <th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
+                            <?php if ($matriculacion_desactivada): ?>
+                                <th>Estado de Llamada</th>
+                            <?php else: ?>
+                                <th>Comunicación</th>
+                                <th>Acción</th>
+                            <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
@@ -547,9 +578,21 @@ class SGA_Admin {
                                 $index = $data['row_index'];
                                 $nonce = wp_create_nonce('sga_approve_nonce_' . $estudiante->ID . '_' . $index);
                                 $link = admin_url('admin-post.php?action=sga_approve_single&post_id=' . $estudiante->ID . '&row_index=' . $index . '&_wpnonce=' . $nonce);
+                                
+                                if ($matriculacion_desactivada) {
+                                    $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
+                                    if (!is_array($call_statuses)) $call_statuses = [];
+                                    $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                                } else {
+                                    $llamados = get_post_meta($estudiante->ID, '_sga_llamado_cursos', true);
+                                    if (!is_array($llamados)) $llamados = [];
+                                    $fue_llamado = in_array($index, $llamados);
+                                }
                                 ?>
                                 <tr>
+                                    <?php if (!$matriculacion_desactivada): ?>
                                     <th scope="row" class="check-column"><input id="cb-select-<?php echo esc_attr($estudiante->ID . '-' . $index); ?>" type="checkbox" name="inscripciones_a_aprobar[]" value="<?php echo esc_attr($estudiante->ID . ':' . $index); ?>"></th>
+                                    <?php endif; ?>
                                     <td><?php echo esc_html($estudiante->post_title); ?></td>
                                     <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
                                     <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
@@ -557,17 +600,109 @@ class SGA_Admin {
                                     <td><?php echo esc_html($curso['nombre_curso']); ?></td>
                                     <td><?php echo esc_html($curso['horario']); ?></td>
                                     <td><span style="color: #f59e0b; font-weight: bold;">Inscrito</span></td>
-                                    <td><a href="<?php echo esc_url($link); ?>" class="button button-primary">Aprobar</a></td>
+                                    <td>
+                                        <?php if ($matriculacion_desactivada): ?>
+                                            <div class="sga-call-status-wrapper">
+                                                <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
+                                                    <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
+                                                    <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
+                                                    <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
+                                                    <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
+                                                    <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
+                                                </select>
+                                                <span class="spinner"></span>
+                                            </div>
+                                        <?php else: ?>
+                                            <?php if (!$fue_llamado): ?>
+                                            <a href="#" class="button button-secondary sga-marcar-llamado" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar Llamado</a>
+                                            <?php else: ?>
+                                            <span style="display: flex; align-items: center; gap: 5px; color: #10b981; font-weight: bold;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+                                                Llamado
+                                            </span>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <?php if (!$matriculacion_desactivada): ?>
+                                    <td>
+                                        <a href="<?php echo esc_url($link); ?>" class="button button-primary"><?php echo $matriculacion_desactivada ? 'Matricular Manualmente' : 'Aprobar'; ?></a>
+                                    </td>
+                                    <?php endif; ?>
                                 </tr>
                             <?php endforeach; ?>
                         <?php else : ?>
-                            <tr><td colspan="9">No se encontraron inscripciones pendientes con los filtros aplicados.</td></tr>
+                            <tr><td colspan="10">No se encontraron inscripciones pendientes con los filtros aplicados.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
-            </form>
+            <?php echo $form_tag_close; ?>
         </div>
+        <style>
+            .sga-call-status-wrapper { display: flex; align-items: center; gap: 5px; }
+            .sga-call-status-wrapper .spinner { float: none; vertical-align: middle; }
+        </style>
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            $('.wp-list-table').on('click', '.sga-marcar-llamado', function(e) {
+                e.preventDefault();
+                var btn = $(this);
+                var post_id = btn.data('postid');
+                var row_index = btn.data('rowindex');
+                var nonce = btn.data('nonce');
+                var cell = btn.parent();
+
+                btn.text('Marcando...');
+
+                $.post(ajaxurl, {
+                    action: 'sga_marcar_como_llamado',
+                    _ajax_nonce: nonce,
+                    post_id: post_id,
+                    row_index: row_index
+                }).done(function(response) {
+                    if (response.success) {
+                        cell.html('<span style="display: flex; align-items: center; gap: 5px; color: #10b981; font-weight: bold;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Llamado</span>');
+                    } else {
+                        alert('Error: ' + response.data.message);
+                        btn.text('Marcar Llamado');
+                    }
+                }).fail(function() {
+                    alert('Error de conexión.');
+                    btn.text('Marcar Llamado');
+                });
+            });
+
+            $('.wp-list-table').on('change', '.sga-call-status-select', function(e) {
+                var select = $(this);
+                var post_id = select.data('postid');
+                var row_index = select.data('rowindex');
+                var nonce = select.data('nonce');
+                var status = select.val();
+                var spinner = select.next('.spinner');
+
+                select.prop('disabled', true);
+                spinner.addClass('is-active');
+
+                $.post(ajaxurl, {
+                    action: 'sga_update_call_status',
+                    _ajax_nonce: nonce,
+                    post_id: post_id,
+                    row_index: row_index,
+                    status: status
+                }).done(function(response) {
+                    if (!response.success) {
+                        alert('Error: ' + response.data.message);
+                    }
+                }).fail(function() {
+                    alert('Error de conexión.');
+                }).always(function() {
+                    select.prop('disabled', false);
+                    spinner.removeClass('is-active');
+                });
+            });
+        });
+        </script>
         <?php
     }
 }
+
 

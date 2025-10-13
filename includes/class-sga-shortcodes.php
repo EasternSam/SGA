@@ -200,11 +200,17 @@ class SGA_Shortcodes {
     public function render_view_enviar_a_matriculacion() {
         $estudiantes_inscritos = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        
+        $integration_options = get_option('sga_integration_options', []);
+        $matriculacion_desactivada = !empty($integration_options['disable_auto_enroll']) && $integration_options['disable_auto_enroll'] == 1;
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
-        <h1 class="panel-title">Aprobar Inscripciones Pendientes</h1>
+        <h1 class="panel-title">
+            <?php echo $matriculacion_desactivada ? 'Seguimiento de Inscripciones (Llamadas)' : 'Aprobar Inscripciones Pendientes'; ?>
+        </h1>
 
         <div class="filtros-tabla">
+            <?php if (!$matriculacion_desactivada): ?>
             <div class="bulk-actions-wrapper">
                 <select name="bulk-action" id="bulk-action-select">
                     <option value="-1">Acciones en lote</option>
@@ -212,6 +218,7 @@ class SGA_Shortcodes {
                 </select>
                 <button id="apply-bulk-action" class="button">Aplicar</button>
             </div>
+            <?php endif; ?>
             <input type="text" id="buscador-estudiantes-pendientes" placeholder="Buscar por nombre, cédula o curso...">
             <select id="filtro-curso-pendientes">
                 <option value="">Todos los cursos</option>
@@ -219,12 +226,33 @@ class SGA_Shortcodes {
                     <option value="<?php echo esc_attr($curso_filtro->post_title); ?>"><?php echo esc_html($curso_filtro->post_title); ?></option>
                 <?php endforeach; ?>
             </select>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=sga-aprobar-inscripciones')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
+            <?php if ($matriculacion_desactivada): ?>
+            <select id="filtro-estado-llamada">
+                <option value="">Todos los Estados de Llamada</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="contactado">Contactado</option>
+                <option value="no_contesta">No Contesta</option>
+                <option value="numero_incorrecto">Número Incorrecto</option>
+                <option value="rechazado">Rechazado</option>
+            </select>
+            <?php endif; ?>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=sga_dashboard')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
         </div>
 
         <div class="tabla-wrapper">
             <table class="wp-list-table widefat striped" id="tabla-pendientes">
-                <thead><tr><th class="ga-check-column"><input type="checkbox" id="select-all-pendientes"></th><th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th><th>Acción</th></tr></thead>
+                <thead>
+                    <tr>
+                        <?php if (!$matriculacion_desactivada): ?>
+                        <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes"></th>
+                        <?php endif; ?>
+                        <th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
+                        <?php if ($matriculacion_desactivada): ?>
+                            <th>Estado de Llamada</th>
+                        <?php endif; ?>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
                 <tbody>
                     <?php
                     $hay_pendientes = false;
@@ -235,9 +263,17 @@ class SGA_Shortcodes {
                                 foreach ($cursos as $index => $curso) {
                                     if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
                                         $hay_pendientes = true;
+                                        $current_call_status = 'pendiente';
+                                        if ($matriculacion_desactivada) {
+                                            $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
+                                            if (!is_array($call_statuses)) $call_statuses = [];
+                                            $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                                        }
                                         ?>
-                                        <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>">
+                                        <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>">
+                                            <?php if (!$matriculacion_desactivada): ?>
                                             <td class="ga-check-column"><input type="checkbox" class="bulk-checkbox" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>"></td>
+                                            <?php endif; ?>
                                             <td><?php echo esc_html($estudiante->post_title); ?></td>
                                             <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
                                             <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
@@ -245,7 +281,41 @@ class SGA_Shortcodes {
                                             <td><?php echo esc_html($curso['nombre_curso']); ?></td>
                                             <td><?php echo esc_html($curso['horario']); ?></td>
                                             <td><span class="estado-inscrito">Inscrito</span></td>
-                                            <td><button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">Aprobar</button></td>
+                                            <?php if ($matriculacion_desactivada): ?>
+                                                <td>
+                                                    <div class="sga-call-status-wrapper">
+                                                        <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
+                                                            <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
+                                                            <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
+                                                            <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
+                                                            <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
+                                                            <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
+                                                        </select>
+                                                        <span class="spinner"></span>
+                                                    </div>
+                                                </td>
+                                            <?php endif; ?>
+                                            <td>
+                                                <?php if ($matriculacion_desactivada): ?>
+                                                    <?php
+                                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
+                                                    if (!is_array($call_log)) $call_log = [];
+                                                    $call_info = $call_log[$index] ?? null;
+
+                                                    if ($call_info) {
+                                                        echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+                                                    } else {
+                                                        ?>
+                                                        <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
+                                                        <?php
+                                                    }
+                                                    ?>
+                                                <?php else: ?>
+                                                    <button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">
+                                                        Aprobar
+                                                    </button>
+                                                <?php endif; ?>
+                                            </td>
                                         </tr>
                                         <?php
                                     }
@@ -254,7 +324,8 @@ class SGA_Shortcodes {
                         }
                     }
                     if (!$hay_pendientes) {
-                        echo '<tr class="no-results"><td colspan="9">No hay estudiantes pendientes de aprobación.</td></tr>';
+                        $colspan = 9;
+                        echo '<tr class="no-results"><td colspan="' . $colspan . '">No hay estudiantes pendientes de aprobación.</td></tr>';
                     }
                     ?>
                 </tbody>
@@ -1161,6 +1232,65 @@ class SGA_Shortcodes {
                     }
                 });
 
+                $("#gestion-academica-app-container").on('change', '.sga-call-status-select', function(e) {
+                    var select = $(this);
+                    var post_id = select.data('postid');
+                    var row_index = select.data('rowindex');
+                    var nonce = select.data('nonce');
+                    var status = select.val();
+                    var spinner = select.next('.spinner');
+
+                    select.prop('disabled', true);
+                    spinner.addClass('is-active');
+
+                    $.post(ajaxurl, {
+                        action: 'sga_update_call_status',
+                        _ajax_nonce: nonce,
+                        post_id: post_id,
+                        row_index: row_index,
+                        status: status
+                    }).done(function(response) {
+                        if (!response.success) {
+                            alert('Error: ' + (response.data.message || 'Error desconocido'));
+                        } else {
+                            // Update the data attribute on the row for live filtering
+                            select.closest('tr').data('call-status', status);
+                        }
+                    }).fail(function() {
+                        alert('Error de conexión.');
+                    }).always(function() {
+                        select.prop('disabled', false);
+                        spinner.removeClass('is-active');
+                    });
+                });
+
+                $("#tabla-pendientes").on("click", ".sga-marcar-llamado-btn", function() {
+                    var btn = $(this);
+                    var post_id = btn.data('postid');
+                    var row_index = btn.data('rowindex');
+                    var nonce = btn.data('nonce');
+                    var cell = btn.parent(); // the <td>
+
+                    btn.prop('disabled', true).text('Marcando...');
+
+                    $.post(ajaxurl, {
+                        action: 'sga_marcar_llamado',
+                        _ajax_nonce: nonce,
+                        post_id: post_id,
+                        row_index: row_index,
+                    }).done(function(response) {
+                        if (response.success) {
+                            cell.html(response.data.html);
+                        } else {
+                            alert('Error: ' + (response.data.message || 'Error desconocido'));
+                            btn.prop('disabled', false).text('Marcar como Llamado');
+                        }
+                    }).fail(function() {
+                        alert('Error de conexión.');
+                        btn.prop('disabled', false).text('Marcar como Llamado');
+                    });
+                });
+
                 function closeModal() {
                     $("#ga-modal-confirmacion").fadeOut(200);
                     $("#ga-modal-confirmar").text('Confirmar y Enviar').prop('disabled', false);
@@ -1196,6 +1326,41 @@ class SGA_Shortcodes {
                 $("#select-all-pendientes").on("click", function() {
                     $("#tabla-pendientes .bulk-checkbox").prop('checked', this.checked);
                 });
+
+                function filterPendientesTable() {
+                    var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
+                    var courseFilter = $('#filtro-curso-pendientes').val();
+                    var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
+                    var rowsFound = 0;
+
+                    $('#tabla-pendientes tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
+                            return;
+                        }
+
+                        var rowText = row.text().toLowerCase();
+                        var rowCourse = row.data('curso');
+                        var rowCallStatus = row.data('call-status');
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesCourse = (courseFilter === '' || rowCourse === courseFilter);
+                        var matchesCallStatus = (callStatusFilter === '' || rowCallStatus === callStatusFilter);
+
+                        if (matchesSearch && matchesCourse && matchesCallStatus) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+
+                    $('#tabla-pendientes .no-results-search').remove();
+                    if (rowsFound === 0 && !$('#tabla-pendientes .no-results').is(':visible')) {
+                        var colspan = $('#tabla-pendientes thead th').length;
+                        $('#tabla-pendientes tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
 
                 function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
                     var searchTerm = $(searchInputSelector).val().toLowerCase();
@@ -1297,8 +1462,7 @@ class SGA_Shortcodes {
                 }
                 $("#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos").on("keyup change", filterCourses);
 
-
-                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes").on("keyup change", function() { filterTable('#tabla-pendientes', '#buscador-estudiantes-pendientes', '#filtro-curso-pendientes'); });
+                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada").on("keyup change", function() { filterPendientesTable(); });
                 $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
                 $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
                 
@@ -1572,3 +1736,4 @@ class SGA_Shortcodes {
         <?php
     }
 }
+

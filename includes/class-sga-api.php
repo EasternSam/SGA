@@ -83,6 +83,14 @@ class SGA_API {
         }
 
         if ($status === 'pagado') {
+            $integration_options = get_option('sga_integration_options', []);
+            $auto_enroll_disabled = !empty($integration_options['disable_auto_enroll']) && $integration_options['disable_auto_enroll'] == 1;
+
+            if ($auto_enroll_disabled) {
+                SGA_Utils::_log_activity('API Entrante: Matriculación Omitida', "La matriculación automática está desactivada. La inscripción para {$cedula} en '{$curso_nombre}' no fue procesada.", 0, true);
+                return new WP_REST_Response(['message' => 'Pago recibido. La matriculación automática está desactivada, se requiere aprobación manual.'], 200);
+            }
+            
             $student_query = get_posts([
                 'post_type' => 'estudiante', 'posts_per_page' => 1,
                 'meta_key' => 'cedula', 'meta_value' => $cedula,

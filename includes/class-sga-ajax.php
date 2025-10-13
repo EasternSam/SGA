@@ -19,13 +19,92 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
-        add_action('wp_ajax_sga_get_report_chart_data', array($this, 'ajax_get_report_chart_data')); // <-- AÑADIDO
+        add_action('wp_ajax_sga_get_report_chart_data', array($this, 'ajax_get_report_chart_data'));
         add_action('wp_ajax_sga_test_api_connection', array($this, 'ajax_test_api_connection'));
         add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
+        add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status'));
+        add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
 
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
+    }
+
+    /**
+     * AJAX: Marca a un estudiante como llamado por el usuario actual.
+     */
+    public function ajax_sga_marcar_llamado() {
+        if (!isset($_POST['post_id']) || !isset($_POST['row_index']) || !isset($_POST['_ajax_nonce'])) {
+            wp_send_json_error(['message' => 'Parámetros inválidos.']);
+        }
+        
+        $post_id = intval($_POST['post_id']);
+        $row_index = intval($_POST['row_index']);
+        
+        check_ajax_referer('sga_marcar_llamado_' . $post_id . '_' . $row_index);
+
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+
+        $current_user = wp_get_current_user();
+        $call_log = get_post_meta($post_id, '_sga_call_log', true);
+        if (!is_array($call_log)) {
+            $call_log = [];
+        }
+
+        $timestamp = current_time('timestamp');
+        $call_log[$row_index] = [
+            'user_id' => $current_user->ID,
+            'user_name' => $current_user->display_name,
+            'timestamp' => $timestamp
+        ];
+
+        update_post_meta($post_id, '_sga_call_log', $call_log);
+        
+        $html = 'Llamado por <strong>' . esc_html($current_user->display_name) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $timestamp)) . '</small>';
+        
+        // Also log this as a general activity
+        $student_post = get_post($post_id);
+        $log_content = "Estudiante: {$student_post->post_title} (ID: {$post_id}) fue marcado como llamado.";
+        SGA_Utils::_log_activity('Inscripción Marcada Como Llamada', $log_content, $current_user->ID);
+
+
+        wp_send_json_success(['html' => $html]);
+    }
+
+    /**
+     * AJAX: Actualiza el estado de la llamada para una inscripción específica.
+     */
+    public function ajax_update_call_status() {
+        if (!isset($_POST['post_id']) || !isset($_POST['row_index']) || !isset($_POST['status']) || !isset($_POST['_ajax_nonce'])) {
+            wp_send_json_error(['message' => 'Parámetros inválidos.']);
+        }
+
+        $post_id = intval($_POST['post_id']);
+        $row_index = intval($_POST['row_index']);
+        $status = sanitize_key($_POST['status']);
+
+        check_ajax_referer('sga_update_call_status_' . $post_id . '_' . $row_index);
+
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos para esta acción.']);
+        }
+
+        $call_statuses = get_post_meta($post_id, '_sga_call_statuses', true);
+        if (!is_array($call_statuses)) {
+            $call_statuses = [];
+        }
+        $call_statuses[$row_index] = $status;
+        update_post_meta($post_id, '_sga_call_statuses', $call_statuses);
+
+        $student = get_post($post_id);
+        SGA_Utils::_log_activity(
+            'Estado de Llamada Actualizado',
+            "Se actualizó el estado de llamada a '{$status}' para el estudiante: {$student->post_title} (Inscripción #{$row_index})."
+        );
+
+        wp_send_json_success(['message' => 'Estado actualizado.']);
     }
 
     /**
@@ -392,3 +471,4 @@ class SGA_Ajax {
         wp_send_json_success(['message' => 'Prueba de conexión iniciada.']);
     }
 }
+
