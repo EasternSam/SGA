@@ -541,4 +541,132 @@ class SGA_Reports {
         fclose($output);
         exit();
     }
+
+    public function exportar_registro_llamadas() {
+        if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'export_calls_nonce')) {
+            wp_die('Error de seguridad.');
+        }
+        if (!current_user_can('edit_estudiantes')) {
+            wp_die('No tienes permisos.');
+        }
+
+        $search_term = isset($_GET['search_term']) ? sanitize_text_field(stripslashes($_GET['search_term'])) : '';
+        $agent_filter = isset($_GET['agent_filter']) ? sanitize_text_field(stripslashes($_GET['agent_filter'])) : '';
+        $status_filter = isset($_GET['status_filter']) ? sanitize_text_field(stripslashes($_GET['status_filter'])) : '';
+        
+        $filename = 'registro-llamadas-' . date('Y-m-d') . '.xls';
+        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+        header('Content-Disposition: attachment; filename=' . $filename);
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $args = array(
+            'post_type' => 'sga_llamada',
+            'posts_per_page' => -1,
+            'orderby' => 'date',
+            'order' => 'DESC',
+        );
+
+        $call_logs_query = new WP_Query($args);
+        $filtered_calls = [];
+
+        $status_map = [
+            'pendiente' => 'Pendiente',
+            'contactado' => 'Contactado',
+            'no_contesta' => 'No Contesta',
+            'numero_incorrecto' => 'Número Incorrecto',
+            'rechazado' => 'Rechazado',
+        ];
+
+        if ($call_logs_query->have_posts()) {
+            while ($call_logs_query->have_posts()) {
+                $call_logs_query->the_post();
+                
+                $post_id = get_the_ID();
+                $author_info = get_userdata(get_the_author_meta('ID'));
+                $agent_name = $author_info->display_name;
+
+                // Agent filter
+                if (!empty($agent_filter) && $agent_name != $agent_filter) {
+                    continue;
+                }
+
+                $student_id = get_post_meta($post_id, '_student_id', true);
+                $row_index = get_post_meta($post_id, '_row_index', true);
+                
+                $call_statuses = get_post_meta($student_id, '_sga_call_statuses', true);
+                if (!is_array($call_statuses)) { $call_statuses = []; }
+                $current_status_key = $call_statuses[$row_index] ?? 'pendiente';
+                
+                // Status filter
+                if (!empty($status_filter) && $current_status_key != $status_filter) {
+                    continue;
+                }
+                
+                $student_name = get_post_meta($post_id, '_student_name', true);
+                $course_name = get_post_meta($post_id, '_course_name', true);
+                
+                // Search term filter (for meta fields)
+                if (!empty($search_term)) {
+                    $searchable_string = strtolower($student_name . ' ' . $course_name);
+                    if (strpos($searchable_string, strtolower($search_term)) === false) {
+                        continue;
+                    }
+                }
+
+                $status_text = $status_map[$current_status_key] ?? ucfirst($current_status_key);
+
+                $filtered_calls[] = [
+                    'agent' => $agent_name,
+                    'student' => $student_name,
+                    'course' => $course_name,
+                    'status' => $status_text,
+                    'date' => get_the_date('d/m/Y h:i A', $post_id)
+                ];
+            }
+            wp_reset_postdata();
+        }
+
+        ob_start();
+        ?>
+        <!DOCTYPE html>
+        <html lang="es">
+        <head><meta charset="UTF-8"></head>
+        <body>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Agente</th>
+                        <th>Estudiante</th>
+                        <th>Curso</th>
+                        <th>Estado de Llamada</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (!empty($filtered_calls)): ?>
+                        <?php foreach ($filtered_calls as $call): ?>
+                            <tr>
+                                <td><?php echo esc_html($call['agent']); ?></td>
+                                <td><?php echo esc_html($call['student']); ?></td>
+                                <td><?php echo esc_html($call['course']); ?></td>
+                                <td><?php echo esc_html($call['status']); ?></td>
+                                <td><?php echo esc_html($call['date']); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="5">No se encontraron registros con los filtros aplicados.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </body>
+        </html>
+        <?php
+        SGA_Utils::_log_activity('Exportación Excel', "Se exportó el registro de llamadas.");
+        echo ob_get_clean();
+        exit();
+    }
 }
+

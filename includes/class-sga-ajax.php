@@ -15,6 +15,7 @@ class SGA_Ajax {
         add_action('wp_ajax_aprobar_seleccionados', array($this, 'ajax_aprobar_seleccionados'));
         add_action('wp_ajax_exportar_excel', array($this, 'ajax_exportar_excel'));
         add_action('wp_ajax_exportar_moodle_csv', array($this, 'ajax_exportar_moodle_csv'));
+        add_action('wp_ajax_sga_exportar_registro_llamadas', array($this, 'ajax_exportar_registro_llamadas'));
         add_action('wp_ajax_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
@@ -64,11 +65,28 @@ class SGA_Ajax {
         
         $html = 'Llamado por <strong>' . esc_html($current_user->display_name) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $timestamp)) . '</small>';
         
-        // Also log this as a general activity
         $student_post = get_post($post_id);
+        $cursos_inscritos = get_field('cursos_inscritos', $post_id);
+        $curso_actual = $cursos_inscritos[$row_index] ?? null;
+        $course_name = $curso_actual ? $curso_actual['nombre_curso'] : 'Desconocido';
+
         $log_content = "Estudiante: {$student_post->post_title} (ID: {$post_id}) fue marcado como llamado.";
         SGA_Utils::_log_activity('Inscripción Marcada Como Llamada', $log_content, $current_user->ID);
 
+        // Crear el CPT 'sga_llamada'
+        $call_post_id = wp_insert_post([
+            'post_type'    => 'sga_llamada',
+            'post_title'   => 'Llamada a ' . $student_post->post_title . ' por ' . $current_user->display_name,
+            'post_status'  => 'publish',
+            'post_author'  => $current_user->ID,
+        ]);
+
+        if ($call_post_id && !is_wp_error($call_post_id)) {
+            update_post_meta($call_post_id, '_student_id', $post_id);
+            update_post_meta($call_post_id, '_student_name', $student_post->post_title);
+            update_post_meta($call_post_id, '_course_name', $course_name);
+            update_post_meta($call_post_id, '_row_index', $row_index);
+        }
 
         wp_send_json_success(['html' => $html]);
     }
@@ -105,6 +123,15 @@ class SGA_Ajax {
         );
 
         wp_send_json_success(['message' => 'Estado actualizado.']);
+    }
+
+    /**
+     * AJAX: Genera y descarga un archivo Excel con el registro de llamadas.
+     */
+    public function ajax_exportar_registro_llamadas() {
+        check_ajax_referer('export_calls_nonce', '_wpnonce');
+        $reports_handler = new SGA_Reports();
+        $reports_handler->exportar_registro_llamadas();
     }
 
     /**

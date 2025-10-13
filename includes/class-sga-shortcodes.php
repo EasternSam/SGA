@@ -43,6 +43,7 @@ class SGA_Shortcodes {
                 <div id="panel-view-matriculacion" class="panel-view"><?php $this->render_view_matriculacion(); ?></div>
                 <div id="panel-view-enviar_a_matriculacion" class="panel-view"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
                 <div id="panel-view-lista_matriculados" class="panel-view"><?php $this->render_view_lista_matriculados(); ?></div>
+                <div id="panel-view-registro_llamadas" class="panel-view"><?php $this->render_view_registro_llamadas(); ?></div>
                 <div id="panel-view-estudiantes" class="panel-view"><?php $this->render_view_lista_estudiantes(); ?></div>
                 <div id="panel-view-cursos" class="panel-view"><?php $this->render_view_lista_cursos(); ?></div>
                 <div id="panel-view-registro_pagos" class="panel-view"><?php $this->render_view_registro_pagos(); ?></div>
@@ -187,6 +188,11 @@ class SGA_Shortcodes {
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
                 <h2>Lista de Matriculados</h2>
                 <p>Consultar y exportar estudiantes activos</p>
+            </a>
+            <a href="#" data-view="registro_llamadas" class="panel-card panel-nav-link">
+                <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path><path d="M14.05 2a9 9 0 0 1 8 7.94"></path><path d="M14.05 6A5 5 0 0 1 18 10"></path></svg></div>
+                <h2>Registro de Llamadas</h2>
+                <p>Consultar historial de llamadas</p>
             </a>
             <a href="<?php echo esc_url(site_url('/cursos/')); ?>" target="_blank" class="panel-card">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
@@ -390,6 +396,121 @@ class SGA_Shortcodes {
                     ?>
                 </tbody>
             </table>
+        </div>
+        <?php
+    }
+
+    public function render_view_registro_llamadas() {
+        $all_call_authors_query = new WP_User_Query(array(
+            'who' => 'authors',
+            'has_published_posts' => array('sga_llamada'),
+            'fields' => 'all_with_meta',
+        ));
+        $authors = $all_call_authors_query->get_results();
+        ?>
+        <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
+        <h1 class="panel-title">Registro de Llamadas</h1>
+        <div class="filtros-tabla">
+            <input type="text" id="buscador-registro-llamadas" placeholder="Buscar por estudiante o curso...">
+            <select id="filtro-agente-llamadas">
+                <option value="">Todos los agentes</option>
+                <?php foreach ($authors as $author) : ?>
+                    <option value="<?php echo esc_attr($author->display_name); ?>"><?php echo esc_html($author->display_name); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="filtro-estado-llamadas-registro">
+                <option value="">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="contactado">Contactado</option>
+                <option value="no_contesta">No Contesta</option>
+                <option value="numero_incorrecto">Número Incorrecto</option>
+                <option value="rechazado">Rechazado</option>
+            </select>
+            <div class="export-actions-wrapper">
+                <button id="exportar-llamadas-btn" class="button">Exportar a Excel</button>
+            </div>
+        </div>
+
+        <div id="sga-call-log-accordion">
+            <?php
+            $args = array(
+                'post_type' => 'sga_llamada',
+                'posts_per_page' => -1,
+                'orderby' => 'author',
+                'order' => 'ASC',
+            );
+            $call_logs_query = new WP_Query($args);
+            $calls_by_user = [];
+
+            if ($call_logs_query->have_posts()) {
+                while ($call_logs_query->have_posts()) {
+                    $call_logs_query->the_post();
+                    $author_id = get_the_author_meta('ID');
+                    if (!isset($calls_by_user[$author_id])) {
+                        $calls_by_user[$author_id] = [
+                            'user_info' => get_userdata($author_id),
+                            'calls' => []
+                        ];
+                    }
+                    $calls_by_user[$author_id]['calls'][] = get_post();
+                }
+                wp_reset_postdata();
+            }
+
+            if (!empty($calls_by_user)):
+                foreach ($calls_by_user as $user_id => $data): ?>
+                    <div class="user-log-section" data-agent="<?php echo esc_attr($data['user_info']->display_name); ?>">
+                        <h2 class="user-log-title">
+                            <button aria-expanded="false">
+                                <span class="user-name"><?php echo esc_html($data['user_info']->display_name); ?></span>
+                                <span class="call-count"><?php echo count($data['calls']); ?> llamadas</span>
+                                <span class="toggle-icon" aria-hidden="true"></span>
+                            </button>
+                        </h2>
+                        <div class="user-log-content">
+                             <div class="tabla-wrapper">
+                                <table class="wp-list-table widefat striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Estudiante</th>
+                                            <th>Curso</th>
+                                            <th>Estado de Llamada</th>
+                                            <th>Fecha de Llamada</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php 
+                                        $status_map = [
+                                            'pendiente' => ['text' => 'Pendiente', 'class' => 'ga-pill-llamada-pendiente'],
+                                            'contactado' => ['text' => 'Contactado', 'class' => 'ga-pill-llamada-contactado'],
+                                            'no_contesta' => ['text' => 'No Contesta', 'class' => 'ga-pill-llamada-no_contesta'],
+                                            'numero_incorrecto' => ['text' => 'Número Incorrecto', 'class' => 'ga-pill-llamada-numero_incorrecto'],
+                                            'rechazado' => ['text' => 'Rechazado', 'class' => 'ga-pill-llamada-rechazado'],
+                                        ];
+                                        foreach (array_reverse($data['calls']) as $call):
+                                            $student_id = get_post_meta($call->ID, '_student_id', true);
+                                            $row_index = get_post_meta($call->ID, '_row_index', true);
+                                            $call_statuses = get_post_meta($student_id, '_sga_call_statuses', true);
+                                            if (!is_array($call_statuses)) { $call_statuses = []; }
+                                            $current_status_key = $call_statuses[$row_index] ?? 'pendiente';
+                                            $status_details = $status_map[$current_status_key] ?? ['text' => ucfirst($current_status_key), 'class' => ''];
+                                        ?>
+                                            <tr data-status="<?php echo esc_attr($current_status_key); ?>">
+                                                <td><?php echo esc_html(get_post_meta($call->ID, '_student_name', true)); ?></td>
+                                                <td><?php echo esc_html(get_post_meta($call->ID, '_course_name', true)); ?></td>
+                                                <td><span class="ga-pill <?php echo esc_attr($status_details['class']); ?>"><?php echo esc_html($status_details['text']); ?></span></td>
+                                                <td><?php echo esc_html(get_the_date('d/m/Y h:i A', $call)); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <p>No se han registrado llamadas todavía.</p>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -1006,6 +1127,11 @@ class SGA_Shortcodes {
             .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
             .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
             .ga-pill-publico { background-color: var(--sga-green); margin-right: 15px;} .ga-pill-privado { background-color: var(--sga-text-light); margin-right: 15px;}
+            .ga-pill-llamada-pendiente { background-color: var(--sga-yellow); }
+            .ga-pill-llamada-contactado { background-color: var(--sga-green); }
+            .ga-pill-llamada-no_contesta { background-color: #94a3b8; }
+            .ga-pill-llamada-numero_incorrecto { background-color: var(--sga-pink); }
+            .ga-pill-llamada-rechazado { background-color: var(--sga-red); }
             
             /* Course View Switcher */
             .view-switcher { display: flex; gap: 5px; background-color: var(--sga-gray); padding: 4px; border-radius: 8px; margin-left: auto; }
@@ -1085,6 +1211,70 @@ class SGA_Shortcodes {
             .report-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
             .chart-container { position: relative; height: 300px; }
             @media (max-width: 960px) { .report-grid { grid-template-columns: 1fr; } }
+            
+            /* Call Log Accordion */
+            #sga-call-log-accordion .user-log-section {
+                border: 1px solid var(--sga-gray);
+                margin-bottom: 10px;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            #sga-call-log-accordion .user-log-title {
+                margin: 0;
+                font-size: 1em;
+            }
+            #sga-call-log-accordion .user-log-title button {
+                display: flex;
+                align-items: center;
+                width: 100%;
+                padding: 12px 20px;
+                border: none;
+                background: var(--sga-light);
+                cursor: pointer;
+                text-align: left;
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--sga-primary);
+                transition: background-color 0.2s;
+            }
+            #sga-call-log-accordion .user-log-title button:hover {
+                background: var(--sga-gray);
+            }
+            #sga-call-log-accordion .user-log-title button .call-count {
+                margin-left: 15px;
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--sga-text-light);
+                background-color: var(--sga-white);
+                padding: 3px 10px;
+                border-radius: 12px;
+                border: 1px solid var(--sga-gray);
+            }
+            #sga-call-log-accordion .toggle-icon {
+                margin-left: auto;
+                width: 20px;
+                height: 20px;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M14.83 7.17a1.002 1.002 0 00-1.41 0L10 10.59 6.59 7.17a1.002 1.002 0 10-1.41 1.41L10 13.41l4.83-4.83a1 1 0 000-1.41z' fill='%2350575e'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: center;
+                transition: transform 0.2s ease-in-out;
+            }
+            #sga-call-log-accordion button[aria-expanded="true"] .toggle-icon {
+                transform: rotate(180deg);
+            }
+            #sga-call-log-accordion .user-log-content {
+                padding: 0;
+                display: none;
+            }
+            #sga-call-log-accordion .user-log-content .tabla-wrapper {
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+                margin-bottom: 0;
+            }
+            #sga-call-log-accordion .user-log-content .wp-list-table {
+                border-top: 1px solid var(--sga-gray);
+            }
         </style>
         <?php
     }
@@ -1482,6 +1672,67 @@ class SGA_Shortcodes {
                     window.location.href = url.href;
                 });
 
+                $("#exportar-llamadas-btn").on("click", function(e) {
+                    e.preventDefault();
+                    var searchTerm = $('#buscador-registro-llamadas').val();
+                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var statusFilter = $('#filtro-estado-llamadas-registro').val();
+                    var nonce = '<?php echo wp_create_nonce("export_calls_nonce"); ?>';
+
+                    var url = new URL(ajaxurl);
+                    url.searchParams.append('action', 'sga_exportar_registro_llamadas');
+                    url.searchParams.append('_wpnonce', nonce);
+                    url.searchParams.append('search_term', searchTerm);
+                    url.searchParams.append('agent_filter', agentFilter);
+                    url.searchParams.append('status_filter', statusFilter);
+                    
+                    window.location.href = url.href;
+                });
+
+                function filterCallLog() {
+                    var searchTerm = $('#buscador-registro-llamadas').val().toLowerCase();
+                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var statusFilter = $('#filtro-estado-llamadas-registro').val();
+                    
+                    $('#sga-call-log-accordion .user-log-section').each(function() {
+                        var userSection = $(this);
+                        var agentName = userSection.data('agent');
+                        var matchesAgent = (agentFilter === '' || agentName === agentFilter);
+                        
+                        if (!matchesAgent) {
+                            userSection.hide();
+                            return; 
+                        }
+
+                        var tableRows = userSection.find('.user-log-content tbody tr');
+                        var matchingRowsInSection = 0;
+
+                        tableRows.each(function() {
+                            var row = $(this);
+                            var rowText = row.text().toLowerCase();
+                            var rowStatus = row.data('status');
+
+                            var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                            var matchesStatus = (statusFilter === '' || rowStatus === statusFilter);
+
+                            if (matchesSearch && matchesStatus) {
+                                row.show();
+                                matchingRowsInSection++;
+                            } else {
+                                row.hide();
+                            }
+                        });
+
+                        if (matchingRowsInSection > 0) {
+                            userSection.show();
+                        } else {
+                            userSection.hide();
+                        }
+                    });
+                }
+                $('#buscador-registro-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro').on('keyup change', filterCallLog);
+
+
                 $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) {
                     e.preventDefault();
                     var courseName = $(this).data('curso-nombre');
@@ -1731,6 +1982,16 @@ class SGA_Shortcodes {
                         chartContainer.html('<p style="text-align:center;color:var(--sga-red);">Error al contactar al servidor para los datos del gráfico.</p>');
                     });
                 }
+                
+                // Call Log Accordion
+                $('#gestion-academica-app-container').on('click', '#sga-call-log-accordion .user-log-title button', function() {
+                    var button = $(this);
+                    var content = button.closest('.user-log-section').find('.user-log-content');
+                    var isExpanded = button.attr('aria-expanded') === 'true';
+
+                    button.attr('aria-expanded', !isExpanded);
+                    content.slideToggle(200);
+                });
             });
         </script>
         <?php

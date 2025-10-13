@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 /**
  * Clase SGA_CPT
  *
- * Gestiona la creación y configuración de todos los Custom Post Types (CPTs)
+ * Gestiona la creaci¨®n y configuraci¨®n de todos los Custom Post Types (CPTs)
  * y las meta boxes asociadas.
  */
 class SGA_CPT {
@@ -93,10 +93,23 @@ class SGA_CPT {
             'show_in_menu' => false,
             'description' => 'Crea conceptos de pago generales como diplomas, carnets, etc.'
         ));
+        
+        register_post_type('sga_llamada', array(
+            'labels' => array('name' => 'Registros de Llamadas', 'singular_name' => 'Registro de Llamada'),
+            'public' => false,
+            'show_ui' => true,
+            'show_in_menu' => false,
+            'supports' => array('title', 'author', 'custom-fields'),
+            'rewrite' => false,
+            'capability_type' => 'post',
+            'capabilities' => array(
+                'create_posts' => 'do_not_allow', 
+            ),
+        ));
     }
 
     /**
-     * Añade la meta box para el precio en 'sga_concepto_pago'.
+     * A 0Š9ade la meta box para el precio en 'sga_concepto_pago'.
      */
     public function sga_add_price_metabox() {
         add_meta_box(
@@ -142,4 +155,3 @@ class SGA_CPT {
         }
     }
 }
-

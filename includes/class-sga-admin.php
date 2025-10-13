@@ -584,9 +584,9 @@ class SGA_Admin {
                                     if (!is_array($call_statuses)) $call_statuses = [];
                                     $current_call_status = $call_statuses[$index] ?? 'pendiente';
                                 } else {
-                                    $llamados = get_post_meta($estudiante->ID, '_sga_llamado_cursos', true);
-                                    if (!is_array($llamados)) $llamados = [];
-                                    $fue_llamado = in_array($index, $llamados);
+                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
+                                    if (!is_array($call_log)) $call_log = [];
+                                    $fue_llamado = isset($call_log[$index]);
                                 }
                                 ?>
                                 <tr>
@@ -615,12 +615,10 @@ class SGA_Admin {
                                         <?php else: ?>
                                             <?php if (!$fue_llamado): ?>
                                             <a href="#" class="button button-secondary sga-marcar-llamado" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar Llamado</a>
-                                            <?php else: ?>
-                                            <span style="display: flex; align-items: center; gap: 5px; color: #10b981; font-weight: bold;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
-                                                Llamado
-                                            </span>
-                                            <?php endif; ?>
+                                            <?php else:
+                                                $call_info = $call_log[$index];
+                                                echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+                                            endif; ?>
                                         <?php endif; ?>
                                     </td>
                                     <?php if (!$matriculacion_desactivada): ?>
@@ -654,13 +652,13 @@ class SGA_Admin {
                 btn.text('Marcando...');
 
                 $.post(ajaxurl, {
-                    action: 'sga_marcar_como_llamado',
+                    action: 'sga_marcar_llamado',
                     _ajax_nonce: nonce,
                     post_id: post_id,
                     row_index: row_index
                 }).done(function(response) {
                     if (response.success) {
-                        cell.html('<span style="display: flex; align-items: center; gap: 5px; color: #10b981; font-weight: bold;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Llamado</span>');
+                        cell.html(response.data.html);
                     } else {
                         alert('Error: ' + response.data.message);
                         btn.text('Marcar Llamado');
@@ -704,5 +702,4 @@ class SGA_Admin {
         <?php
     }
 }
-
 
