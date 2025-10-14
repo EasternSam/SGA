@@ -37,8 +37,26 @@ class SGA_Shortcodes {
             </div>
         </div>
 
+        <div id="ga-modal-comentario-llamada" class="ga-modal" style="display:none;">
+            <div class="ga-modal-content">
+                <h4>Añadir Comentario a la Llamada</h4>
+                <p>Puedes añadir una nota o comentario sobre esta llamada (opcional).</p>
+                <textarea id="sga-comentario-llamada-texto" placeholder="Escribe tu comentario aquí..." rows="4" style="width: 100%;"></textarea>
+                <div class="ga-modal-actions">
+                    <button id="ga-modal-comentario-cancelar" class="button button-secondary">Cancelar</button>
+                    <button id="ga-modal-comentario-guardar" class="button button-primary">Marcar y Guardar</button>
+                </div>
+            </div>
+        </div>
+
         <div id="gestion-academica-app-container">
             <div class="gestion-academica-wrapper">
+                <div id="sga-panel-loader" style="display: none;">
+                    <div style="text-align:center; color: var(--sga-primary); font-weight: 600;">
+                        <span class="spinner is-active" style="float:none; width:auto; height:auto; margin-bottom: 10px;"></span>
+                        <p>Cargando...</p>
+                    </div>
+                </div>
                 <div id="panel-view-principal" class="panel-view active"><?php $this->render_view_principal(); ?></div>
                 <div id="panel-view-matriculacion" class="panel-view"><?php $this->render_view_matriculacion(); ?></div>
                 <div id="panel-view-enviar_a_matriculacion" class="panel-view"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
@@ -310,6 +328,9 @@ class SGA_Shortcodes {
 
                                                     if ($call_info) {
                                                         echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+                                                        if (!empty($call_info['comment'])) {
+                                                            echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
+                                                        }
                                                     } else {
                                                         ?>
                                                         <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
@@ -473,9 +494,12 @@ class SGA_Shortcodes {
                                     <thead>
                                         <tr>
                                             <th>Estudiante</th>
+                                            <th>Cédula</th>
+                                            <th>Contacto</th>
                                             <th>Curso</th>
-                                            <th>Estado de Llamada</th>
-                                            <th>Fecha de Llamada</th>
+                                            <th>Estado</th>
+                                            <th>Comentario</th>
+                                            <th>Fecha</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -497,8 +521,14 @@ class SGA_Shortcodes {
                                         ?>
                                             <tr data-status="<?php echo esc_attr($current_status_key); ?>">
                                                 <td><?php echo esc_html(get_post_meta($call->ID, '_student_name', true)); ?></td>
+                                                <td><?php echo esc_html(get_field('cedula', $student_id)); ?></td>
+                                                <td>
+                                                    <small><strong>Email:</strong> <?php echo esc_html(get_field('email', $student_id)); ?></small><br>
+                                                    <small><strong>Tel:</strong> <?php echo esc_html(get_field('telefono', $student_id)); ?></small>
+                                                </td>
                                                 <td><?php echo esc_html(get_post_meta($call->ID, '_course_name', true)); ?></td>
                                                 <td><span class="ga-pill <?php echo esc_attr($status_details['class']); ?>"><?php echo esc_html($status_details['text']); ?></span></td>
+                                                <td><?php echo esc_html($call->post_content); ?></td>
                                                 <td><?php echo esc_html(get_the_date('d/m/Y h:i A', $call)); ?></td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -963,6 +993,8 @@ class SGA_Shortcodes {
             'enable_monthly' => 0,
         ]);
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        $agentes_query = new WP_User_Query([ 'role__in' => ['administrator', 'gestor_academico'], 'fields' => 'all_with_meta' ]);
+        $agentes = $agentes_query->get_results();
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Central de Reportes</h1>
@@ -981,8 +1013,18 @@ class SGA_Shortcodes {
                                     <option value="matriculados">Estudiantes Matriculados</option>
                                     <option value="pendientes">Inscripciones Pendientes</option>
                                     <option value="cursos">Lista de Cursos Activos</option>
-                                    <option value="log">Registro de Actividad</option>
                                     <option value="payment_history">Historial de Pagos</option>
+                                    <option value="historial_llamadas">Historial de Llamadas</option>
+                                    <option value="log">Registro de Actividad</option>
+                                </select>
+                            </div>
+                             <div class="sga-form-group" id="report-agente-filter-container" style="display:none;">
+                                <label for="report_agente_filtro">Filtrar por Agente</label>
+                                <select name="agente_filtro" id="report_agente_filtro">
+                                    <option value="">Todos los agentes</option>
+                                    <?php foreach ($agentes as $agente) : ?>
+                                        <option value="<?php echo esc_attr($agente->ID); ?>"><?php echo esc_html($agente->display_name); ?></option>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                             <div class="sga-form-group" id="report-curso-filter-container" style="display:none;">
@@ -1037,7 +1079,7 @@ class SGA_Shortcodes {
                     </form>
                 </div>
                 <a href="#" data-view="log" class="panel-card panel-nav-link">
-                    <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
+                    <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
                     <h2>Registro de Actividad</h2>
                     <p>Consultar el log del sistema</p>
                 </a>
@@ -1063,7 +1105,24 @@ class SGA_Shortcodes {
             }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             #gestion-academica-app-container { padding: 20px; }
-            .gestion-academica-wrapper { background-color: var(--sga-white); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: var(--shadow-lg); }
+            .gestion-academica-wrapper { 
+                position: relative;
+                background-color: var(--sga-white); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: var(--shadow-lg); 
+            }
+            #sga-panel-loader {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(248, 250, 252, 0.85);
+                backdrop-filter: blur(2px);
+                z-index: 999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 16px;
+            }
             .panel-view { display: none; padding: 30px 40px; animation: fadeIn 0.5s ease-out; }
             .panel-view.active { display: block; }
             
@@ -1121,8 +1180,9 @@ class SGA_Shortcodes {
             .button-secondary:hover { background-color: var(--sga-gray) !important; }
             .ga-check-column { width: 2.2em; }
             
-            /* Status Pills */
+            /* Status Pills & Comments */
             .estado-inscrito { color: var(--sga-yellow); background-color: #fffbeb; padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: 12px; }
+            .sga-call-comment { font-size: 12px; color: var(--sga-text-light); margin: 5px 0 0 0; padding-left: 5px; border-left: 2px solid var(--sga-gray); }
             .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 16px; color: var(--sga-white); }
             .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
             .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
@@ -1286,7 +1346,9 @@ class SGA_Shortcodes {
             jQuery(document).ready(function($) {
                 var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
                 var approvalData = {};
+                var callData = {};
                 var inscriptionsChart;
+                var viewsToRefresh = {};
 
                 function setDynamicDateTime() {
                     if (!$("#dynamic-date").length) return;
@@ -1306,16 +1368,45 @@ class SGA_Shortcodes {
                     e.preventDefault();
                     var view = $(this).data("view");
                     var activePanel = $(".panel-view.active");
-                    if (activePanel.is("#panel-view-" + view)) {
+                    var targetPanel = $("#panel-view-" + view);
+                    var loader = $("#sga-panel-loader");
+
+                    if (activePanel.is(targetPanel)) {
                         return;
                     }
-                    activePanel.fadeOut(200, function() {
-                        $(this).removeClass("active");
-                        $("#panel-view-" + view).fadeIn(200).addClass("active");
-                        if (view === 'reportes') {
+
+                    loader.fadeIn(150);
+
+                    function switchView() {
+                        activePanel.removeClass("active").hide();
+                        targetPanel.addClass("active").show();
+                        if (view === 'reportes' && (!inscriptionsChart || viewsToRefresh['reportes'])) {
                             renderInscriptionsChart();
                         }
-                    });
+                        loader.fadeOut(150);
+                    }
+
+                    if (viewsToRefresh[view]) {
+                        $.post(ajaxurl, {
+                            action: 'sga_get_panel_view_html',
+                            view: view,
+                            _ajax_nonce: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>'
+                        }).done(function(response) {
+                            if (response.success) {
+                                targetPanel.html(response.data.html);
+                                delete viewsToRefresh[view];
+                            } else {
+                                targetPanel.html('<div class="sga-profile-error">Error al recargar la vista.</div>');
+                            }
+                        }).fail(function() {
+                            targetPanel.html('<div class="sga-profile-error">Error de comunicación al recargar la vista.</div>');
+                        }).always(function() {
+                            switchView();
+                        });
+                    } else {
+                        // No AJAX needed, give the loader time to show up
+                        setTimeout(switchView, 200); 
+                    }
                 });
 
                 $("#tabla-pendientes").on("click", ".aprobar-btn", function() {
@@ -1373,7 +1464,8 @@ class SGA_Shortcodes {
                             nombre: approvalData.nombre
                         }).done(function(response) {
                             if (response.success) {
-                                actualizarUIAprobacion(response.data);
+                                viewsToRefresh['lista_matriculados'] = true;
+                                viewsToRefresh['cursos'] = true;
                                 approvalData.element.closest('tr').fadeOut(500, function() {
                                     $(this).remove();
                                     checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
@@ -1395,8 +1487,9 @@ class SGA_Shortcodes {
                         }).done(function(response) {
                             if (response.success) {
                                 if (response.data.approved && response.data.approved.length > 0) {
+                                    viewsToRefresh['lista_matriculados'] = true;
+                                    viewsToRefresh['cursos'] = true;
                                     response.data.approved.forEach(function(estudiante) {
-                                        actualizarUIAprobacion(estudiante);
                                         $('#tabla-pendientes .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
                                             $(this).remove();
                                             checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
@@ -1443,8 +1536,8 @@ class SGA_Shortcodes {
                         if (!response.success) {
                             alert('Error: ' + (response.data.message || 'Error desconocido'));
                         } else {
-                            // Update the data attribute on the row for live filtering
                             select.closest('tr').data('call-status', status);
+                            viewsToRefresh['registro_llamadas'] = true;
                         }
                     }).fail(function() {
                         alert('Error de conexión.');
@@ -1454,31 +1547,50 @@ class SGA_Shortcodes {
                     });
                 });
 
-                $("#tabla-pendientes").on("click", ".sga-marcar-llamado-btn", function() {
+                $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
                     var btn = $(this);
-                    var post_id = btn.data('postid');
-                    var row_index = btn.data('rowindex');
-                    var nonce = btn.data('nonce');
-                    var cell = btn.parent(); // the <td>
+                    callData = {
+                        post_id: btn.data('postid'),
+                        row_index: btn.data('rowindex'),
+                        nonce: btn.data('nonce'),
+                        element: btn
+                    };
+                    $('#sga-comentario-llamada-texto').val('');
+                    $('#ga-modal-comentario-llamada').fadeIn(200);
+                });
 
-                    btn.prop('disabled', true).text('Marcando...');
+                $('#ga-modal-comentario-guardar').on('click', function() {
+                    var btn = $(this);
+                    var comment = $('#sga-comentario-llamada-texto').val();
+                    var cell = callData.element.parent();
+
+                    btn.prop('disabled', true).text('Guardando...');
+                    callData.element.prop('disabled', true);
 
                     $.post(ajaxurl, {
                         action: 'sga_marcar_llamado',
-                        _ajax_nonce: nonce,
-                        post_id: post_id,
-                        row_index: row_index,
+                        _ajax_nonce: callData.nonce,
+                        post_id: callData.post_id,
+                        row_index: callData.row_index,
+                        comment: comment
                     }).done(function(response) {
                         if (response.success) {
                             cell.html(response.data.html);
+                            viewsToRefresh['registro_llamadas'] = true;
+                            $('#ga-modal-comentario-llamada').fadeOut(200);
                         } else {
                             alert('Error: ' + (response.data.message || 'Error desconocido'));
-                            btn.prop('disabled', false).text('Marcar como Llamado');
                         }
                     }).fail(function() {
                         alert('Error de conexión.');
-                        btn.prop('disabled', false).text('Marcar como Llamado');
+                    }).always(function() {
+                        btn.prop('disabled', false).text('Marcar y Guardar');
+                        callData.element.prop('disabled', false);
                     });
+                });
+
+                $('#ga-modal-comentario-cancelar').on('click', function() {
+                    $('#ga-modal-comentario-llamada').fadeOut(200);
                 });
 
                 function closeModal() {
@@ -1486,19 +1598,6 @@ class SGA_Shortcodes {
                     $("#ga-modal-confirmar").text('Confirmar y Enviar').prop('disabled', false);
                     $("#ga-modal-cancelar").prop('disabled', false);
                     approvalData = {};
-                }
-
-                function actualizarUIAprobacion(data) {
-                    var newRow = '<tr data-curso="' + data.nombre_curso + '">' +
-                        '<td><strong>' + data.matricula + '</strong></td>' +
-                        '<td>' + data.nombre + '</td>' +
-                        '<td>' + data.cedula + '</td>' +
-                        '<td>' + data.email + '</td>' +
-                        '<td>' + data.telefono + '</td>' +
-                        '<td>' + data.nombre_curso + '</td>' +
-                        '</tr>';
-                    $("#tabla-matriculados .no-results").remove();
-                    $("#tabla-matriculados tbody").append(newRow);
                 }
 
                 function checkEmptyTable(tableId, colspan, message) {
@@ -1672,7 +1771,7 @@ class SGA_Shortcodes {
                     window.location.href = url.href;
                 });
 
-                $("#exportar-llamadas-btn").on("click", function(e) {
+                $("#gestion-academica-app-container").on("click", "#exportar-llamadas-btn", function(e) {
                     e.preventDefault();
                     var searchTerm = $('#buscador-registro-llamadas').val();
                     var agentFilter = $('#filtro-agente-llamadas').val();
@@ -1804,6 +1903,9 @@ class SGA_Shortcodes {
                     }).done(function(response) {
                         if (response.success) {
                             alert('Perfil actualizado correctamente.');
+                            viewsToRefresh['estudiantes'] = true;
+                            viewsToRefresh['lista_matriculados'] = true;
+                            viewsToRefresh['enviar_a_matriculacion'] = true;
                         } else {
                             alert('Error al guardar: ' + response.data.message);
                         }
@@ -1899,11 +2001,18 @@ class SGA_Shortcodes {
                 // Reports View Logic
                 $('#report_type').on('change', function() {
                     const reportType = $(this).val();
-                    const courseFilter = $('#report-curso-filter-container');
+                    const cursoFilter = $('#report-curso-filter-container');
+                    const agenteFilter = $('#report-agente-filter-container');
+
+                    // Ocultar todos los filtros específicos primero
+                    cursoFilter.hide();
+                    agenteFilter.hide();
+
                     if (reportType === 'matriculados' || reportType === 'pendientes') {
-                        courseFilter.slideDown();
-                    } else {
-                        courseFilter.slideUp();
+                        cursoFilter.slideDown();
+                    } else if (reportType === 'historial_llamadas') {
+                        cursoFilter.slideDown();
+                        agenteFilter.slideDown();
                     }
                 });
                 

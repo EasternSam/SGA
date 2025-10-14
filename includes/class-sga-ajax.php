@@ -25,10 +25,28 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
         add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status'));
         add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
+        add_action('wp_ajax_sga_get_panel_view_html', array($this, 'ajax_get_panel_view_html'));
+        add_action('wp_ajax_sga_check_pending_inscriptions', array($this, 'ajax_check_pending_inscriptions'));
 
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
+    }
+
+    /**
+     * AJAX: Verifica el número de inscripciones pendientes para la notificación en tiempo real.
+     */
+    public function ajax_check_pending_inscriptions() {
+        if (!check_ajax_referer('sga_pending_nonce', 'security', false)) {
+            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        }
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos.'], 403);
+        }
+        
+        $count = SGA_Utils::_get_pending_inscriptions_count();
+
+        wp_send_json_success(['count' => $count]);
     }
 
     /**
@@ -41,6 +59,7 @@ class SGA_Ajax {
         
         $post_id = intval($_POST['post_id']);
         $row_index = intval($_POST['row_index']);
+        $comment = isset($_POST['comment']) ? sanitize_textarea_field($_POST['comment']) : '';
         
         check_ajax_referer('sga_marcar_llamado_' . $post_id . '_' . $row_index);
 
@@ -58,12 +77,16 @@ class SGA_Ajax {
         $call_log[$row_index] = [
             'user_id' => $current_user->ID,
             'user_name' => $current_user->display_name,
-            'timestamp' => $timestamp
+            'timestamp' => $timestamp,
+            'comment' => $comment
         ];
 
         update_post_meta($post_id, '_sga_call_log', $call_log);
         
         $html = 'Llamado por <strong>' . esc_html($current_user->display_name) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $timestamp)) . '</small>';
+        if (!empty($comment)) {
+            $html .= '<p class="sga-call-comment"><em>' . esc_html($comment) . '</em></p>';
+        }
         
         $student_post = get_post($post_id);
         $cursos_inscritos = get_field('cursos_inscritos', $post_id);
@@ -71,6 +94,9 @@ class SGA_Ajax {
         $course_name = $curso_actual ? $curso_actual['nombre_curso'] : 'Desconocido';
 
         $log_content = "Estudiante: {$student_post->post_title} (ID: {$post_id}) fue marcado como llamado.";
+        if (!empty($comment)) {
+            $log_content .= " Comentario: " . $comment;
+        }
         SGA_Utils::_log_activity('Inscripción Marcada Como Llamada', $log_content, $current_user->ID);
 
         // Crear el CPT 'sga_llamada'
@@ -79,6 +105,7 @@ class SGA_Ajax {
             'post_title'   => 'Llamada a ' . $student_post->post_title . ' por ' . $current_user->display_name,
             'post_status'  => 'publish',
             'post_author'  => $current_user->ID,
+            'post_content' => $comment
         ]);
 
         if ($call_post_id && !is_wp_error($call_post_id)) {
@@ -496,6 +523,32 @@ class SGA_Ajax {
         SGA_Integration::_query_student_test();
 
         wp_send_json_success(['message' => 'Prueba de conexión iniciada.']);
+    }
+
+    /**
+     * AJAX: Recarga el HTML de una vista específica del panel.
+     */
+    public function ajax_get_panel_view_html() {
+        if (!isset($_POST['view']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce')) {
+            wp_send_json_error(['message' => 'Parámetros inválidos o error de seguridad.']);
+        }
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+
+        $view = sanitize_key($_POST['view']);
+        $method_name = 'render_view_' . $view;
+
+        $shortcode_handler = new SGA_Shortcodes();
+
+        if (method_exists($shortcode_handler, $method_name)) {
+            ob_start();
+            $shortcode_handler->{$method_name}();
+            $html = ob_get_clean();
+            wp_send_json_success(['html' => $html]);
+        } else {
+            wp_send_json_error(['message' => 'La vista solicitada no existe.']);
+        }
     }
 }
 

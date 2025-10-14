@@ -59,17 +59,24 @@ class SGA_Roles {
             }
         }
 
-        // Programar el cron job
+        // Programar el cron job de reportes
         if (!wp_next_scheduled('sga_daily_report_cron')) {
             wp_schedule_event(strtotime('02:00:00'), 'daily', 'sga_daily_report_cron');
+        }
+
+        // Programar el cron job para archivar y resetear llamadas
+        if (!wp_next_scheduled('sga_archive_and_reset_call_log')) {
+            // Se ejecuta a las 3:00 AM para no coincidir con el de reportes
+            wp_schedule_event(strtotime('03:00:00'), 'daily', 'sga_archive_and_reset_call_log');
         }
     }
 
     /**
      * Se ejecuta en la desactivación del plugin.
-     * Limpia el cron job programado.
+     * Limpia los cron jobs programados.
      */
     public static function on_deactivation() {
         wp_clear_scheduled_hook('sga_daily_report_cron');
+        wp_clear_scheduled_hook('sga_archive_and_reset_call_log');
     }
 }

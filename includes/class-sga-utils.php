@@ -539,4 +539,31 @@ class SGA_Utils {
 
         return $content;
     }
+
+    /**
+     * Obtiene el número de inscripciones pendientes.
+     * @return int Cantidad de inscripciones pendientes.
+     */
+    public static function _get_pending_inscriptions_count() {
+        $count = 0;
+        $estudiantes_ids = get_posts([
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+        ]);
+
+        if ($estudiantes_ids && function_exists('get_field')) {
+            foreach ($estudiantes_ids as $estudiante_id) {
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                if ($cursos) {
+                    foreach ($cursos as $curso) {
+                        if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
+                            $count++;
+                        }
+                    }
+                }
+            }
+        }
+        return $count;
+    }
 }

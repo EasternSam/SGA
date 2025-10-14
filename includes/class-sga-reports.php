@@ -22,6 +22,7 @@ class SGA_Reports {
 
         // Hook para el cron job de reportes programados
         add_action('sga_daily_report_cron', array($this, 'handle_scheduled_reports'));
+        add_action('sga_archive_daily_calls_cron', array($this, 'archive_daily_calls'));
     }
 
     // --- MANEJADORES DE ACCIONES DE ADMIN-POST ---
@@ -35,7 +36,7 @@ class SGA_Reports {
                 $post = get_post($post_id);
                 $cedula = get_field('cedula', $post_id);
                 SGA_Utils::_aprobar_estudiante($post_id, $row_index, $cedula, $post->post_title);
-                wp_redirect(admin_url('admin.php?page=sga-aprobar-inscripciones&approved=1'));
+                wp_redirect(admin_url('admin.php?page=sga_dashboard&approved=1'));
                 exit;
             }
         }
@@ -59,7 +60,7 @@ class SGA_Reports {
                     }
                 }
                 if ($aprobados_count > 0) {
-                    wp_redirect(admin_url('admin.php?page=sga-aprobar-inscripciones&approved=' . $aprobados_count));
+                    wp_redirect(admin_url('admin.php?page=sga_dashboard&approved=' . $aprobados_count));
                     exit;
                 }
             }
@@ -73,11 +74,18 @@ class SGA_Reports {
 
         $report_type = sanitize_key($_POST['report_type']);
         $report_action = sanitize_key($_POST['report_action']);
+        
+        $args = [
+            'date_from' => isset($_POST['date_from']) ? sanitize_text_field($_POST['date_from']) : '',
+            'date_to' => isset($_POST['date_to']) ? sanitize_text_field($_POST['date_to']) : '',
+            'curso_filtro' => isset($_POST['curso_filtro']) ? sanitize_text_field($_POST['curso_filtro']) : '',
+            'agente_filtro' => isset($_POST['agente_filtro']) ? sanitize_text_field($_POST['agente_filtro']) : ''
+        ];
 
-        $report_data = $this->_generate_report($report_type);
+        $report_data = $this->_generate_report($report_type, $args);
         if (!$report_data) {
             add_settings_error('sga_reports', 'sga_report_error', 'Error: La librería Dompdf es necesaria para generar reportes en PDF. Por favor, instálala y vuelve a intentarlo.', 'error');
-            wp_redirect(admin_url('admin.php?page=sga-reportes-settings'));
+            wp_redirect(admin_url('admin.php?page=sga-settings&tab=reportes'));
             exit;
         }
 
@@ -92,7 +100,7 @@ class SGA_Reports {
             add_settings_error('sga_reports', 'sga_report_sent', $sent ? 'El reporte ha sido enviado.' : 'Error al enviar el correo.', $sent ? 'success' : 'error');
         }
 
-        wp_redirect(admin_url('admin.php?page=sga-reportes-settings'));
+        wp_redirect(admin_url('admin.php?page=sga-settings&tab=reportes'));
         exit;
     }
 
@@ -138,7 +146,7 @@ class SGA_Reports {
         }
     }
 
-    private function _generate_report($type) {
+    private function _generate_report($type, $args = []) {
         if (!class_exists('Dompdf\Dompdf')) {
             SGA_Utils::_log_activity('Error de Reporte', 'La librería Dompdf no está instalada o no se puede encontrar.');
             return false;
@@ -163,7 +171,7 @@ class SGA_Reports {
             case 'matriculados':
                 $report_title = 'Reporte de Estudiantes Matriculados';
                 $headers = ['Matrícula', 'Nombre', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Horario'];
-                $students_data = SGA_Utils::_get_filtered_students('', '');
+                $students_data = SGA_Utils::_get_filtered_students('', $args['curso_filtro'] ?? '');
                 foreach ($students_data as $data) {
                     $rows[] = [
                         esc_html(isset($data['curso']['matricula']) ? $data['curso']['matricula'] : ''),
@@ -186,6 +194,9 @@ class SGA_Reports {
                         if ($cursos) {
                             foreach ($cursos as $curso) {
                                 if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
+                                     if (!empty($args['curso_filtro']) && $curso['nombre_curso'] !== $args['curso_filtro']) {
+                                        continue;
+                                    }
                                     $rows[] = [
                                         esc_html($estudiante->post_title),
                                         esc_html(get_field('cedula', $estudiante->ID)),
@@ -237,15 +248,19 @@ class SGA_Reports {
                 }
                 break;
             case 'log':
-                $report_title = 'Reporte de Actividad (Últimos 30 días)';
+                $report_title = 'Reporte de Actividad';
                 $headers = ['Acción', 'Detalles', 'Usuario', 'Fecha'];
-                $log_entries = get_posts(array(
-                    'post_type' => 'gestion_log',
-                    'posts_per_page' => -1,
-                    'orderby' => 'date',
-                    'order' => 'DESC',
-                    'date_query' => array(array('after' => '30 days ago', 'inclusive' => true)),
-                ));
+                $query_args = [
+                    'post_type' => 'gestion_log', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                if (!empty($args['date_from']) || !empty($args['date_to'])) {
+                    $query_args['date_query'] = [];
+                    if (!empty($args['date_from'])) $query_args['date_query']['after'] = $args['date_from'];
+                    if (!empty($args['date_to'])) $query_args['date_query']['before'] = $args['date_to'];
+                }
+                $log_entries = get_posts($query_args);
+
                 if ($log_entries) {
                     foreach ($log_entries as $entry) {
                         $user_id = get_post_meta($entry->ID, '_log_user_id', true);
@@ -256,6 +271,60 @@ class SGA_Reports {
                             wp_strip_all_tags($entry->post_content),
                             esc_html($user_name),
                             get_the_date('Y-m-d H:i:s', $entry),
+                        ];
+                    }
+                }
+                break;
+            case 'historial_llamadas':
+                $report_title = 'Reporte de Historial de Llamadas';
+                $headers = ['Agente', 'Estudiante', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Comentario', 'Fecha'];
+                
+                // 1. Obtener llamadas archivadas
+                $query_args_hist = [
+                    'post_type' => 'sga_llamada_hist', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                if (!empty($args['date_from']) || !empty($args['date_to'])) {
+                    $query_args_hist['date_query'] = [];
+                    if (!empty($args['date_from'])) $query_args_hist['date_query']['after'] = $args['date_from'];
+                    if (!empty($args['date_to'])) $query_args_hist['date_query']['before'] = $args['date_to'];
+                }
+                 if (!empty($args['agente_filtro'])) {
+                    $query_args_hist['author'] = intval($args['agente_filtro']);
+                }
+                if (!empty($args['curso_filtro'])) {
+                    $query_args_hist['meta_query'] = [['key' => '_course_name', 'value' => $args['curso_filtro']]];
+                }
+                $llamadas_hist_query = new WP_Query($query_args_hist);
+
+                // 2. Obtener llamadas del día actual
+                $query_args_hoy = [
+                    'post_type' => 'sga_llamada', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                 if (!empty($args['agente_filtro'])) {
+                    $query_args_hoy['author'] = intval($args['agente_filtro']);
+                }
+                if (!empty($args['curso_filtro'])) {
+                    $query_args_hoy['meta_query'] = [['key' => '_course_name', 'value' => $args['curso_filtro']]];
+                }
+                $llamadas_hoy_query = new WP_Query($query_args_hoy);
+                
+                $todas_las_llamadas = array_merge($llamadas_hist_query->posts, $llamadas_hoy_query->posts);
+
+                if (!empty($todas_las_llamadas)) {
+                    foreach ($todas_las_llamadas as $llamada) {
+                         $user_info = get_userdata($llamada->post_author);
+                         $student_id = get_post_meta($llamada->ID, '_student_id', true);
+                        $rows[] = [
+                            esc_html($user_info ? $user_info->display_name : 'N/A'),
+                            esc_html(get_post_meta($llamada->ID, '_student_name', true)),
+                            esc_html(get_field('cedula', $student_id)),
+                            esc_html(get_field('email', $student_id)),
+                            esc_html(get_field('telefono', $student_id)),
+                            esc_html(get_post_meta($llamada->ID, '_course_name', true)),
+                            esc_html($llamada->post_content),
+                            get_the_date('Y-m-d H:i:s', $llamada),
                         ];
                     }
                 }
@@ -608,7 +677,7 @@ class SGA_Reports {
                 
                 // Search term filter (for meta fields)
                 if (!empty($search_term)) {
-                    $searchable_string = strtolower($student_name . ' ' . $course_name);
+                    $searchable_string = strtolower($student_name . ' ' . $course_name . ' ' . get_the_content());
                     if (strpos($searchable_string, strtolower($search_term)) === false) {
                         continue;
                     }
@@ -619,8 +688,12 @@ class SGA_Reports {
                 $filtered_calls[] = [
                     'agent' => $agent_name,
                     'student' => $student_name,
+                    'cedula' => get_field('cedula', $student_id),
+                    'email' => get_field('email', $student_id),
+                    'telefono' => get_field('telefono', $student_id),
                     'course' => $course_name,
                     'status' => $status_text,
+                    'comment' => get_the_content(),
                     'date' => get_the_date('d/m/Y h:i A', $post_id)
                 ];
             }
@@ -638,8 +711,12 @@ class SGA_Reports {
                     <tr>
                         <th>Agente</th>
                         <th>Estudiante</th>
+                        <th>Cédula</th>
+                        <th>Email</th>
+                        <th>Teléfono</th>
                         <th>Curso</th>
                         <th>Estado de Llamada</th>
+                        <th>Comentario</th>
                         <th>Fecha</th>
                     </tr>
                 </thead>
@@ -649,14 +726,18 @@ class SGA_Reports {
                             <tr>
                                 <td><?php echo esc_html($call['agent']); ?></td>
                                 <td><?php echo esc_html($call['student']); ?></td>
+                                <td><?php echo esc_html($call['cedula']); ?></td>
+                                <td><?php echo esc_html($call['email']); ?></td>
+                                <td><?php echo esc_html($call['telefono']); ?></td>
                                 <td><?php echo esc_html($call['course']); ?></td>
                                 <td><?php echo esc_html($call['status']); ?></td>
+                                <td><?php echo esc_html($call['comment']); ?></td>
                                 <td><?php echo esc_html($call['date']); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="5">No se encontraron registros con los filtros aplicados.</td>
+                            <td colspan="9">No se encontraron registros con los filtros aplicados.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

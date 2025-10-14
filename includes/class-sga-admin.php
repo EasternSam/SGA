@@ -13,15 +13,19 @@ class SGA_Admin {
     public function __construct() {
         add_action('admin_menu', array($this, 'add_admin_menu_pages'));
         add_action('admin_init', array($this, 'register_plugin_settings'));
+        add_action('admin_footer', array($this, 'add_realtime_notification_script'));
     }
 
     /**
      * Añade el menú principal y los submenús del plugin al panel de administración.
      */
     public function add_admin_menu_pages() {
+        $pending_count = SGA_Utils::_get_pending_inscriptions_count();
+        $notification_bubble = $pending_count > 0 ? ' <span class="awaiting-mod">' . $pending_count . '</span>' : '';
+
         add_menu_page(
             'Gestión Académica',
-            'Gestión Académica',
+            'Gestión Académica' . $notification_bubble,
             'edit_estudiantes',
             'sga_dashboard',
             array($this, 'render_admin_approval_page'),
@@ -73,6 +77,48 @@ class SGA_Admin {
             array($this, 'render_main_settings_page')
         );
     }
+    
+     /**
+     * Añade el script para notificaciones en tiempo real en el footer del admin.
+     */
+    public function add_realtime_notification_script() {
+        if (current_user_can('edit_estudiantes')) {
+            ?>
+            <script type="text/javascript">
+            jQuery(document).ready(function($) {
+                var sgaMenuLink = $('#toplevel_page_sga_dashboard > a');
+                
+                function checkPendingInscriptions() {
+                    $.post(ajaxurl, {
+                        action: 'sga_check_pending_inscriptions',
+                        security: '<?php echo wp_create_nonce("sga_pending_nonce"); ?>'
+                    }).done(function(response) {
+                        if (response.success) {
+                            var count = parseInt(response.data.count, 10);
+                            var bubble = sgaMenuLink.find('.awaiting-mod');
+
+                            if (count > 0) {
+                                if (bubble.length) {
+                                    bubble.text(count);
+                                } else {
+                                    sgaMenuLink.append(' <span class="awaiting-mod">' + count + '</span>');
+                                }
+                            } else {
+                                bubble.remove();
+                            }
+                        }
+                    });
+                }
+                
+                // Check immediately on page load and then every 30 seconds
+                checkPendingInscriptions();
+                setInterval(checkPendingInscriptions, 30000); 
+            });
+            </script>
+            <?php
+        }
+    }
+
 
     /**
      * Registra los grupos de opciones del plugin.
@@ -702,4 +748,3 @@ class SGA_Admin {
         <?php
     }
 }
-

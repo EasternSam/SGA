@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 /**
  * Clase SGA_CPT
  *
- * Gestiona la creaci¨®n y configuraci¨®n de todos los Custom Post Types (CPTs)
+ * Gestiona la creaci¡§ 0…3n y configuraci¡§ 0…3n de todos los Custom Post Types (CPTs)
  * y las meta boxes asociadas.
  */
 class SGA_CPT {
@@ -106,10 +106,23 @@ class SGA_CPT {
                 'create_posts' => 'do_not_allow', 
             ),
         ));
+
+        register_post_type('sga_reporte_llamada', array(
+            'labels' => array('name' => 'Reportes de Llamadas', 'singular_name' => 'Reporte de Llamada'),
+            'public' => false,
+            'show_ui' => true, // Visible en el admin para debug
+            'show_in_menu' => false, // No en el menú principal
+            'supports' => array('title', 'editor'),
+            'rewrite' => false,
+            'capability_type' => 'post',
+            'capabilities' => array(
+                'create_posts' => 'do_not_allow', 
+            ),
+        ));
     }
 
     /**
-     * A 0Š9ade la meta box para el precio en 'sga_concepto_pago'.
+     * A 0 0”79ade la meta box para el precio en 'sga_concepto_pago'.
      */
     public function sga_add_price_metabox() {
         add_meta_box(
