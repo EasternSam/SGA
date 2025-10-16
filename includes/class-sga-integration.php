@@ -75,6 +75,18 @@ class SGA_Integration {
                 'fecha_inscripcion' => current_time('mysql'),
                 'estado' => 'Inscrito'
             ), $post_id);
+
+            // --- Asignación automática a un agente ---
+            $cursos = get_field('cursos_inscritos', $post_id);
+            $new_row_index = count($cursos) - 1; // El índice del repeater recién añadido
+            
+            $next_agent_id = SGA_Utils::_get_next_agent_for_assignment();
+            if ($next_agent_id) {
+                SGA_Utils::_assign_inscription_to_agent($post_id, $new_row_index, $next_agent_id);
+                $agent_info = get_userdata($next_agent_id);
+                $log_content_agent = "La inscripción de {$nombre_completo} para '{$curso_inscrito}' fue asignada automáticamente al agente: {$agent_info->display_name}.";
+                SGA_Utils::_log_activity('Inscripción Asignada', $log_content_agent, 0);
+            }
         }
 
         // --- Notificar al sistema interno sobre la nueva inscripción (Webhook Saliente) ---

@@ -34,6 +34,56 @@ class SGA_Utils {
     }
 
     /**
+     * Obtiene una lista de todos los usuarios con el rol 'agente'.
+     * @return array Array de objetos WP_User.
+     */
+    public static function _get_sga_agents() {
+        $args = array(
+            'role'    => 'agente',
+            'orderby' => 'display_name',
+            'order'   => 'ASC'
+        );
+        $agents = get_users($args);
+        return $agents;
+    }
+
+    /**
+     * Asigna una inscripción específica a un agente.
+     * @param int $student_id ID del post del estudiante.
+     * @param int $row_index Índice de la fila del curso en el repeater.
+     * @param int $agent_id ID del usuario del agente.
+     */
+    public static function _assign_inscription_to_agent($student_id, $row_index, $agent_id) {
+        $assignments = get_post_meta($student_id, '_sga_agent_assignments', true);
+        if (!is_array($assignments)) {
+            $assignments = [];
+        }
+        $assignments[$row_index] = (int)$agent_id;
+        update_post_meta($student_id, '_sga_agent_assignments', $assignments);
+    }
+
+    /**
+     * Obtiene el siguiente agente en la rotación para asignación automática.
+     * @return int|null ID del agente o null si no hay agentes.
+     */
+    public static function _get_next_agent_for_assignment() {
+        $agents = self::_get_sga_agents();
+        if (empty($agents)) {
+            return null;
+        }
+
+        $last_assigned_index = get_transient('sga_last_assigned_agent_index');
+        if (false === $last_assigned_index) {
+            $next_index = 0;
+        } else {
+            $next_index = ($last_assigned_index + 1) % count($agents);
+        }
+
+        set_transient('sga_last_assigned_agent_index', $next_index, DAY_IN_SECONDS);
+        return $agents[$next_index]->ID;
+    }
+
+    /**
      * Obtiene y formatea una plantilla de correo electrónico HTML.
      * @return string El HTML completo del correo.
      */

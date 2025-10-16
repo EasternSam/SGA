@@ -12,128 +12,308 @@ class SGA_Admin {
 
     public function __construct() {
         add_action('admin_menu', array($this, 'add_admin_menu_pages'));
+        add_action('admin_menu', array($this, 'remove_menus_for_sga_roles'), 999); // Prioridad alta para limpiar el menú
         add_action('admin_init', array($this, 'register_plugin_settings'));
         add_action('admin_footer', array($this, 'add_realtime_notification_script'));
+        
+        // Hooks para la pantalla de bienvenida y redirección
+        add_filter('login_redirect', array($this, 'redirect_sga_users_on_login'), 10, 3);
+        add_action('admin_init', array($this, 'force_redirect_from_dashboard'));
+        add_action('admin_head', array($this, 'custom_welcome_screen_styles'));
+    }
+
+    /**
+     * Helper para verificar si el usuario actual tiene uno de los roles SGA.
+     * @return bool
+     */
+    private function sga_user_has_sga_role() {
+        $user = wp_get_current_user();
+        if (!$user->ID) return false;
+        $sga_roles = ['gestor_academico', 'agente', 'gestor_de_cursos'];
+        $user_roles = (array) $user->roles;
+        return !empty(array_intersect($sga_roles, $user_roles));
+    }
+
+    /**
+     * Redirige a los usuarios con roles SGA a la página de bienvenida al iniciar sesión.
+     */
+    public function redirect_sga_users_on_login($redirect_to, $requested_redirect_to, $user) {
+        if (isset($user->roles) && is_array($user->roles)) {
+            if ($this->sga_user_has_sga_role()) {
+                return admin_url('admin.php?page=sga_welcome');
+            }
+        }
+        return $redirect_to;
+    }
+
+    /**
+     * Fuerza la redirección desde el escritorio principal si un usuario SGA intenta acceder a él.
+     */
+    public function force_redirect_from_dashboard() {
+        global $pagenow;
+        if ($pagenow === 'index.php' && $this->sga_user_has_sga_role()) {
+            if (!isset($_GET['page']) || $_GET['page'] !== 'sga_welcome') {
+                wp_redirect(admin_url('admin.php?page=sga_welcome'));
+                exit;
+            }
+        }
     }
 
     /**
      * Añade el menú principal y los submenús del plugin al panel de administración.
      */
     public function add_admin_menu_pages() {
-        $pending_count = SGA_Utils::_get_pending_inscriptions_count();
-        $notification_bubble = $pending_count > 0 ? ' <span class="awaiting-mod">' . $pending_count . '</span>' : '';
+        if ($this->sga_user_has_sga_role()) {
+            // --- Menú para Roles SGA (Agente, Gestor de Cursos, etc.) ---
+            add_menu_page(
+                'Bienvenido',
+                'Bienvenido',
+                'read',
+                'sga_welcome',
+                array($this, 'render_sga_welcome_page'),
+                'dashicons-admin-home',
+                2
+            );
+        } else {
+            // --- Menú para Administradores ---
+            $pending_count = SGA_Utils::_get_pending_inscriptions_count();
+            $notification_bubble = $pending_count > 0 ? ' <span class="awaiting-mod">' . $pending_count . '</span>' : '';
 
-        add_menu_page(
-            'Gestión Académica',
-            'Gestión Académica' . $notification_bubble,
-            'edit_estudiantes',
-            'sga_dashboard',
-            array($this, 'render_admin_approval_page'),
-            'dashicons-welcome-learn-more',
-            25
-        );
-        add_submenu_page(
-            'sga_dashboard',
-            'Aprobar Inscripciones',
-            'Aprobar Inscripciones',
-            'edit_estudiantes',
-            'sga_dashboard' // This makes it the default page
-        );
-        add_submenu_page(
-            'sga_dashboard',
-            'Estudiantes',
-            'Estudiantes',
-            'edit_estudiantes',
-            'edit.php?post_type=estudiante'
-        );
-         add_submenu_page(
-            'sga_dashboard',
-            'Cursos',
-            'Cursos',
-            'edit_posts', // Assuming gestor can edit courses
-            'edit.php?post_type=curso'
-        );
-        add_submenu_page(
-            'sga_dashboard',
-            'Registro de Actividad',
-            'Registro de Actividad',
-            'manage_options', // Only admins should see this
-            'edit.php?post_type=gestion_log'
-        );
-        // --- Separator ---
-        add_submenu_page(
-            'sga_dashboard',
-            null, // No title for separator
-            '<span style="display:block; margin:1px 0 1px -5px; padding:0; height:1px; line-height:1px; background:#4f5458;"></span>',
-            'manage_options',
-            '#'
-        );
-        add_submenu_page(
-            'sga_dashboard',
-            'Ajustes',
-            'Ajustes',
-            'manage_options',
-            'sga-settings',
-            array($this, 'render_main_settings_page')
-        );
-    }
-    
-     /**
-     * Añade el script para notificaciones en tiempo real en el footer del admin.
-     */
-    public function add_realtime_notification_script() {
-        if (current_user_can('edit_estudiantes')) {
-            ?>
-            <script type="text/javascript">
-            jQuery(document).ready(function($) {
-                var sgaMenuLink = $('#toplevel_page_sga_dashboard > a');
-                
-                function checkPendingInscriptions() {
-                    $.post(ajaxurl, {
-                        action: 'sga_check_pending_inscriptions',
-                        security: '<?php echo wp_create_nonce("sga_pending_nonce"); ?>'
-                    }).done(function(response) {
-                        if (response.success) {
-                            var count = parseInt(response.data.count, 10);
-                            var bubble = sgaMenuLink.find('.awaiting-mod');
-
-                            if (count > 0) {
-                                if (bubble.length) {
-                                    bubble.text(count);
-                                } else {
-                                    sgaMenuLink.append(' <span class="awaiting-mod">' + count + '</span>');
-                                }
-                            } else {
-                                bubble.remove();
-                            }
-                        }
-                    });
-                }
-                
-                // Check immediately on page load and then every 30 seconds
-                checkPendingInscriptions();
-                setInterval(checkPendingInscriptions, 30000); 
-            });
-            </script>
-            <?php
+            add_menu_page(
+                'Gestión Académica',
+                'Gestión Académica' . $notification_bubble,
+                'edit_estudiantes',
+                'sga_dashboard',
+                null, // Se usará el shortcode para el panel
+                'dashicons-welcome-learn-more',
+                25
+            );
+            add_submenu_page(
+                'sga_dashboard',
+                'Panel Principal',
+                'Panel Principal',
+                'edit_estudiantes',
+                'sga_panel_redirect', // Slug falso para redirigir
+                array($this, 'redirect_to_gestion_page')
+            );
+            add_submenu_page(
+                'sga_dashboard',
+                'Estudiantes',
+                'Estudiantes',
+                'edit_estudiantes',
+                'edit.php?post_type=estudiante'
+            );
+            add_submenu_page(
+                'sga_dashboard',
+                'Cursos',
+                'Cursos',
+                'edit_posts',
+                'edit.php?post_type=curso'
+            );
+             add_submenu_page(
+                'sga_dashboard',
+                'Conceptos de Pago',
+                'Conceptos de Pago',
+                'manage_options',
+                'edit.php?post_type=sga_concepto_pago'
+            );
+            add_submenu_page(
+                'sga_dashboard',
+                'Registro de Actividad',
+                'Registro de Actividad',
+                'manage_options',
+                'edit.php?post_type=gestion_log'
+            );
+            add_submenu_page(
+                'sga_dashboard',
+                'Ajustes',
+                'Ajustes',
+                'manage_options',
+                'sga-settings',
+                array($this, 'render_main_settings_page')
+            );
         }
     }
 
+    /**
+     * Elimina todos los menús no esenciales para los roles SGA.
+     */
+    public function remove_menus_for_sga_roles() {
+        if ($this->sga_user_has_sga_role()) {
+            remove_menu_page('index.php'); // Escritorio
+            remove_menu_page('edit.php'); // Entradas
+            remove_menu_page('upload.php'); // Medios
+            remove_menu_page('edit.php?post_type=page'); // Páginas
+            remove_menu_page('edit-comments.php'); // Comentarios
+            remove_menu_page('themes.php'); // Apariencia
+            remove_menu_page('plugins.php'); // Plugins
+            remove_menu_page('users.php'); // Usuarios
+            remove_menu_page('tools.php'); // Herramientas
+            remove_menu_page('options-general.php'); // Ajustes
+            remove_menu_page('profile.php'); // Perfil (se puede acceder desde la barra superior)
+
+            // Limpieza adicional para menús de otros plugins
+            global $menu;
+            $allowed_slugs = ['sga_welcome', 'profile.php', 'wp-menu-separator1', 'wp-menu-separator2', 'wp-menu-separator-last'];
+            foreach ($menu as $key => $item) {
+                $slug = $item[2];
+                if (!in_array($slug, $allowed_slugs)) {
+                    remove_menu_page($slug);
+                }
+            }
+        }
+    }
+
+    /**
+     * Renderiza la página de bienvenida personalizada.
+     */
+    public function render_sga_welcome_page() {
+        $user = wp_get_current_user();
+        $logo_url = wp_get_attachment_url(5754); // Obtener la URL del logo desde la mediateca
+        ?>
+        <div class="sga-welcome-screen">
+            <div class="sga-welcome-content">
+                <?php if ($logo_url) : ?>
+                    <img src="<?php echo esc_url($logo_url); ?>" alt="Logo CENTU" class="sga-welcome-logo"/>
+                <?php endif; ?>
+                <h1>¡Bienvenido, <?php echo esc_html($user->display_name); ?>!</h1>
+                <p>Estás en el portal de gestión académica. Haz clic en el botón para acceder al panel principal.</p>
+                <a href="<?php echo esc_url(home_url('/gestion')); ?>" class="sga-welcome-button">
+                    Acceder al Panel de Gestión
+                </a>
+            </div>
+        </div>
+        <?php
+    }
+
+     /**
+     * Añade CSS para ocultar la UI de WordPress en la pantalla de bienvenida.
+     */
+    public function custom_welcome_screen_styles() {
+        if (isset($_GET['page']) && $_GET['page'] === 'sga_welcome') {
+            echo '
+            <style>
+                /* Ocultar elementos de la UI de WordPress */
+                #adminmenumain, #wpadminbar, #wpfooter, .notice, #wp-auth-check-wrap {
+                    display: none !important;
+                }
+                /* Ajustar el contenedor de contenido */
+                #wpcontent {
+                    margin-left: 0 !important;
+                    padding-left: 0 !important;
+                }
+                html.wp-toolbar {
+                    padding-top: 0 !important;
+                }
+                /* Estilos de la pantalla de bienvenida */
+                .sga-welcome-screen {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    background-color: #f0f2f5;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                }
+                .sga-welcome-content {
+                    text-align: center;
+                    background: #ffffff;
+                    padding: 50px 60px;
+                    border-radius: 16px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                    max-width: 500px;
+                }
+                .sga-welcome-logo {
+                    max-width: 200px;
+                    margin-bottom: 30px;
+                }
+                .sga-welcome-content h1 {
+                    font-size: 28px;
+                    color: #141f53;
+                    margin: 0 0 15px 0;
+                }
+                .sga-welcome-content p {
+                    font-size: 16px;
+                    color: #64748b;
+                    margin: 0 0 30px 0;
+                    line-height: 1.6;
+                }
+                .sga-welcome-button {
+                    display: inline-block;
+                    background-color: #4f46e5;
+                    color: #ffffff;
+                    padding: 15px 30px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    transition: all 0.3s ease;
+                }
+                .sga-welcome-button:hover {
+                    background-color: #141f53;
+                    transform: translateY(-3px);
+                    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+                }
+            </style>';
+        }
+    }
+    
+     /**
+     * Redirige el submenú del panel a la página de gestión.
+     */
+    public function redirect_to_gestion_page() {
+        wp_redirect(esc_url(home_url('/gestion')));
+        exit;
+    }
+
+    /**
+     * Añade el script para notificaciones en tiempo real en el footer del admin.
+     */
+    public function add_realtime_notification_script() {
+        if ($this->sga_user_has_sga_role() || !current_user_can('edit_estudiantes')) return;
+
+        ?>
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            var sgaMenuLink = $('#toplevel_page_sga_dashboard > a');
+            
+            function checkPendingInscriptions() {
+                $.post(ajaxurl, {
+                    action: 'sga_check_pending_inscriptions',
+                    security: '<?php echo wp_create_nonce("sga_pending_nonce"); ?>'
+                }).done(function(response) {
+                    if (response.success) {
+                        var count = parseInt(response.data.count, 10);
+                        var bubble = sgaMenuLink.find('.awaiting-mod');
+
+                        if (count > 0) {
+                            if (bubble.length) {
+                                bubble.text(count);
+                            } else {
+                                sgaMenuLink.append(' <span class="awaiting-mod">' + count + '</span>');
+                            }
+                        } else {
+                            bubble.remove();
+                        }
+                    }
+                });
+            }
+            
+            checkPendingInscriptions();
+            setInterval(checkPendingInscriptions, 30000); 
+        });
+        </script>
+        <?php
+    }
 
     /**
      * Registra los grupos de opciones del plugin.
      */
     public function register_plugin_settings() {
-        // Report settings
         register_setting('sga_report_options_group', 'sga_report_options', array($this, 'sanitize_report_options'));
-        // Payment and Integration settings in one group
         register_setting('sga_main_settings_group', 'sga_payment_options', array($this, 'sanitize_payment_options'));
         register_setting('sga_main_settings_group', 'sga_integration_options', array($this, 'sanitize_integration_options'));
     }
 
-    /**
-     * Sanitiza las opciones de reportes.
-     */
     public function sanitize_report_options($input) {
         $sanitized_input = [];
         if (isset($input['recipient_email'])) $sanitized_input['recipient_email'] = sanitize_email($input['recipient_email']);
@@ -141,31 +321,19 @@ class SGA_Admin {
         $sanitized_input['enable_monthly'] = isset($input['enable_monthly']) ? 1 : 0;
         return $sanitized_input;
     }
-
-    /**
-     * Sanitiza las opciones de pagos.
-     */
     public function sanitize_payment_options($input) {
         $sanitized_input = [];
-        // General
         $sanitized_input['enable_payments'] = isset($input['enable_payments']) ? 1 : 0;
         if (isset($input['local_currency_symbol'])) $sanitized_input['local_currency_symbol'] = sanitize_text_field($input['local_currency_symbol']);
         if (isset($input['active_gateway'])) $sanitized_input['active_gateway'] = in_array($input['active_gateway'], ['azul', 'cardnet']) ? $input['active_gateway'] : 'azul';
-        // Azul
         if (isset($input['azul_merchant_id'])) $sanitized_input['azul_merchant_id'] = sanitize_text_field($input['azul_merchant_id']);
         if (isset($input['azul_auth_key'])) $sanitized_input['azul_auth_key'] = sanitize_text_field($input['azul_auth_key']);
         if (isset($input['azul_environment'])) $sanitized_input['azul_environment'] = in_array($input['azul_environment'], ['sandbox', 'live']) ? $input['azul_environment'] : 'sandbox';
-        // Cardnet
         if (isset($input['cardnet_public_key'])) $sanitized_input['cardnet_public_key'] = sanitize_text_field($input['cardnet_public_key']);
         if (isset($input['cardnet_private_key'])) $sanitized_input['cardnet_private_key'] = sanitize_text_field($input['cardnet_private_key']);
         if (isset($input['cardnet_environment'])) $sanitized_input['cardnet_environment'] = in_array($input['cardnet_environment'], ['sandbox', 'production']) ? $input['cardnet_environment'] : 'sandbox';
-
         return $sanitized_input;
     }
-    
-    /**
-     * Sanitiza las opciones de integración.
-     */
     public function sanitize_integration_options($input) {
         $sanitized_input = [];
         if (isset($input['webhook_url'])) $sanitized_input['webhook_url'] = esc_url_raw($input['webhook_url']);
@@ -174,10 +342,7 @@ class SGA_Admin {
         $sanitized_input['disable_auto_enroll'] = isset($input['disable_auto_enroll']) ? 1 : 0;
         return $sanitized_input;
     }
-    
-    /**
-     * Renderiza la página principal de ajustes con pestañas.
-     */
+
     public function render_main_settings_page() {
         if (!current_user_can('manage_options')) wp_die(__('No tienes permisos para acceder a esta página.'));
         $active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'pagos';
@@ -205,25 +370,15 @@ class SGA_Admin {
                     $this->render_reports_settings_tab();
                     submit_button('Guardar Cambios');
                 } elseif ($active_tab == 'debug') {
-                    // No options group needed for debug tab
                     $this->render_debug_settings_tab();
-                    // No submit button needed here
                 }
                 ?>
             </form>
         </div>
         <?php
     }
-
-    /**
-     * Renderiza la pestaña de ajustes de pagos.
-     */
     private function render_payment_settings_tab() {
-        $options = get_option('sga_payment_options', [
-            'enable_payments' => 1, 'local_currency_symbol' => 'DOP', 'active_gateway' => 'cardnet',
-            'azul_merchant_id' => '', 'azul_auth_key' => '', 'azul_environment' => 'sandbox',
-            'cardnet_public_key' => '', 'cardnet_private_key' => '', 'cardnet_environment' => 'sandbox',
-        ]);
+        $options = get_option('sga_payment_options', []);
         ?>
         <h2>Configuración de Pagos Online</h2>
         <p>Activa o desactiva los pagos en línea y configura las credenciales de tu pasarela.</p>
@@ -255,49 +410,29 @@ class SGA_Admin {
                 </td>
             </tr>
         </table>
-        <hr>
-        <h3>Pasarela de Pago: Azul</h3>
-        <table class="form-table">
-            <tr valign="top"><th scope="row">... (campos de Azul) ...</th><td>...</td></tr>
-        </table>
-        <hr>
-        <h3>Pasarela de Pago: Cardnet</h3>
-        <table class="form-table">
-            <tr valign="top"><th scope="row">... (campos de Cardnet) ...</th><td>...</td></tr>
-        </table>
         <?php
     }
-    
-    /**
-     * Renderiza la pestaña de ajustes de integración.
-     */
     private function render_integration_settings_tab() {
-        $options = get_option('sga_integration_options', [
-            'webhook_url' => '', 'student_query_url' => '', 'api_secret_key' => '', 'disable_auto_enroll' => 0
-        ]);
+        $options = get_option('sga_integration_options', []);
         ?>
         <h2>Integración con Sistema Interno (Webhooks y API)</h2>
-        <p>Configura la comunicación entre este plugin y tu sistema de gestión interno.</p>
         <table class="form-table">
             <tr valign="top">
                 <th scope="row"><label for="webhook_url">URL del Webhook (Saliente)</label></th>
                 <td>
-                    <input type="url" id="webhook_url" name="sga_integration_options[webhook_url]" value="<?php echo esc_attr($options['webhook_url'] ?? ''); ?>" class="regular-text" placeholder="https://api.sistemainterno.com/nueva-inscripcion" />
-                    <p class="description">**Función:** Notificar a tu sistema interno cuando un nuevo estudiante se inscribe en la web.<br>El SGA enviará una petición <code>POST</code> a esta URL con los datos de la inscripción.</p>
+                    <input type="url" id="webhook_url" name="sga_integration_options[webhook_url]" value="<?php echo esc_attr($options['webhook_url'] ?? ''); ?>" class="regular-text" />
                 </td>
             </tr>
             <tr valign="top">
                 <th scope="row"><label for="student_query_url">URL de Consulta de Estudiantes (Entrante)</label></th>
                 <td>
-                    <input type="url" id="student_query_url" name="sga_integration_options[student_query_url]" value="<?php echo esc_attr($options['student_query_url'] ?? ''); ?>" class="regular-text" placeholder="https://api.sistemainterno.com/students" />
-                    <p class="description">**Función:** Permite al SGA buscar si un estudiante ya existe en tu sistema interno antes de crear uno nuevo.<br>El SGA hará una petición <code>GET</code> a esta URL, añadiendo la cédula al final (ej: <code>.../students?cedula=0010020034</code>).</p>
+                    <input type="url" id="student_query_url" name="sga_integration_options[student_query_url]" value="<?php echo esc_attr($options['student_query_url'] ?? ''); ?>" class="regular-text" />
                 </td>
             </tr>
             <tr valign="top">
                 <th scope="row"><label for="api_secret_key">Clave Secreta de la API</label></th>
                 <td>
                     <input type="password" id="api_secret_key" name="sga_integration_options[api_secret_key]" value="<?php echo esc_attr($options['api_secret_key'] ?? ''); ?>" class="regular-text" />
-                    <p class="description">**Función:** Asegura toda la comunicación entre el SGA y tu sistema interno.<br>Esta clave se enviará en la cabecera <code>X-SGA-Signature</code> en cada petición.</p>
                 </td>
             </tr>
              <tr valign="top">
@@ -307,129 +442,63 @@ class SGA_Admin {
                         <input type="checkbox" id="disable_auto_enroll" name="sga_integration_options[disable_auto_enroll]" value="1" <?php checked(1, $options['disable_auto_enroll'] ?? 0, true); ?> />
                         Desactivar matriculación automática
                     </label>
-                    <p class="description">Si se marca esta casilla, las peticiones del sistema interno para confirmar un pago no matricularán al estudiante automáticamente. La inscripción seguirá como "pendiente" y requerirá aprobación manual desde este panel.</p>
                 </td>
             </tr>
         </table>
         <?php
     }
-
-    /**
-     * Renderiza la pestaña de ajustes de reportes.
-     */
     private function render_reports_settings_tab() {
-         $options = get_option('sga_report_options', [
-            'recipient_email' => get_option('admin_email'), 'enable_weekly' => 0, 'enable_monthly' => 0,
-        ]);
+         $options = get_option('sga_report_options', []);
         ?>
         <h2>Reportes Automáticos</h2>
-        <p>Configura los reportes programados que se enviarán al correo especificado.</p>
         <table class="form-table">
             <tr valign="top">
                 <th scope="row"><label for="recipient_email">Correo Receptor</label></th>
                 <td>
                     <input type="email" id="recipient_email" name="sga_report_options[recipient_email]" value="<?php echo esc_attr($options['recipient_email']); ?>" class="regular-text" />
-                    <p class="description">El correo donde se recibirán todos los reportes automáticos.</p>
                 </td>
             </tr>
             <tr valign="top">
                 <th scope="row">Reporte Semanal</th>
                 <td>
-                    <label for="enable_weekly"><input type="checkbox" id="enable_weekly" name="sga_report_options[enable_weekly]" value="1" <?php checked(1, $options['enable_weekly'], true); ?> /> Activar reporte semanal de matriculados y pendientes.</label>
-                    <p class="description">Se enviará cada lunes a las 2:00 AM.</p>
+                    <label for="enable_weekly"><input type="checkbox" id="enable_weekly" name="sga_report_options[enable_weekly]" value="1" <?php checked(1, $options['enable_weekly'], true); ?> /> Activar reporte semanal.</label>
                 </td>
             </tr>
             <tr valign="top">
                 <th scope="row">Reporte Mensual</th>
                 <td>
-                    <label for="enable_monthly"><input type="checkbox" id="enable_monthly" name="sga_report_options[enable_monthly]" value="1" <?php checked(1, $options['enable_monthly'], true); ?> /> Activar reporte mensual completo.</label>
-                    <p class="description">Se enviará el primer día de cada mes a las 2:00 AM.</p>
+                    <label for="enable_monthly"><input type="checkbox" id="enable_monthly" name="sga_report_options[enable_monthly]" value="1" <?php checked(1, $options['enable_monthly'], true); ?> /> Activar reporte mensual.</label>
                 </td>
             </tr>
         </table>
         <?php
     }
-    
-    /**
-     * Renderiza la pestaña de debug de la API.
-     */
     private function render_debug_settings_tab() {
         ?>
         <h2>Herramientas de Debug para la Integración</h2>
-        <p>Utiliza estas herramientas para verificar la conexión con tu sistema interno y ver los registros de comunicación.</p>
-
         <div id="sga-debug-wrapper">
             <div id="sga-debug-tools">
                 <h3>Simulador de Webhook Entrante</h3>
-                <p>Simula una petición de tu sistema interno al SGA para marcar una inscripción como pagada y matricular al estudiante.</p>
                 <table class="form-table">
-                    <tr valign="top">
-                        <th scope="row"><label for="sga-sim-cedula">Cédula del Estudiante</label></th>
-                        <td><input type="text" id="sga-sim-cedula" class="regular-text" placeholder="Ej: 0010020034" /></td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row"><label for="sga-sim-curso">Nombre del Curso</label></th>
-                        <td><input type="text" id="sga-sim-curso" class="regular-text" placeholder="Ej: Diseño Gráfico Avanzado" /></td>
-                    </tr>
-                    <tr valign="top">
-                         <th scope="row">Acción</th>
-                        <td>
-                            <button type="button" id="sga-test-webhook-btn" class="button button-primary">Simular Recepción de Pago</button>
-                            <span class="spinner" style="float: none; vertical-align: middle;"></span>
-                        </td>
-                    </tr>
+                    <tr><th><label for="sga-sim-cedula">Cédula</label></th><td><input type="text" id="sga-sim-cedula" /></td></tr>
+                    <tr><th><label for="sga-sim-curso">Curso</label></th><td><input type="text" id="sga-sim-curso" /></td></tr>
+                    <tr><th>Acción</th><td><button type="button" id="sga-test-webhook-btn">Simular</button></td></tr>
                 </table>
-                <hr>
                 <h3>Prueba de Conexión Saliente</h3>
-                <p>Verifica que el SGA puede comunicarse con las URLs de tu sistema interno.</p>
-                 <table class="form-table">
-                     <tr valign="top">
-                        <th scope="row">Probar Conexión</th>
-                        <td>
-                            <button type="button" id="sga-test-connection-btn" class="button button-secondary">Iniciar Prueba de Conexión</button>
-                            <span class="spinner" style="float: none; vertical-align: middle;"></span>
-                        </td>
-                    </tr>
+                 <table>
+                     <tr><th>Probar</th><td><button type="button" id="sga-test-connection-btn">Iniciar Prueba</button></td></tr>
                  </table>
-                 <div id="sga-test-results" style="margin-top: 15px; padding: 12px; border: 1px solid #dcdcde; background: #f6f7f7; display: none; border-radius: 4px;"></div>
+                 <div id="sga-test-results"></div>
             </div>
-
             <div id="sga-debug-log">
                  <h3>Registro de la API</h3>
-                <textarea readonly style="width: 100%; height: 500px; background: #282c34; color: #abb2bf; font-family: monospace; font-size: 12px; white-space: pre; border-radius: 4px; padding: 10px;"><?php
-                    $log_query = new WP_Query([
-                        'post_type' => 'gestion_log',
-                        'posts_per_page' => 50,
-                        'orderby' => 'date',
-                        'order' => 'DESC',
-                        'meta_query' => [
-                            [
-                                'key' => '_is_api_log',
-                                'value' => '1',
-                                'compare' => '=',
-                            ],
-                        ],
-                    ]);
-                    if ($log_query->have_posts()) {
-                        while($log_query->have_posts()) {
-                            $log_query->the_post();
-                            echo '[' . get_the_date('Y-m-d H:i:s') . '] ' . esc_html(get_the_title()) . "\n";
-                            echo esc_html(get_the_content()) . "\n\n";
-                        }
-                        wp_reset_postdata();
-                    } else {
-                        echo 'No hay registros de la API todavía.';
-                    }
+                <textarea readonly><?php
+                    $log_query = new WP_Query(['post_type' => 'gestion_log', 'posts_per_page' => 50, 'orderby' => 'date', 'order' => 'DESC', 'meta_query' => [['key' => '_is_api_log', 'value' => '1']]]);
+                    if ($log_query->have_posts()) { while($log_query->have_posts()) { $log_query->the_post(); echo '[' . get_the_date('Y-m-d H:i:s') . '] ' . esc_html(get_the_title()) . "\n" . esc_html(get_the_content()) . "\n\n"; } wp_reset_postdata(); }
+                    else { echo 'No hay registros de la API.'; }
                 ?></textarea>
-                <p class="description">Muestra las últimas 50 entradas del registro relacionadas con la API. <a href="<?php echo admin_url('edit.php?post_type=gestion_log'); ?>">Ver todos los registros</a>.</p>
             </div>
         </div>
-        <style>
-            #sga-debug-wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-            #sga-debug-tools, #sga-debug-log { background: #fff; padding: 20px; border: 1px solid #dcdcde; border-radius: 4px; }
-            @media (max-width: 960px) { #sga-debug-wrapper { grid-template-columns: 1fr; } }
-        </style>
-
         <script>
         jQuery(document).ready(function($) {
             // Test Conexión Saliente
@@ -506,245 +575,5 @@ class SGA_Admin {
         </script>
         <?php
     }
-
-    /**
-     * Renderiza la página nativa de WP para aprobar inscripciones.
-     */
-    public function render_admin_approval_page() {
-        $search_term = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
-        $course_filter = isset($_GET['curso_filtro']) ? sanitize_text_field($_GET['curso_filtro']) : '';
-        $inscripciones_pendientes = [];
-        $cursos_disponibles_en_pendientes = [];
-        $estudiantes_query = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
-
-        $integration_options = get_option('sga_integration_options', []);
-        $matriculacion_desactivada = !empty($integration_options['disable_auto_enroll']) && $integration_options['disable_auto_enroll'] == 1;
-
-        if ($estudiantes_query && function_exists('get_field')) {
-            foreach ($estudiantes_query as $estudiante) {
-                $cursos = get_field('cursos_inscritos', $estudiante->ID);
-                if ($cursos) {
-                    foreach ($cursos as $index => $curso) {
-                        if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
-                            if (!isset($cursos_disponibles_en_pendientes[$curso['nombre_curso']])) {
-                                $cursos_disponibles_en_pendientes[$curso['nombre_curso']] = $curso['nombre_curso'];
-                            }
-                            $match_curso = empty($course_filter) || $curso['nombre_curso'] === $course_filter;
-                            $cedula = get_field('cedula', $estudiante->ID);
-                            $email = get_field('email', $estudiante->ID);
-                            $texto_busqueda_fila = $estudiante->post_title . ' ' . $cedula . ' ' . $email;
-                            $match_busqueda = empty($search_term) || stripos($texto_busqueda_fila, $search_term) !== false;
-                            if ($match_curso && $match_busqueda) {
-                                $inscripciones_pendientes[] = ['estudiante' => $estudiante, 'curso' => $curso, 'row_index' => $index];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ksort($cursos_disponibles_en_pendientes);
-        ?>
-        <div class="wrap">
-            <h1 class="wp-heading-inline">
-                <?php echo $matriculacion_desactivada ? 'Seguimiento de Inscripciones (Llamadas)' : 'Aprobar Inscripciones Pendientes'; ?>
-            </h1>
-            <?php
-            if (isset($_GET['approved'])) {
-                $count = intval($_GET['approved']);
-                $message = sprintf(_n('%s estudiante aprobado exitosamente.', '%s estudiantes aprobados exitosamente.', $count, 'sga-plugin'), number_format_i18n($count));
-                echo '<div class="notice notice-success is-dismissible"><p>' . $message . '</p></div>';
-            }
-            ?>
-            <form method="get">
-                <input type="hidden" name="page" value="sga_dashboard">
-                <p class="search-box">
-                    <label class="screen-reader-text" for="post-search-input">Buscar Inscripción:</label>
-                    <input type="search" id="post-search-input" name="s" value="<?php echo esc_attr($search_term); ?>">
-                    <input type="submit" id="search-submit" class="button" value="Buscar Inscripción">
-                </p>
-                <div class="tablenav top">
-                    <div class="alignleft actions">
-                        <label for="filter-by-course" class="screen-reader-text">Filtrar por curso</label>
-                        <select name="curso_filtro" id="filter-by-course">
-                            <option value="">Todos los cursos</option>
-                            <?php foreach ($cursos_disponibles_en_pendientes as $nombre_curso) : ?>
-                                <option value="<?php echo esc_attr($nombre_curso); ?>" <?php selected($course_filter, $nombre_curso); ?>>
-                                    <?php echo esc_html($nombre_curso); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <input type="submit" name="filter_action" id="post-query-submit" class="button" value="Filtrar">
-                    </div>
-                    <br class="clear">
-                </div>
-            </form>
-
-            <?php 
-            $form_tag_open = $matriculacion_desactivada ? '<div>' : '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-            $form_tag_close = $matriculacion_desactivada ? '</div>' : '</form>';
-            echo $form_tag_open;
-            ?>
-            
-                <?php if (!$matriculacion_desactivada): ?>
-                <input type="hidden" name="action" value="sga_approve_bulk">
-                <?php wp_nonce_field('sga_approve_bulk_nonce', '_wpnonce_bulk_approve'); ?>
-                <div class="tablenav top">
-                    <div class="alignleft actions bulkactions">
-                        <label for="bulk-action-selector-top" class="screen-reader-text">Seleccionar acción en lote</label>
-                        <select name="bulk_action" id="bulk-action-selector-top">
-                            <option value="-1">Acciones en lote</option>
-                            <option value="aprobar_lote">Aprobar</option>
-                        </select>
-                        <input type="submit" id="doaction" class="button action" value="Aplicar">
-                    </div>
-                    <br class="clear">
-                </div>
-                <?php endif; ?>
-                <table class="wp-list-table widefat fixed striped">
-                    <thead>
-                        <tr>
-                            <?php if (!$matriculacion_desactivada): ?>
-                            <td id="cb" class="manage-column column-cb check-column"><input id="cb-select-all-1" type="checkbox"></td>
-                            <?php endif; ?>
-                            <th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                            <?php if ($matriculacion_desactivada): ?>
-                                <th>Estado de Llamada</th>
-                            <?php else: ?>
-                                <th>Comunicación</th>
-                                <th>Acción</th>
-                            <?php endif; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (!empty($inscripciones_pendientes)) : ?>
-                            <?php
-                            foreach ($inscripciones_pendientes as $data) :
-                                $estudiante = $data['estudiante'];
-                                $curso = $data['curso'];
-                                $index = $data['row_index'];
-                                $nonce = wp_create_nonce('sga_approve_nonce_' . $estudiante->ID . '_' . $index);
-                                $link = admin_url('admin-post.php?action=sga_approve_single&post_id=' . $estudiante->ID . '&row_index=' . $index . '&_wpnonce=' . $nonce);
-                                
-                                if ($matriculacion_desactivada) {
-                                    $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
-                                    if (!is_array($call_statuses)) $call_statuses = [];
-                                    $current_call_status = $call_statuses[$index] ?? 'pendiente';
-                                } else {
-                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
-                                    if (!is_array($call_log)) $call_log = [];
-                                    $fue_llamado = isset($call_log[$index]);
-                                }
-                                ?>
-                                <tr>
-                                    <?php if (!$matriculacion_desactivada): ?>
-                                    <th scope="row" class="check-column"><input id="cb-select-<?php echo esc_attr($estudiante->ID . '-' . $index); ?>" type="checkbox" name="inscripciones_a_aprobar[]" value="<?php echo esc_attr($estudiante->ID . ':' . $index); ?>"></th>
-                                    <?php endif; ?>
-                                    <td><?php echo esc_html($estudiante->post_title); ?></td>
-                                    <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
-                                    <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
-                                    <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
-                                    <td><?php echo esc_html($curso['nombre_curso']); ?></td>
-                                    <td><?php echo esc_html($curso['horario']); ?></td>
-                                    <td><span style="color: #f59e0b; font-weight: bold;">Inscrito</span></td>
-                                    <td>
-                                        <?php if ($matriculacion_desactivada): ?>
-                                            <div class="sga-call-status-wrapper">
-                                                <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
-                                                    <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
-                                                    <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
-                                                    <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
-                                                    <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
-                                                    <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
-                                                </select>
-                                                <span class="spinner"></span>
-                                            </div>
-                                        <?php else: ?>
-                                            <?php if (!$fue_llamado): ?>
-                                            <a href="#" class="button button-secondary sga-marcar-llamado" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar Llamado</a>
-                                            <?php else:
-                                                $call_info = $call_log[$index];
-                                                echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
-                                            endif; ?>
-                                        <?php endif; ?>
-                                    </td>
-                                    <?php if (!$matriculacion_desactivada): ?>
-                                    <td>
-                                        <a href="<?php echo esc_url($link); ?>" class="button button-primary"><?php echo $matriculacion_desactivada ? 'Matricular Manualmente' : 'Aprobar'; ?></a>
-                                    </td>
-                                    <?php endif; ?>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else : ?>
-                            <tr><td colspan="10">No se encontraron inscripciones pendientes con los filtros aplicados.</td></tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            <?php echo $form_tag_close; ?>
-        </div>
-        <style>
-            .sga-call-status-wrapper { display: flex; align-items: center; gap: 5px; }
-            .sga-call-status-wrapper .spinner { float: none; vertical-align: middle; }
-        </style>
-        <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            $('.wp-list-table').on('click', '.sga-marcar-llamado', function(e) {
-                e.preventDefault();
-                var btn = $(this);
-                var post_id = btn.data('postid');
-                var row_index = btn.data('rowindex');
-                var nonce = btn.data('nonce');
-                var cell = btn.parent();
-
-                btn.text('Marcando...');
-
-                $.post(ajaxurl, {
-                    action: 'sga_marcar_llamado',
-                    _ajax_nonce: nonce,
-                    post_id: post_id,
-                    row_index: row_index
-                }).done(function(response) {
-                    if (response.success) {
-                        cell.html(response.data.html);
-                    } else {
-                        alert('Error: ' + response.data.message);
-                        btn.text('Marcar Llamado');
-                    }
-                }).fail(function() {
-                    alert('Error de conexión.');
-                    btn.text('Marcar Llamado');
-                });
-            });
-
-            $('.wp-list-table').on('change', '.sga-call-status-select', function(e) {
-                var select = $(this);
-                var post_id = select.data('postid');
-                var row_index = select.data('rowindex');
-                var nonce = select.data('nonce');
-                var status = select.val();
-                var spinner = select.next('.spinner');
-
-                select.prop('disabled', true);
-                spinner.addClass('is-active');
-
-                $.post(ajaxurl, {
-                    action: 'sga_update_call_status',
-                    _ajax_nonce: nonce,
-                    post_id: post_id,
-                    row_index: row_index,
-                    status: status
-                }).done(function(response) {
-                    if (!response.success) {
-                        alert('Error: ' + response.data.message);
-                    }
-                }).fail(function() {
-                    alert('Error de conexión.');
-                }).always(function() {
-                    select.prop('disabled', false);
-                    spinner.removeClass('is-active');
-                });
-            });
-        });
-        </script>
-        <?php
-    }
 }
+

@@ -27,11 +27,91 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
         add_action('wp_ajax_sga_get_panel_view_html', array($this, 'ajax_get_panel_view_html'));
         add_action('wp_ajax_sga_check_pending_inscriptions', array($this, 'ajax_check_pending_inscriptions'));
+        add_action('wp_ajax_sga_distribute_inscriptions', array($this, 'ajax_distribute_pending_inscriptions'));
 
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
     }
+
+    /**
+     * AJAX: Reparte las inscripciones pendientes no asignadas entre los agentes seleccionados.
+     */
+    public function ajax_distribute_pending_inscriptions() {
+        if (!check_ajax_referer('sga_distribute_nonce', 'security', false)) {
+            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        }
+        if (!current_user_can('manage_options') && !current_user_can('gestor_academico')) {
+            wp_send_json_error(['message' => 'No tienes permisos para realizar esta acción.'], 403);
+        }
+
+        $agent_ids = isset($_POST['agent_ids']) ? array_map('intval', $_POST['agent_ids']) : [];
+        if (empty($agent_ids)) {
+            wp_send_json_error(['message' => 'No se seleccionaron agentes.']);
+        }
+
+        // 1. Recolectar todas las inscripciones pendientes sin asignar, agrupadas por curso.
+        $unassigned_by_course = [];
+        $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
+
+        foreach ($estudiantes as $estudiante) {
+            $cursos = get_field('cursos_inscritos', $estudiante->ID);
+            $assignments = get_post_meta($estudiante->ID, '_sga_agent_assignments', true);
+            if (!is_array($assignments)) $assignments = [];
+
+            if ($cursos) {
+                foreach ($cursos as $index => $curso) {
+                    if (isset($curso['estado']) && $curso['estado'] === 'Inscrito' && !isset($assignments[$index])) {
+                        $course_name = $curso['nombre_curso'];
+                        if (!isset($unassigned_by_course[$course_name])) {
+                            $unassigned_by_course[$course_name] = [];
+                        }
+                        $unassigned_by_course[$course_name][] = [
+                            'student_id' => $estudiante->ID,
+                            'row_index'  => $index,
+                        ];
+                    }
+                }
+            }
+        }
+
+        if (empty($unassigned_by_course)) {
+            wp_send_json_success(['message' => 'No hay inscripciones pendientes sin asignar para repartir.']);
+        }
+
+        // 2. Repartir las inscripciones.
+        $agent_count = count($agent_ids);
+        $assignments_log = [];
+        $current_agent_index = 0;
+        
+        // Ordenar los cursos para un reparto consistente.
+        ksort($unassigned_by_course);
+
+        foreach ($unassigned_by_course as $course_name => $inscriptions) {
+            foreach ($inscriptions as $inscription) {
+                $agent_id_to_assign = $agent_ids[$current_agent_index];
+                SGA_Utils::_assign_inscription_to_agent($inscription['student_id'], $inscription['row_index'], $agent_id_to_assign);
+
+                // Para el log
+                if (!isset($assignments_log[$agent_id_to_assign])) $assignments_log[$agent_id_to_assign] = 0;
+                $assignments_log[$agent_id_to_assign]++;
+
+                // Avanzar al siguiente agente en la rotación.
+                $current_agent_index = ($current_agent_index + 1) % $agent_count;
+            }
+        }
+
+        // 3. Registrar la actividad.
+        $log_details = "Se repartieron las inscripciones pendientes entre " . count($agent_ids) . " agentes. Resumen:\n";
+        foreach ($assignments_log as $agent_id => $count) {
+            $agent_info = get_userdata($agent_id);
+            $log_details .= "- " . $agent_info->display_name . ": " . $count . " inscripciones.\n";
+        }
+        SGA_Utils::_log_activity('Inscripciones Repartidas', $log_details);
+
+        wp_send_json_success(['message' => 'Inscripciones repartidas exitosamente.']);
+    }
+
 
     /**
      * AJAX: Verifica el número de inscripciones pendientes para la notificación en tiempo real.
@@ -551,4 +631,3 @@ class SGA_Ajax {
         }
     }
 }
-

@@ -16,10 +16,31 @@ class SGA_Shortcodes {
     }
 
     /**
+     * Helper para verificar si el usuario actual tiene uno de los roles especificados.
+     * @param array $roles_to_check Array de slugs de roles a verificar.
+     * @return bool
+     */
+    private function sga_user_has_role($roles_to_check) {
+        $user = wp_get_current_user();
+        if (!$user->ID) return false;
+        $user_roles = (array) $user->roles;
+        foreach ((array) $roles_to_check as $role) {
+            if (in_array($role, $user_roles)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Renderiza el shortcode del panel de gestión principal.
      * Carga las diferentes vistas (paneles) desde la clase.
      */
     public function render_panel() {
+        if (!is_user_logged_in() || !$this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'gestor_de_cursos'])) {
+            return '<div class="notice notice-error" style="margin: 20px;"><p>No tienes los permisos necesarios para acceder a este panel. Por favor, contacta a un administrador.</p></div>';
+        }
+
         ob_start();
         $this->render_panel_styles();
         ?>
@@ -48,6 +69,21 @@ class SGA_Shortcodes {
                 </div>
             </div>
         </div>
+        
+        <div id="ga-modal-repartir-agentes" class="ga-modal" style="display:none;">
+            <div class="ga-modal-content">
+                <h4>Repartir Inscripciones</h4>
+                <p>Selecciona los agentes entre los cuales quieres repartir las inscripciones pendientes no asignadas.</p>
+                <div id="sga-distribute-agent-list" style="text-align: left; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 20px;">
+                    <!-- La lista de agentes se cargará aquí vía JS -->
+                </div>
+                <div class="ga-modal-actions">
+                    <button id="ga-modal-repartir-cancelar" class="button button-secondary">Cancelar</button>
+                    <button id="ga-modal-repartir-confirmar" class="button button-primary">Confirmar Reparto</button>
+                </div>
+            </div>
+        </div>
+
 
         <div id="gestion-academica-app-container">
             <div class="gestion-academica-wrapper">
@@ -153,21 +189,28 @@ class SGA_Shortcodes {
         </div>
 
         <div class="panel-grid main-menu">
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
             <a href="#" data-view="matriculacion" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4z"/><path d="M20.6 20.4c-.4-3.3-3.8-5.9-8.6-5.9s-8.2 2.6-8.6 5.9"/><path d="M18 18.2c.4-.2.9-.4 1.3-.7"/><path d="M22 13.8c0-.6-.1-1.2-.3-1.8"/><path d="M11.3 2.2c-.4.2-.8.4-1.2.7"/><path d="M2 13.8c0 .6.1 1.2.3 1.8"/><path d="M4.7 17.5c-.4.3-.8.5-1.3.7"/><path d="M12.7 21.8c.4-.2.8-.4 1.2-.7"/></svg></div>
                 <h2>Matriculación</h2>
                 <p>Aprobar y gestionar matrículas</p>
             </a>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
             <a href="#" data-view="estudiantes" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <h2>Estudiantes</h2>
                 <p>Ver y editar perfiles</p>
             </a>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente'])) : ?>
             <a href="#" data-view="cursos" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
                 <h2>Cursos</h2>
                 <p>Administrar cursos y horarios</p>
             </a>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
             <?php
             $options = get_option('sga_payment_options');
             if (isset($options['enable_online_payments']) && $options['enable_online_payments'] == 1) :
@@ -178,16 +221,21 @@ class SGA_Shortcodes {
                 <p>Consultar historial de pagos</p>
             </a>
             <?php endif; ?>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos'])) : ?>
             <a href="#" data-view="comunicacion" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
                 <h2>Comunicación</h2>
                 <p>Enviar correos masivos</p>
             </a>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente'])) : ?>
             <a href="#" data-view="reportes" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/></svg></div>
                 <h2>Reportes</h2>
                 <p>Visualizar y generar informes</p>
             </a>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -197,26 +245,40 @@ class SGA_Shortcodes {
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Sistema de Matriculación</h1>
         <div class="panel-grid">
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : // Botón de Aprobar ?>
             <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></div>
                 <h2>Aprobar Inscripciones</h2>
                 <p>Validar y matricular nuevos estudiantes</p>
             </a>
+            <?php else: // Botón de Seguimiento para Agente ?>
+            <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link">
+                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></div>
+                <h2>Seguimiento de Inscripciones</h2>
+                <p>Contactar a estudiantes inscritos</p>
+            </a>
+            <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
             <a href="#" data-view="lista_matriculados" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
                 <h2>Lista de Matriculados</h2>
                 <p>Consultar y exportar estudiantes activos</p>
             </a>
+            <?php endif; ?>
+             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
             <a href="#" data-view="registro_llamadas" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path><path d="M14.05 2a9 9 0 0 1 8 7.94"></path><path d="M14.05 6A5 5 0 0 1 18 10"></path></svg></div>
                 <h2>Registro de Llamadas</h2>
                 <p>Consultar historial de llamadas</p>
             </a>
+             <?php endif; ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
             <a href="<?php echo esc_url(site_url('/cursos/')); ?>" target="_blank" class="panel-card">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
                 <h2>Nueva Inscripción</h2>
                 <p>Inscribir un estudiante manualmente</p>
             </a>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -225,16 +287,19 @@ class SGA_Shortcodes {
         $estudiantes_inscritos = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         
-        $integration_options = get_option('sga_integration_options', []);
-        $matriculacion_desactivada = !empty($integration_options['disable_auto_enroll']) && $integration_options['disable_auto_enroll'] == 1;
+        $can_approve = $this->sga_user_has_role(['administrator']);
+        $agents = SGA_Utils::_get_sga_agents();
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">
-            <?php echo $matriculacion_desactivada ? 'Seguimiento de Inscripciones (Llamadas)' : 'Aprobar Inscripciones Pendientes'; ?>
+            <?php echo $can_approve ? 'Aprobar Inscripciones Pendientes' : 'Seguimiento de Inscripciones (Llamadas)'; ?>
         </h1>
 
         <div class="filtros-tabla">
-            <?php if (!$matriculacion_desactivada): ?>
+            <?php if ($can_approve): ?>
+            <div class="bulk-actions-wrapper">
+                <button id="sga-distribute-btn" class="button button-primary">Repartir Inscripciones</button>
+            </div>
             <div class="bulk-actions-wrapper">
                 <select name="bulk-action" id="bulk-action-select">
                     <option value="-1">Acciones en lote</option>
@@ -250,7 +315,6 @@ class SGA_Shortcodes {
                     <option value="<?php echo esc_attr($curso_filtro->post_title); ?>"><?php echo esc_html($curso_filtro->post_title); ?></option>
                 <?php endforeach; ?>
             </select>
-            <?php if ($matriculacion_desactivada): ?>
             <select id="filtro-estado-llamada">
                 <option value="">Todos los Estados de Llamada</option>
                 <option value="pendiente">Pendiente</option>
@@ -259,89 +323,114 @@ class SGA_Shortcodes {
                 <option value="numero_incorrecto">Número Incorrecto</option>
                 <option value="rechazado">Rechazado</option>
             </select>
-            <?php endif; ?>
+             <select id="filtro-agente-asignado">
+                <option value="">Todos los Agentes</option>
+                <option value="unassigned">Sin Asignar</option>
+                <?php foreach ($agents as $agent) : ?>
+                    <option value="<?php echo esc_attr($agent->ID); ?>"><?php echo esc_html($agent->display_name); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])): ?>
             <a href="<?php echo esc_url(admin_url('admin.php?page=sga_dashboard')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
+            <?php endif; ?>
         </div>
 
         <div class="tabla-wrapper">
             <table class="wp-list-table widefat striped" id="tabla-pendientes">
                 <thead>
                     <tr>
-                        <?php if (!$matriculacion_desactivada): ?>
+                        <?php if ($can_approve): ?>
                         <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes"></th>
                         <?php endif; ?>
-                        <th>Nombre</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                        <?php if ($matriculacion_desactivada): ?>
-                            <th>Estado de Llamada</th>
-                        <?php endif; ?>
+                        <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
+                        <th>Estado de Llamada</th>
                         <th>Acción</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php
                     $hay_pendientes = false;
+                    $agent_colors = [];
+                    $color_palette = ['#e0f2fe', '#e0e7ff', '#dcfce7', '#fef9c3', '#fee2e2', '#f3e8ff', '#dbeafe'];
+                    $color_index = 0;
+
                     if ($estudiantes_inscritos && function_exists('get_field')) {
                         foreach ($estudiantes_inscritos as $estudiante) {
                             $cursos = get_field('cursos_inscritos', $estudiante->ID);
+                            $assignments = get_post_meta($estudiante->ID, '_sga_agent_assignments', true);
+                            if (!is_array($assignments)) $assignments = [];
+
                             if ($cursos) {
                                 foreach ($cursos as $index => $curso) {
                                     if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
                                         $hay_pendientes = true;
-                                        $current_call_status = 'pendiente';
-                                        if ($matriculacion_desactivada) {
-                                            $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
-                                            if (!is_array($call_statuses)) $call_statuses = [];
-                                            $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                                        
+                                        $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
+                                        if (!is_array($call_statuses)) $call_statuses = [];
+                                        $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                                        
+                                        $agent_id = $assignments[$index] ?? 'unassigned';
+                                        $agent_name = 'Sin Asignar';
+                                        $row_style = '';
+
+                                        if (is_numeric($agent_id)) {
+                                            $agent_info = get_userdata($agent_id);
+                                            if ($agent_info) {
+                                                $agent_name = $agent_info->display_name;
+                                                if (!isset($agent_colors[$agent_id])) {
+                                                    $agent_colors[$agent_id] = $color_palette[$color_index % count($color_palette)];
+                                                    $color_index++;
+                                                }
+                                                $row_style = 'style="background-color:' . $agent_colors[$agent_id] . ';"';
+                                            }
                                         }
                                         ?>
-                                        <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>">
-                                            <?php if (!$matriculacion_desactivada): ?>
+                                        <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>" data-agent-id="<?php echo esc_attr($agent_id); ?>" <?php echo $row_style; ?>>
+                                            <?php if ($can_approve): ?>
                                             <td class="ga-check-column"><input type="checkbox" class="bulk-checkbox" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>"></td>
                                             <?php endif; ?>
                                             <td><?php echo esc_html($estudiante->post_title); ?></td>
+                                            <td><strong><?php echo esc_html($agent_name); ?></strong></td>
                                             <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
                                             <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
                                             <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
                                             <td><?php echo esc_html($curso['nombre_curso']); ?></td>
                                             <td><?php echo esc_html($curso['horario']); ?></td>
                                             <td><span class="estado-inscrito">Inscrito</span></td>
-                                            <?php if ($matriculacion_desactivada): ?>
-                                                <td>
-                                                    <div class="sga-call-status-wrapper">
-                                                        <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
-                                                            <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
-                                                            <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
-                                                            <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
-                                                            <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
-                                                            <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
-                                                        </select>
-                                                        <span class="spinner"></span>
-                                                    </div>
-                                                </td>
-                                            <?php endif; ?>
                                             <td>
-                                                <?php if ($matriculacion_desactivada): ?>
-                                                    <?php
-                                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
-                                                    if (!is_array($call_log)) $call_log = [];
-                                                    $call_info = $call_log[$index] ?? null;
+                                                <div class="sga-call-status-wrapper">
+                                                    <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
+                                                        <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
+                                                        <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
+                                                        <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
+                                                        <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
+                                                        <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
+                                                    </select>
+                                                    <span class="spinner"></span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <?php
+                                                $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
+                                                if (!is_array($call_log)) $call_log = [];
+                                                $call_info = $call_log[$index] ?? null;
 
-                                                    if ($call_info) {
-                                                        echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
-                                                        if (!empty($call_info['comment'])) {
-                                                            echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
-                                                        }
-                                                    } else {
-                                                        ?>
-                                                        <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
-                                                        <?php
+                                                if ($call_info) {
+                                                    echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+                                                    if (!empty($call_info['comment'])) {
+                                                        echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
                                                     }
+                                                } else {
                                                     ?>
-                                                <?php else: ?>
+                                                    <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
+                                                    <?php
+                                                }
+
+                                                if ($can_approve) { ?>
                                                     <button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">
                                                         Aprobar
                                                     </button>
-                                                <?php endif; ?>
+                                                <?php } ?>
                                             </td>
                                         </tr>
                                         <?php
@@ -351,7 +440,7 @@ class SGA_Shortcodes {
                         }
                     }
                     if (!$hay_pendientes) {
-                        $colspan = 9;
+                        $colspan = $can_approve ? 11 : 10;
                         echo '<tr class="no-results"><td colspan="' . $colspan . '">No hay estudiantes pendientes de aprobación.</td></tr>';
                     }
                     ?>
@@ -590,7 +679,6 @@ class SGA_Shortcodes {
     }
 
     public function render_view_lista_cursos() {
-        // Fetch courses with both 'publish' and 'private' statuses
         $cursos_activos = get_posts(array(
             'post_type' => 'curso',
             'posts_per_page' => -1,
@@ -598,7 +686,6 @@ class SGA_Shortcodes {
             'order' => 'ASC',
             'post_status' => array('publish', 'private')
         ));
-        // Fetch all categories (Escuelas)
         $escuelas = get_terms(array('taxonomy' => 'category', 'hide_empty' => false));
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
@@ -619,8 +706,10 @@ class SGA_Shortcodes {
                 <option value="publish">Público</option>
                 <option value="private">Privado</option>
             </select>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos'])) : ?>
             <a href="<?php echo esc_url(admin_url('post-new.php?post_type=curso')); ?>" target="_blank" class="button button-primary">Nuevo Curso</a>
             <a href="<?php echo esc_url(admin_url('edit.php?post_type=curso')); ?>" target="_blank" class="button button-secondary">Editar Cursos</a>
+            <?php endif; ?>
             <div class="view-switcher">
                 <button class="view-btn active" data-view="grid" title="Vista de Tarjetas">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -656,7 +745,9 @@ class SGA_Shortcodes {
                         </div>
                         <div class="curso-card-actions">
                             <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
+                            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos'])) : ?>
                             <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="curso-card-body">
@@ -787,7 +878,9 @@ class SGA_Shortcodes {
                             </td>
                             <td class="actions-cell">
                                 <a href="#" class="button button-secondary ver-matriculados-btn" data-curso-nombre="<?php echo esc_attr($curso->post_title); ?>">Matriculados</a>
+                                <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos'])) : ?>
                                 <a href="<?php echo get_edit_post_link($curso->ID); ?>" class="button" target="_blank">Editar</a>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -987,14 +1080,10 @@ class SGA_Shortcodes {
     }
 
     public function render_view_reportes() {
-        $options = get_option('sga_report_options', [
-            'recipient_email' => get_option('admin_email'),
-            'enable_weekly' => 0,
-            'enable_monthly' => 0,
-        ]);
+        $options = get_option('sga_report_options', []);
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
-        $agentes_query = new WP_User_Query([ 'role__in' => ['administrator', 'gestor_academico'], 'fields' => 'all_with_meta' ]);
-        $agentes = $agentes_query->get_results();
+        $agentes = SGA_Utils::_get_sga_agents();
+        $is_agent = $this->sga_user_has_role(['agente']);
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Central de Reportes</h1>
@@ -1010,20 +1099,26 @@ class SGA_Shortcodes {
                             <div class="sga-form-group">
                                 <label for="report_type">Tipo de Reporte</label>
                                 <select name="report_type" id="report_type">
-                                    <option value="matriculados">Estudiantes Matriculados</option>
-                                    <option value="pendientes">Inscripciones Pendientes</option>
-                                    <option value="cursos">Lista de Cursos Activos</option>
-                                    <option value="payment_history">Historial de Pagos</option>
-                                    <option value="historial_llamadas">Historial de Llamadas</option>
-                                    <option value="log">Registro de Actividad</option>
+                                    <?php if ($is_agent) : ?>
+                                        <option value="historial_llamadas">Historial de Llamadas</option>
+                                    <?php else : ?>
+                                        <option value="matriculados">Estudiantes Matriculados</option>
+                                        <option value="pendientes">Inscripciones Pendientes</option>
+                                        <option value="cursos">Lista de Cursos Activos</option>
+                                        <option value="payment_history">Historial de Pagos</option>
+                                        <option value="historial_llamadas">Historial de Llamadas</option>
+                                        <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
+                                        <option value="log">Registro de Actividad</option>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                 </select>
                             </div>
                              <div class="sga-form-group" id="report-agente-filter-container" style="display:none;">
                                 <label for="report_agente_filtro">Filtrar por Agente</label>
-                                <select name="agente_filtro" id="report_agente_filtro">
+                                <select name="agente_filtro" id="report_agente_filtro" <?php if ($is_agent) echo 'disabled'; ?>>
                                     <option value="">Todos los agentes</option>
                                     <?php foreach ($agentes as $agente) : ?>
-                                        <option value="<?php echo esc_attr($agente->ID); ?>"><?php echo esc_html($agente->display_name); ?></option>
+                                        <option value="<?php echo esc_attr($agente->ID); ?>" <?php selected(get_current_user_id(), $agente->ID, $is_agent); ?>><?php echo esc_html($agente->display_name); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -1046,7 +1141,9 @@ class SGA_Shortcodes {
                             </div>
                         </div>
                         <div class="report-actions">
+                            <?php if (!$is_agent) : ?>
                             <button type="submit" name="report_action" value="email" class="button button-secondary">Enviar por Correo</button>
+                            <?php endif; ?>
                             <button type="submit" name="report_action" value="download" class="button button-primary">Generar PDF</button>
                         </div>
                     </form>
@@ -1059,6 +1156,7 @@ class SGA_Shortcodes {
                 </div>
             </div>
             <div class="report-sidebar">
+                 <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
                 <div class="sga-card">
                     <h3>Reportes Programados</h3>
                     <form id="sga-scheduled-reports-form">
@@ -1078,11 +1176,14 @@ class SGA_Shortcodes {
                         <div id="scheduled-report-status" style="margin-top: 10px;"></div>
                     </form>
                 </div>
+                <?php endif; ?>
+                <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
                 <a href="#" data-view="log" class="panel-card panel-nav-link">
-                    <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
+                    <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M5 17v-2.5"/><path d="M5 12V2"/></svg></div>
                     <h2>Registro de Actividad</h2>
                     <p>Consultar el log del sistema</p>
                 </a>
+                <?php endif; ?>
             </div>
         </div>
         <?php
@@ -1165,7 +1266,7 @@ class SGA_Shortcodes {
             .wp-list-table { background: var(--sga-white); margin: 0; width: 100%; border-collapse: collapse; }
             .wp-list-table thead th { background-color: var(--sga-light); color: var(--sga-text); font-weight: 600; border: none; text-align: left; padding: 12px 15px; border-bottom: 2px solid var(--sga-gray); }
             .wp-list-table tbody tr { transition: background-color 0.2s; }
-            .wp-list-table tbody tr:hover { background-color: #f1f5f9; }
+            /* .wp-list-table tbody tr:hover { background-color: #f1f5f9; } */
             .wp-list-table td { padding: 12px 15px; vertical-align: middle; border-bottom: 1px solid var(--sga-gray); }
             .wp-list-table td.actions-cell { display: flex; gap: 8px; align-items: center; }
             .wp-list-table tbody tr:last-child td { border-bottom: none; }
@@ -1253,7 +1354,8 @@ class SGA_Shortcodes {
             .sga-dynamic-tags-info p { margin: 0 0 10px 0; font-weight: 600; color: var(--sga-text); }
             .sga-dynamic-tags-info ul { margin: 0; padding-left: 20px; }
             .sga-dynamic-tags-info code { background-color: var(--sga-gray); padding: 3px 6px; border-radius: 4px; font-family: monospace; color: var(--sga-primary); }
-            #sga-estudiantes-checkbox-list { height: 200px; overflow-y: auto; border: 1px solid var(--sga-gray); padding: 10px; border-radius: 8px; margin-top: 10px; background-color: var(--sga-white); }
+            #sga-estudiantes-checkbox-list, #sga-distribute-agent-list { height: 200px; overflow-y: auto; border: 1px solid var(--sga-gray); padding: 10px; border-radius: 8px; margin-top: 10px; background-color: var(--sga-white); }
+            #sga-distribute-agent-list label { display: block; }
             .sga-student-item label { display: block; padding: 5px; border-radius: 4px; transition: background-color 0.2s; cursor: pointer; }
             .sga-student-item label:hover { background-color: #f1f5f9; }
 
@@ -1340,6 +1442,11 @@ class SGA_Shortcodes {
     }
 
     public function render_panel_navigation_js() {
+        $agents = SGA_Utils::_get_sga_agents();
+        $agents_for_js = [];
+        foreach($agents as $agent) {
+            $agents_for_js[] = ['id' => $agent->ID, 'name' => $agent->display_name];
+        }
         ?>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
@@ -1349,6 +1456,7 @@ class SGA_Shortcodes {
                 var callData = {};
                 var inscriptionsChart;
                 var viewsToRefresh = {};
+                var sgaAgents = <?php echo json_encode($agents_for_js); ?>;
 
                 function setDynamicDateTime() {
                     if (!$("#dynamic-date").length) return;
@@ -1404,7 +1512,6 @@ class SGA_Shortcodes {
                             switchView();
                         });
                     } else {
-                        // No AJAX needed, give the loader time to show up
                         setTimeout(switchView, 200); 
                     }
                 });
@@ -1609,6 +1716,7 @@ class SGA_Shortcodes {
                 $("#ga-modal-cancelar, .ga-modal").on("click", function(e) {
                     if (e.target == this || $(this).is("#ga-modal-cancelar")) {
                         closeModal();
+                        $('#ga-modal-repartir-agentes').fadeOut(200);
                     }
                 });
 
@@ -1620,6 +1728,7 @@ class SGA_Shortcodes {
                     var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
                     var courseFilter = $('#filtro-curso-pendientes').val();
                     var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
+                    var agentFilter = $('#filtro-agente-asignado').val() || '';
                     var rowsFound = 0;
 
                     $('#tabla-pendientes tbody tr').each(function() {
@@ -1631,12 +1740,14 @@ class SGA_Shortcodes {
                         var rowText = row.text().toLowerCase();
                         var rowCourse = row.data('curso');
                         var rowCallStatus = row.data('call-status');
+                        var rowAgentId = String(row.data('agent-id'));
 
                         var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
                         var matchesCourse = (courseFilter === '' || rowCourse === courseFilter);
                         var matchesCallStatus = (callStatusFilter === '' || rowCallStatus === callStatusFilter);
+                        var matchesAgent = (agentFilter === '' || rowAgentId === agentFilter);
 
-                        if (matchesSearch && matchesCourse && matchesCallStatus) {
+                        if (matchesSearch && matchesCourse && matchesCallStatus && matchesAgent) {
                             row.show();
                             rowsFound++;
                         } else {
@@ -1724,7 +1835,6 @@ class SGA_Shortcodes {
                     }
                 }
 
-                // --- Course Filter Logic ---
                 function filterCourses() {
                     var searchTerm = $('#buscador-cursos').val().toLowerCase();
                     var escuelaFilter = $('#filtro-escuela-cursos').val();
@@ -1750,11 +1860,9 @@ class SGA_Shortcodes {
                     });
                 }
                 $("#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos").on("keyup change", filterCourses);
-
-                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada").on("keyup change", function() { filterPendientesTable(); });
+                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() { filterPendientesTable(); });
                 $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
                 $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
-                
                 $("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change", function() { filterLogTable(); });
 
                 $("#exportar-btn").on("click", function(e) {
@@ -1998,54 +2106,38 @@ class SGA_Shortcodes {
                     });
                 });
 
-                // Reports View Logic
                 $('#report_type').on('change', function() {
                     const reportType = $(this).val();
                     const cursoFilter = $('#report-curso-filter-container');
                     const agenteFilter = $('#report-agente-filter-container');
-
-                    // Ocultar todos los filtros específicos primero
                     cursoFilter.hide();
                     agenteFilter.hide();
-
-                    if (reportType === 'matriculados' || reportType === 'pendientes') {
+                    if (reportType === 'matriculados' || reportType === 'pendientes' || reportType === 'historial_llamadas') {
                         cursoFilter.slideDown();
-                    } else if (reportType === 'historial_llamadas') {
-                        cursoFilter.slideDown();
+                    }
+                    if (reportType === 'historial_llamadas') {
                         agenteFilter.slideDown();
                     }
-                });
+                }).trigger('change');
                 
                 $('.view-switcher').on('click', '.view-btn', function(e) {
                     e.preventDefault();
                     var $this = $(this);
-                    if ($this.hasClass('active')) {
-                        return;
-                    }
-
+                    if ($this.hasClass('active')) return;
                     var targetView = $this.data('view');
-                    
                     $('.view-btn').removeClass('active');
                     $this.addClass('active');
-
                     if (targetView === 'grid') {
-                        $('.cursos-list-view').fadeOut(200, function() {
-                            $('.cursos-grid').fadeIn(200);
-                        });
+                        $('.cursos-list-view').fadeOut(200, function() { $('.cursos-grid').fadeIn(200); });
                     } else {
-                        $('.cursos-grid').fadeOut(200, function() {
-                            $('.cursos-list-view').fadeIn(200);
-                        });
+                        $('.cursos-grid').fadeOut(200, function() { $('.cursos-list-view').fadeIn(200); });
                     }
                 });
 
                 function renderInscriptionsChart() {
-                    if (inscriptionsChart) {
-                        inscriptionsChart.destroy();
-                    }
+                    if (inscriptionsChart) { inscriptionsChart.destroy(); }
                     var ctx = document.getElementById('inscriptionsChart').getContext('2d');
                     var chartContainer = $('.chart-container');
-                    
                     chartContainer.html('<canvas id="inscriptionsChart"></canvas><div class="chart-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);"><span class="spinner is-active"></span></div>');
                     ctx = document.getElementById('inscriptionsChart').getContext('2d');
 
@@ -2055,52 +2147,83 @@ class SGA_Shortcodes {
                     }).done(function(response) {
                         chartContainer.find('.chart-loading').remove();
                         if(response.success) {
-                            const data = {
-                                labels: response.data.labels,
-                                datasets: [{
-                                    label: 'Inscripciones por Mes',
-                                    data: response.data.data,
-                                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                                    borderColor: 'rgba(79, 70, 229, 1)',
-                                    borderWidth: 2,
-                                    tension: 0.4,
-                                    fill: true
-                                }]
-                            };
                             inscriptionsChart = new Chart(ctx, {
                                 type: 'line',
-                                data: data,
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    scales: { 
-                                        y: { 
-                                            beginAtZero: true,
-                                            ticks: {
-                                                stepSize: 1 
-                                            }
-                                        } 
-                                    }
-                                }
+                                data: { labels: response.data.labels, datasets: [{ label: 'Inscripciones por Mes', data: response.data.data, backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: 'rgba(79, 70, 229, 1)', borderWidth: 2, tension: 0.4, fill: true }] },
+                                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
                             });
                         } else {
-                            chartContainer.html('<p style="text-align:center;color:var(--sga-red);">No se pudieron cargar los datos del gráfico.</p>');
+                            chartContainer.html('<p>No se pudieron cargar los datos.</p>');
                         }
                     }).fail(function() {
                         chartContainer.find('.chart-loading').remove();
-                        chartContainer.html('<p style="text-align:center;color:var(--sga-red);">Error al contactar al servidor para los datos del gráfico.</p>');
+                        chartContainer.html('<p>Error al contactar al servidor.</p>');
                     });
                 }
                 
-                // Call Log Accordion
                 $('#gestion-academica-app-container').on('click', '#sga-call-log-accordion .user-log-title button', function() {
                     var button = $(this);
                     var content = button.closest('.user-log-section').find('.user-log-content');
                     var isExpanded = button.attr('aria-expanded') === 'true';
-
                     button.attr('aria-expanded', !isExpanded);
                     content.slideToggle(200);
                 });
+
+                // --- Lógica de Reparto de Agentes ---
+                $('#panel-view-enviar_a_matriculacion').on('click', '#sga-distribute-btn', function() {
+                    var agentListHtml = '';
+                    if (sgaAgents.length > 0) {
+                        sgaAgents.forEach(function(agent) {
+                            agentListHtml += '<label><input type="checkbox" class="sga-distribute-agent" value="' + agent.id + '"> ' + agent.name + '</label><br>';
+                        });
+                    } else {
+                        agentListHtml = '<p>No hay agentes disponibles para asignar.</p>';
+                    }
+                    $('#sga-distribute-agent-list').html(agentListHtml);
+                    $('#ga-modal-repartir-agentes').fadeIn(200);
+                });
+
+                $('#ga-modal-repartir-confirmar').on('click', function() {
+                    var btn = $(this);
+                    var selectedAgents = [];
+                    $('.sga-distribute-agent:checked').each(function() {
+                        selectedAgents.push($(this).val());
+                    });
+
+                    if (selectedAgents.length === 0) {
+                        alert('Por favor, selecciona al menos un agente.');
+                        return;
+                    }
+
+                    btn.prop('disabled', true).text('Repartiendo...');
+                    $('#sga-panel-loader').fadeIn(150);
+
+                    $.post(ajaxurl, {
+                        action: 'sga_distribute_inscriptions',
+                        security: '<?php echo wp_create_nonce("sga_distribute_nonce"); ?>',
+                        agent_ids: selectedAgents
+                    }).done(function(response) {
+                        if (response.success) {
+                            alert(response.data.message);
+                            viewsToRefresh['enviar_a_matriculacion'] = true;
+                            // Forzar recarga de la vista actual
+                            $(".panel-nav-link[data-view='enviar_a_matriculacion']").first().trigger('click');
+                        } else {
+                            alert('Error: ' + response.data.message);
+                        }
+                    }).fail(function() {
+                        alert('Error de comunicación con el servidor.');
+                    }).always(function() {
+                        btn.prop('disabled', false).text('Confirmar Reparto');
+                        $('#ga-modal-repartir-agentes').fadeOut(200);
+                        $('#sga-panel-loader').fadeOut(150);
+                    });
+                });
+
+                 $('#ga-modal-repartir-cancelar').on('click', function() {
+                    $('#ga-modal-repartir-agentes').fadeOut(200);
+                });
+
             });
         </script>
         <?php
