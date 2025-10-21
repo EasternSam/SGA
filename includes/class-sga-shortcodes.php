@@ -127,22 +127,8 @@ class SGA_Shortcodes {
         $total_cursos_obj = wp_count_posts('curso');
         $total_estudiantes = isset($total_estudiantes_obj->publish) ? $total_estudiantes_obj->publish : 0;
         $total_cursos = isset($total_cursos_obj->publish) ? $total_cursos_obj->publish : 0;
-        $inscripciones_pendientes = 0;
-        if (function_exists('get_field')) {
-            $estudiantes = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1, 'fields' => 'ids'));
-            if($estudiantes){
-                foreach ($estudiantes as $estudiante_id) {
-                    $cursos = get_field('cursos_inscritos', $estudiante_id);
-                    if ($cursos) {
-                        foreach ($cursos as $curso) {
-                            if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
-                                $inscripciones_pendientes++;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        $inscripciones_pendientes = SGA_Utils::_get_pending_inscriptions_count();
+        $llamadas_pendientes = SGA_Utils::_get_pending_calls_count();
         $current_user = wp_get_current_user();
         ?>
         <div class="panel-header-info">
@@ -175,6 +161,15 @@ class SGA_Shortcodes {
                 <div class="stat-info">
                     <span class="stat-number"><?php echo $inscripciones_pendientes; ?></span>
                     <span class="stat-label">Inscripciones Pendientes</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon calls">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $llamadas_pendientes; ?></span>
+                    <span class="stat-label">Pendientes a Llamar</span>
                 </div>
             </div>
             <div class="stat-card">
@@ -1245,6 +1240,7 @@ class SGA_Shortcodes {
             .stat-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--sga-white); }
             .stat-icon.students { background: linear-gradient(135deg, var(--sga-blue), #60a5fa); }
             .stat-icon.pending { background: linear-gradient(135deg, var(--sga-yellow), #fbbf24); }
+            .stat-icon.calls { background: linear-gradient(135deg, var(--sga-pink), #f472b6); }
             .stat-icon.courses { background: linear-gradient(135deg, var(--sga-green), #34d399); }
             .stat-icon svg { width: 24px; height: 24px; }
             .stat-info .stat-number { font-size: 28px; font-weight: 700; color: var(--sga-text); display: block; line-height: 1; }

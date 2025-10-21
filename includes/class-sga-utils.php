@@ -616,4 +616,40 @@ class SGA_Utils {
         }
         return $count;
     }
+
+    /**
+     * Obtiene el número de inscripciones pendientes de llamar.
+     * @return int Cantidad de inscripciones pendientes de llamar.
+     */
+    public static function _get_pending_calls_count() {
+        $count = 0;
+        $estudiantes_ids = get_posts([
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+        ]);
+
+        if ($estudiantes_ids && function_exists('get_field')) {
+            foreach ($estudiantes_ids as $estudiante_id) {
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true);
+                if (!is_array($call_statuses)) {
+                    $call_statuses = [];
+                }
+
+                if ($cursos) {
+                    foreach ($cursos as $index => $curso) {
+                        if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
+                            $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                            if ($current_call_status === 'pendiente') {
+                                $count++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return $count;
+    }
 }
+

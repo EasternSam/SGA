@@ -70,7 +70,8 @@ class SGA_Reports {
 
     public function handle_manual_report_generation() {
         if (!isset($_POST['_wpnonce_manual_report']) || !wp_verify_nonce($_POST['_wpnonce_manual_report'], 'sga_manual_report_nonce')) wp_die('Error de seguridad.');
-        if (!current_user_can('manage_options')) wp_die('No tienes permisos para realizar esta acción.');
+        // FIX: Changed permission check from 'manage_options' to 'sga_access_reportes' to allow Agents to generate reports.
+        if (!current_user_can('sga_access_reportes')) wp_die('No tienes permisos para realizar esta acción.');
 
         $report_type = sanitize_key($_POST['report_type']);
         $report_action = sanitize_key($_POST['report_action']);
@@ -81,6 +82,12 @@ class SGA_Reports {
             'curso_filtro' => isset($_POST['curso_filtro']) ? sanitize_text_field($_POST['curso_filtro']) : '',
             'agente_filtro' => isset($_POST['agente_filtro']) ? sanitize_text_field($_POST['agente_filtro']) : ''
         ];
+
+        // FIX: If the current user is an Agent, force the filter to their ID.
+        $current_user = wp_get_current_user();
+        if (in_array('agente', (array) $current_user->roles)) {
+            $args['agente_filtro'] = $current_user->ID;
+        }
 
         $report_data = $this->_generate_report($report_type, $args);
         if (!$report_data) {
@@ -96,6 +103,10 @@ class SGA_Reports {
             SGA_Utils::_log_activity('Reporte Descargado', "Usuario " . wp_get_current_user()->user_login . " descargó: " . $report_data['title']);
             exit;
         } elseif ($report_action === 'email') {
+            // Non-admin roles shouldn't be able to email reports.
+            if (!current_user_can('manage_options')) {
+                 wp_die('No tienes permisos para enviar reportes por correo.');
+            }
             $sent = SGA_Utils::_send_report_email($report_data['pdf_data'], $report_data['title'], $report_data['filename']);
             add_settings_error('sga_reports', 'sga_report_sent', $sent ? 'El reporte ha sido enviado.' : 'Error al enviar el correo.', $sent ? 'success' : 'error');
         }
@@ -543,7 +554,7 @@ class SGA_Reports {
         ob_start();
         ?>
         <!DOCTYPE html>
-        <html lang="es" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <html lang="es" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
         <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Matriculados</x:Name><x:WorksheetOptions><x:PageSetup><x:Layout x:Orientation="Landscape"/><x:Header x:Margin="0.5"/><x:Footer x:Margin="0.5"/><x:PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/></x:PageSetup><x:FitToPage/><x:Print><x:ValidPrinterInfo/><x:PaperSizeIndex>9</x:PaperSizeIndex><x:HorizontalResolution>600</x:HorizontalResolution><x:VerticalResolution>600</x:VerticalResolution></x:Print><x:Zoom>100</x:Zoom><x:Selected/><x:ProtectContents>False</x:ProtectContents><x:ProtectObjects>False</x:ProtectObjects><x:ProtectScenarios>False</x:ProtectScenarios></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
         <style>body{font-family:Arial,sans-serif;font-size:10pt}.header{text-align:center;margin-bottom:20px}.top-banner{background-color:#002060;padding:10px}.header img{max-height:60px}.header h1{font-size:16pt;font-weight:700;margin-top:20px;margin-bottom:5px}.header .subtitle{font-size:9pt;color:#555}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:9pt}th,td{border:1px solid #999;padding:5px;text-align:left}thead th{background-color:#002060;color:#fff;font-weight:700}tbody tr:nth-child(2n){background-color:#ddebf7}</style></head>
         <body>
