@@ -126,6 +126,7 @@ class SGA_Utils {
                 .summary-table tr:last-child td { border-bottom: none; }
                 .button-table { margin-top: 30px; }
                 .button-link { display: inline-block; padding: 14px 28px; background-color: #0052cc; color: #ffffff !important; text-decoration: none; font-weight: bold; border-radius: 8px; font-size: 16px; }
+                .button-link:hover { text-decoration: none; }
                 .footer { padding: 30px; text-align: center; background-color: #f4f7f6; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; font-family: Arial, sans-serif; }
                 .footer p { margin: 0; font-size: 13px; color: #888888; }
                 .footer a { color: #141f53; text-decoration: none; font-weight: 600; }
@@ -227,6 +228,12 @@ class SGA_Utils {
     
     /**
      * Lógica central para aprobar un estudiante, generar matrícula y enviar correo de confirmación.
+     * @param int $post_id ID del post del estudiante.
+     * @param int $row_index Índice de la fila del curso en el repeater.
+     * @param string $cedula Cédula del estudiante.
+     * @param string $nombre Nombre del estudiante.
+     * @param bool $is_automatic_payment Indica si la aprobación es por pago automático/webhook.
+     * @param array $payment_details Detalles del pago (opcional).
      * @return array|false Datos del estudiante aprobado o false si falla.
      */
     public static function _aprobar_estudiante($post_id, $row_index, $cedula, $nombre, $is_automatic_payment = false, $payment_details = []) {
@@ -325,6 +332,9 @@ class SGA_Utils {
 
     /**
      * Obtiene una lista de estudiantes filtrada por término de búsqueda, curso y estado.
+     * @param string $search_term Término de búsqueda (nombre, cédula, matrícula).
+     * @param string $course_filter Nombre del curso para filtrar.
+     * @param string $status_filter Estado del curso ('Matriculado', 'Inscrito', etc. o vacío para todos).
      * @return array Lista de estudiantes que coinciden.
      */
     public static function _get_filtered_students($search_term = '', $course_filter = '', $status_filter = 'Matriculado') {
@@ -431,6 +441,7 @@ class SGA_Utils {
     
     /**
      * Genera el HTML para la vista de perfil de un estudiante.
+     * @param WP_Post $student_post El objeto post del estudiante.
      * @return string HTML para el perfil.
      */
     public static function _get_student_profile_html($student_post) {
@@ -445,6 +456,15 @@ class SGA_Utils {
         $telefono = get_field('telefono', $student_id);
         $direccion = get_field('direccion', $student_id);
         $cursos = get_field('cursos_inscritos', $student_id);
+        
+        // Determinar si el usuario actual tiene permisos para imprimir
+        $can_print = current_user_can('edit_estudiantes');
+
+        $print_url = add_query_arg([
+            'action' => 'sga_print_student_profile',
+            'student_id' => $student_id,
+            '_wpnonce' => wp_create_nonce('sga_print_profile_' . $student_id)
+        ], admin_url('admin-ajax.php'));
 
         ob_start();
         ?>
@@ -507,6 +527,13 @@ class SGA_Utils {
             </div>
         </div>
         <div class="sga-profile-actions">
+            <?php if ($can_print) { ?>
+            <!-- BOTÓN PARA IMPRIMIR EL EXPEDIENTE -->
+            <a href="<?php echo esc_url($print_url); ?>" class="button button-secondary" target="_blank" style="margin-right: auto;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                Imprimir Expediente
+            </a>
+            <?php } ?>
             <button id="sga-profile-save-btn" class="button button-primary" data-student-id="<?php echo $student_id; ?>">Guardar Cambios</button>
         </div>
         <?php

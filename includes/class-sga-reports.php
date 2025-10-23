@@ -493,6 +493,110 @@ class SGA_Reports {
         ];
     }
     
+    /**
+     * Genera el Expediente del estudiante en formato PDF.
+     * @param int $student_id ID del post del estudiante.
+     * @return array|false Datos del PDF o false si Dompdf no existe.
+     */
+    public function _generate_student_profile_pdf($student_id) {
+        if (!class_exists('Dompdf\Dompdf')) {
+            SGA_Utils::_log_activity('Error de Reporte', 'La librería Dompdf no está instalada o no se puede encontrar.');
+            return false;
+        }
+
+        $student_post = get_post($student_id);
+        if (!$student_post || 'estudiante' !== $student_post->post_type) return false;
+
+        // 1. Obtener datos del estudiante
+        $nombre_completo = $student_post->post_title;
+        $cedula = get_field('cedula', $student_id);
+        $email = get_field('email', $student_id);
+        $telefono = get_field('telefono', $student_id);
+        $direccion = get_field('direccion', $student_id);
+        $cursos = get_field('cursos_inscritos', $student_id);
+
+        $logo_id = 5024; // ID de ejemplo para el logo
+        $logo_src = '';
+        if ($logo_id && $logo_path = get_attached_file($logo_id)) {
+            $mime_type = get_post_mime_type($logo_id);
+            if ($mime_type && file_exists($logo_path)) {
+                $logo_data = file_get_contents($logo_path);
+                $logo_base64 = base64_encode($logo_data);
+                $logo_src = 'data:' . $mime_type . ';base64,' . $logo_base64;
+            }
+        }
+        
+        $report_title = 'Expediente Estudiantil: ' . $nombre_completo;
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+        <style>
+            body{font-family:Arial,sans-serif;font-size:12pt;color:#333;margin:0;padding:0}.header{text-align:center;margin-bottom:30px;border-bottom:3px solid #141f53;padding-bottom:15px}.header img{max-height:80px;margin-bottom:10px}h1{font-size:24pt;color:#141f53;margin:0}.subtitle{font-size:10pt;color:#555;margin-top:5px}.section-title{font-size:16pt;color:#4f46e5;border-bottom:2px solid #e0e0e0;padding-bottom:5px;margin-top:30px;margin-bottom:15px}.data-grid{display:table;width:100%;border-collapse:collapse;margin-bottom:20px}.data-row{display:table-row;}.data-label{display:table-cell;font-weight:700;padding:8px 0;width:30%;vertical-align:top;font-size:11pt}.data-value{display:table-cell;padding:8px 0;width:70%;vertical-align:top;font-size:11pt}.curso-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10pt}th,td{border:1px solid #ccc;padding:10px;text-align:left}thead th{background-color:#141f53;color:#fff;font-weight:700}tbody tr:nth-child(even){background-color:#f8f9fa}.pill{display:inline-block;padding:4px 10px;font-size:10pt;font-weight:700;border-radius:12px;color:#fff;}.pill-inscrito{background-color:#f59e0b}.pill-matriculado{background-color:#10b981}.pill-completado{background-color:#3b82f6}.pill-cancelado{background-color:#ef4444}
+        </style>
+        </head><body>
+            <div class="header">
+                <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                <h1><?php echo esc_html($report_title); ?></h1>
+                <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
+            </div>
+            
+            <h2 class="section-title">Datos Personales y de Contacto</h2>
+            <div class="data-grid">
+                <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
+                <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
+                <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
+                <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
+                <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
+            </div>
+
+            <h2 class="section-title">Historial Académico y Cursos</h2>
+            <?php if ($cursos): ?>
+                <table class="curso-table">
+                    <thead><tr><th>Curso</th><th>Horario</th><th>Fecha Inscripción</th><th>Matrícula</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($cursos as $curso): 
+                            $estado_class = 'pill-inscrito';
+                            switch ($curso['estado']) {
+                                case 'Matriculado': $estado_class = 'pill-matriculado'; break;
+                                case 'Completado': $estado_class = 'pill-completado'; break;
+                                case 'Cancelado': $estado_class = 'pill-cancelado'; break;
+                            }
+                        ?>
+                            <tr>
+                                <td><?php echo esc_html($curso['nombre_curso']); ?></td>
+                                <td><?php echo esc_html($curso['horario']); ?></td>
+                                <td><?php echo esc_html($curso['fecha_inscripcion']); ?></td>
+                                <td><?php echo esc_html($curso['matricula'] ?? 'N/A'); ?></td>
+                                <td><span class="pill <?php echo $estado_class; ?>"><?php echo esc_html($curso['estado']); ?></span></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p>No hay cursos inscritos para este estudiante.</p>
+            <?php endif; ?>
+
+        </body></html>
+        <?php
+        $html_content = ob_get_clean();
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html_content);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $pdf_output = $dompdf->output();
+
+        return [
+            'pdf_data' => $pdf_output,
+            'title' => $report_title,
+            'filename' => 'expediente-' . sanitize_title($nombre_completo) . '-' . date('Y-m-d') . '.pdf'
+        ];
+    }
+    
     public function ajax_sga_print_invoice() {
         if (!isset($_REQUEST['payment_id']) || !isset($_REQUEST['_wpnonce'])) {
             wp_die('Parámetros inválidos.');
@@ -554,7 +658,7 @@ class SGA_Reports {
         ob_start();
         ?>
         <!DOCTYPE html>
-        <html lang="es" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)">
+        <html lang="es" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
         <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Matriculados</x:Name><x:WorksheetOptions><x:PageSetup><x:Layout x:Orientation="Landscape"/><x:Header x:Margin="0.5"/><x:Footer x:Margin="0.5"/><x:PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/></x:PageSetup><x:FitToPage/><x:Print><x:ValidPrinterInfo/><x:PaperSizeIndex>9</x:PaperSizeIndex><x:HorizontalResolution>600</x:HorizontalResolution><x:VerticalResolution>600</x:VerticalResolution></x:Print><x:Zoom>100</x:Zoom><x:Selected/><x:ProtectContents>False</x:ProtectContents><x:ProtectObjects>False</x:ProtectObjects><x:ProtectScenarios>False</x:ProtectScenarios></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
         <style>body{font-family:Arial,sans-serif;font-size:10pt}.header{text-align:center;margin-bottom:20px}.top-banner{background-color:#002060;padding:10px}.header img{max-height:60px}.header h1{font-size:16pt;font-weight:700;margin-top:20px;margin-bottom:5px}.header .subtitle{font-size:9pt;color:#555}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:9pt}th,td{border:1px solid #999;padding:5px;text-align:left}thead th{background-color:#002060;color:#fff;font-weight:700}tbody tr:nth-child(2n){background-color:#ddebf7}</style></head>
         <body>
@@ -761,4 +865,3 @@ class SGA_Reports {
         exit();
     }
 }
-

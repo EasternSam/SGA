@@ -17,6 +17,7 @@ class SGA_Ajax {
         add_action('wp_ajax_exportar_moodle_csv', array($this, 'ajax_exportar_moodle_csv'));
         add_action('wp_ajax_sga_exportar_registro_llamadas', array($this, 'ajax_exportar_registro_llamadas'));
         add_action('wp_ajax_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
+        add_action('wp_ajax_sga_print_student_profile', array($this, 'ajax_print_student_profile')); // <- NUEVO HOOK
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
@@ -50,7 +51,7 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'No se seleccionaron agentes.']);
         }
 
-        // 1. Recolectar todas las inscripciones pendientes sin asignar, agrupadas por curso.
+        // 1. Recolectar todas las inscripciones pendientes no asignadas, agrupadas por curso.
         $unassigned_by_course = [];
         $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
 
@@ -387,6 +388,36 @@ class SGA_Ajax {
     public function ajax_sga_print_invoice() {
         $reports_handler = new SGA_Reports();
         $reports_handler->ajax_sga_print_invoice();
+    }
+    
+    /**
+     * AJAX: Imprime el expediente de un estudiante en PDF.
+     */
+    public function ajax_print_student_profile() {
+        if (!isset($_GET['student_id']) || !isset($_GET['_wpnonce'])) {
+            wp_die('Parámetros inválidos.');
+        }
+        $student_id = intval($_GET['student_id']);
+        $nonce = sanitize_text_field($_GET['_wpnonce']);
+        if (!wp_verify_nonce($nonce, 'sga_print_profile_' . $student_id)) {
+            wp_die('Error de seguridad.');
+        }
+        if (!current_user_can('read_estudiante')) {
+            wp_die('No tienes permisos para realizar esta acción.');
+        }
+
+        $reports_handler = new SGA_Reports();
+        $pdf_data = $reports_handler->_generate_student_profile_pdf($student_id);
+
+        if ($pdf_data && is_array($pdf_data) && !empty($pdf_data['pdf_data'])) {
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $pdf_data['filename'] . '"');
+            echo $pdf_data['pdf_data'];
+            SGA_Utils::_log_activity('Expediente Descargado', "El expediente del estudiante ID: {$student_id} fue descargado.");
+        } else {
+            wp_die('No se pudo generar el PDF. Verifique que la librería Dompdf esté instalada.');
+        }
+        wp_die();
     }
 
     /**
