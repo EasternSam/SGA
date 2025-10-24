@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Gestión Académica CENTU
  * Description: Panel a medida para gestionar inscripciones, cursos, matriculación, pagos (Azul, Cardnet) y reportes avanzados en PDF.
- * Version:20.5
+ * Version:20.5.4
  * Author: Samuel Diaz Pilier
  * Author URI: https://90s.agency/sam
  * @requires PHP 7.1+
@@ -15,7 +15,10 @@ if (!defined('ABSPATH')) exit; // Salir si se accede directamente.
 // --- 1. Definir Constantes del Plugin ---
 define('SGA_PLUGIN_VERSION', '13.6');
 define('SGA_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('SGA_PLUGIN_URL', plugin_dir_url(__FILE__));
+// FIX: Asegurar que SGA_PLUGIN_URL esté definido para encolar assets
+if (!defined('SGA_PLUGIN_URL')) {
+    define('SGA_PLUGIN_URL', plugin_dir_url(__FILE__));
+}
 
 // --- 2. Cargar la librería Dompdf ---
 // Prioriza el autoloader de Composer si existe.
@@ -28,14 +31,27 @@ elseif (file_exists(SGA_PLUGIN_PATH . 'dompdf/autoload.inc.php')) {
 }
 
 // --- 3. Incluir los archivos del Core del Plugin ---
-require_once SGA_PLUGIN_PATH . 'includes/class-sga-utils.php';
+// Se ha ajustado el orden de inclusión para garantizar que las dependencias se carguen primero.
+
+// DEPENDENCIAS BASE Y UTILIDADES GENERALES
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-logging-utils.php';
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-email-utils.php';
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-utils.php'; // Usa las dos anteriores.
+
+// CPT Y ROLES
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-roles.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-cpt.php';
+
+// REPORTES Y SUB-UTILIDADES DE REPORTES
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-report-data-processor.php';
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-report-generator.php'; // Usa Data Processor y Logging Utils.
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-reports.php'; // Usa Report Generator.
+
+// COMPONENTES PRINCIPALES
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-admin.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-ajax.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-shortcodes.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-payments.php';
-require_once SGA_PLUGIN_PATH . 'includes/class-sga-reports.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-integration.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-api.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-main.php';

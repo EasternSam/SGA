@@ -408,15 +408,16 @@ class SGA_Ajax {
         }
 
         $reports_handler = new SGA_Reports();
-        $pdf_data = $reports_handler->_generate_student_profile_pdf($student_id);
+        
+        // CAMBIO: Llamar a la nueva función de HTML en lugar de la de PDF
+        $html_content = $reports_handler->_generate_student_profile_html_for_print($student_id);
 
-        if ($pdf_data && is_array($pdf_data) && !empty($pdf_data['pdf_data'])) {
-            header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $pdf_data['filename'] . '"');
-            echo $pdf_data['pdf_data'];
-            SGA_Utils::_log_activity('Expediente Descargado', "El expediente del estudiante ID: {$student_id} fue descargado.");
+        if ($html_content) {
+            header('Content-Type: text/html; charset=utf-8');
+            echo $html_content; // Servir el HTML
+            SGA_Utils::_log_activity('Expediente Impreso', "Se generó la vista de impresión para el estudiante ID: {$student_id}.");
         } else {
-            wp_die('No se pudo generar el PDF. Verifique que la librería Dompdf esté instalada.');
+            wp_die('No se pudo generar la vista de impresión. Verifique que la librería Dompdf esté instalada (aunque no se usa, su clase podría ser comprobada) o que los datos del estudiante sean correctos.');
         }
         wp_die();
     }
