@@ -17,7 +17,7 @@ class SGA_Ajax {
         add_action('wp_ajax_exportar_moodle_csv', array($this, 'ajax_exportar_moodle_csv'));
         add_action('wp_ajax_sga_exportar_registro_llamadas', array($this, 'ajax_exportar_registro_llamadas'));
         add_action('wp_ajax_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
-        add_action('wp_ajax_sga_print_student_profile', array($this, 'ajax_print_student_profile')); // <- NUEVO HOOK
+        add_action('wp_ajax_sga_print_student_profile', array($this, 'ajax_print_student_profile')); // <- HOOK EXISTENTE
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
@@ -402,7 +402,8 @@ class SGA_Ajax {
         if (!wp_verify_nonce($nonce, 'sga_print_profile_' . $student_id)) {
             wp_die('Error de seguridad.');
         }
-        if (!current_user_can('read_estudiante')) {
+        // FIX: Cambiado 'read_estudiante' a 'read' para permitir a todos los usuarios conectados.
+        if (!current_user_can('read')) {
             wp_die('No tienes permisos para realizar esta acción.');
         }
 

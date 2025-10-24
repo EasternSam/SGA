@@ -458,7 +458,8 @@ class SGA_Utils {
         $cursos = get_field('cursos_inscritos', $student_id);
         
         // Determinar si el usuario actual tiene permisos para imprimir
-        $can_print = current_user_can('edit_estudiantes');
+        // FIX: Se cambió para que sea visible para todos los que accedan a esta vista.
+        $can_print = true; //<- Permite que todos vean el botón
 
         $print_url = add_query_arg([
             'action' => 'sga_print_student_profile',
