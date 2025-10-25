@@ -83,9 +83,9 @@ class SGA_Reports {
             'agente_filtro' => isset($_POST['agente_filtro']) ? sanitize_text_field($_POST['agente_filtro']) : ''
         ];
 
-        // FIX: If the current user is an Agent, force the filter to their ID.
+        // FIX: If the current user is an Agent (of any type), force the filter to their ID.
         $current_user = wp_get_current_user();
-        if (in_array('agente', (array) $current_user->roles)) {
+        if (in_array('agente', (array) $current_user->roles) || in_array('agente_infotep', (array) $current_user->roles)) {
             $args['agente_filtro'] = $current_user->ID;
         }
 

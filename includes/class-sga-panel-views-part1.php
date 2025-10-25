@@ -92,7 +92,7 @@ class SGA_Panel_Views_Part1 {
         </div>
 
         <div class="panel-grid main-menu">
-            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'agente_infotep'])) : ?>
             <a href="#" data-view="matriculacion" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4z"/><path d="M20.6 20.4c-.4-3.3-3.8-5.9-8.6-5.9s-8.2 2.6-8.6 5.9"/><path d="M18 18.2c.4-.2.9-.4 1.3-.7"/><path d="M22 13.8c0-.6-.1-1.2-.3-1.8"/><path d="M11.3 2.2c-.4.2-.8.4-1.2.7"/><path d="M2 13.8c0 .6.1 1.2.3 1.8"/><path d="M4.7 17.5c-.4.3-.8.5-1.3.7"/><path d="M12.7 21.8c.4-.2.8-.4 1.2-.7"/></svg></div>
                 <h2>Matriculación</h2>
@@ -106,7 +106,7 @@ class SGA_Panel_Views_Part1 {
                 <p>Ver y editar perfiles</p>
             </a>
             <?php endif; ?>
-            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente'])) : ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente', 'agente_infotep'])) : ?>
             <a href="#" data-view="cursos" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
                 <h2>Cursos</h2>
@@ -132,7 +132,7 @@ class SGA_Panel_Views_Part1 {
                 <p>Enviar correos masivos</p>
             </a>
             <?php endif; ?>
-            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente'])) : ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente', 'agente_infotep'])) : ?>
             <a href="#" data-view="reportes" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20V16"/></svg></div>
                 <h2>Reportes</h2>
@@ -156,7 +156,7 @@ class SGA_Panel_Views_Part1 {
                 <h2>Aprobar Inscripciones</h2>
                 <p>Validar y matricular nuevos estudiantes</p>
             </a>
-            <?php else: // Botón de Seguimiento para Agente ?>
+            <?php else: // Botón de Seguimiento para Agente (y Agente Infotep) ?>
             <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link">
                  <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></div>
                 <h2>Seguimiento de Inscripciones</h2>
@@ -170,14 +170,14 @@ class SGA_Panel_Views_Part1 {
                 <p>Consultar y exportar estudiantes activos</p>
             </a>
             <?php endif; ?>
-             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
+             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'agente_infotep'])) : ?>
             <a href="#" data-view="registro_llamadas" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path><path d="M14.05 2a9 9 0 0 1 8 7.94"></path><path d="M14.05 6A5 5 0 0 1 18 10"></path></svg></div>
                 <h2>Registro de Llamadas</h2>
                 <p>Consultar historial de llamadas</p>
             </a>
              <?php endif; ?>
-            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente'])) : ?>
+            <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'agente_infotep'])) : ?>
             <a href="<?php echo esc_url(site_url('/cursos/')); ?>" target="_blank" class="panel-card">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
                 <h2>Nueva Inscripción</h2>

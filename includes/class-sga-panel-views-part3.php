@@ -437,7 +437,7 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
         $options = get_option('sga_report_options', []);
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         $agentes = SGA_Utils::_get_sga_agents();
-        $is_agent = $this->sga_user_has_role(['agente']);
+        $is_agent = $this->sga_user_has_role(['agente', 'agente_infotep']);
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Central de Reportes</h1>
