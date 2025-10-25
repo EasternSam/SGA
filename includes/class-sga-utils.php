@@ -34,12 +34,13 @@ class SGA_Utils {
     }
 
     /**
-     * Obtiene una lista de todos los usuarios con el rol 'agente'.
+     * Obtiene una lista de todos los usuarios con el rol 'agente' o un rol específico.
+     * @param string $role_slug El slug del rol a buscar ('agente', 'agente_infotep', etc.).
      * @return array Array de objetos WP_User.
      */
-    public static function _get_sga_agents() {
+    public static function _get_sga_agents($role_slug = 'agente') {
         $args = array(
-            'role'    => 'agente',
+            'role'    => $role_slug,
             'orderby' => 'display_name',
             'order'   => 'ASC'
         );
@@ -63,94 +64,68 @@ class SGA_Utils {
     }
 
     /**
-     * Obtiene el siguiente agente en la rotación para asignación automática.
+     * Obtiene el siguiente agente en la rotación para asignación automática, filtrando por rol.
+     * Utiliza el mismo transient para mantener la rotación del rol.
+     * @param string $role_slug El slug del rol a buscar.
      * @return int|null ID del agente o null si no hay agentes.
      */
-    public static function _get_next_agent_for_assignment() {
-        $agents = self::_get_sga_agents();
+    public static function _get_next_agent_for_assignment($role_slug = 'agente') {
+        $agents = self::_get_sga_agents($role_slug);
         if (empty($agents)) {
             return null;
         }
 
-        $last_assigned_index = get_transient('sga_last_assigned_agent_index');
-        if (false === $last_assigned_index) {
+        // Usar un transient separado para la rotación de cada rol
+        $transient_key = 'sga_last_assigned_agent_index_' . $role_slug;
+        
+        $last_assigned_index = get_transient($transient_key);
+        
+        if (false === $last_assigned_index || $last_assigned_index >= count($agents) - 1) {
             $next_index = 0;
         } else {
-            $next_index = ($last_assigned_index + 1) % count($agents);
+            $next_index = ($last_assigned_index + 1);
         }
-
-        set_transient('sga_last_assigned_agent_index', $next_index, DAY_IN_SECONDS);
+        
+        set_transient($transient_key, $next_index, DAY_IN_SECONDS);
         return $agents[$next_index]->ID;
     }
 
     /**
-     * Obtiene y formatea una plantilla de correo electrónico HTML.
-     * @return string El HTML completo del correo.
+     * Obtiene el siguiente agente en la rotación basado en una lista de IDs proporcionada.
+     * Utilizado para el reparto manual.
+     * @param array $agent_ids Lista de IDs de agentes seleccionados para la rotación.
+     * @return int|null ID del agente o null si la lista está vacía.
      */
-    public static function _get_email_template($title, $content_html, $summary_table_title = '', $summary_data = [], $button_data = []) {
-        $logo_url = 'https://portal-dev.centu.edu.do/wp-content/uploads/2025/07/centu-logo.png'; // Considera hacerlo una opción en los ajustes
-        $summary_html = '';
-        if (!empty($summary_data) && !empty($summary_table_title)) {
-            $summary_html .= '<table class="summary-table" border="0" width="100%" cellspacing="0" cellpadding="0"><thead><tr><th colspan="2">' . esc_html($summary_table_title) . '</th></tr></thead><tbody>';
-            foreach ($summary_data as $label => $value) {
-                $summary_html .= '<tr><td class="label">' . esc_html($label) . '</td><td>' . esc_html($value) . '</td></tr>';
-            }
-            $summary_html .= '</tbody></table>';
+    public static function _get_next_agent_from_list($agent_ids) {
+        if (empty($agent_ids)) {
+            return null;
         }
-        $button_html = '';
-        if (!empty($button_data) && isset($button_data['url']) && isset($button_data['text'])) {
-            $button_html = '<table class="button-table" border="0" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding-top: 20px;"><a href="' . esc_url($button_data['url']) . '" class="button-link">' . esc_html($button_data['text']) . '</a></td></tr></table>';
+        
+        // Asegurar que solo tengamos IDs únicos y válidos
+        $valid_agent_ids = array_filter(array_unique(array_map('intval', $agent_ids)));
+        if (empty($valid_agent_ids)) {
+            return null;
         }
-        ob_start();
-        ?>
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title><?php echo esc_html($title); ?></title>
-            <style>
-                .email-container { padding: 20px 0; }
-                .email-body { border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 600px; margin: 0 auto; }
-                .header { background-color: #141f53; padding: 30px 20px; border-top-left-radius: 12px; border-top-right-radius: 12px; text-align: center; }
-                .logo { display: block; max-width: 180px; height: auto; margin: 0 auto; }
-                .content-cell { padding: 40px 30px; font-family: Arial, sans-serif; }
-                .content-cell h1 { font-size: 26px; font-weight: bold; margin-top: 0; margin-bottom: 20px; color: #141f53; }
-                .content-cell p { margin: 0 0 25px 0; font-size: 16px; line-height: 1.7; color: #555555; }
-                .content-cell p.last { margin-bottom: 0; }
-                .content-cell h2 { font-size: 20px; font-weight: 600; margin-top: 35px; margin-bottom: 15px; color: #141f53; }
-                .summary-table { border-collapse: collapse; border: 1px solid #e0e0e0; border-radius: 8px; width: 100%; overflow: hidden; margin-top: 25px; }
-                .summary-table th { padding: 15px; background-color: #f8f9fa; font-size: 18px; text-align: left; color: #141f53; border-bottom: 1px solid #e0e0e0; }
-                .summary-table td { padding: 15px; font-size: 15px; color: #555; border-bottom: 1px solid #eeeeee; }
-                .summary-table td.label { color: #333; font-weight: 600; width: 40%; }
-                .summary-table tr:last-child td { border-bottom: none; }
-                .button-table { margin-top: 30px; }
-                .button-link { display: inline-block; padding: 14px 28px; background-color: #0052cc; color: #ffffff !important; text-decoration: none; font-weight: bold; border-radius: 8px; font-size: 16px; }
-                .button-link:hover { text-decoration: none; }
-                .footer { padding: 30px; text-align: center; background-color: #f4f7f6; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; font-family: Arial, sans-serif; }
-                .footer p { margin: 0; font-size: 13px; color: #888888; }
-                .footer a { color: #141f53; text-decoration: none; font-weight: 600; }
-            </style>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #f4f7f6;">
-            <table border="0" width="100%" cellspacing="0" cellpadding="0"> <tbody> <tr> <td class="email-container">
-            <table class="email-body" border="0" cellspacing="0" cellpadding="0">
-                <tr> <td class="header"> <img class="logo" src="<?php echo esc_url($logo_url); ?>" alt="Logo de CENTU" width="180" /> </td> </tr>
-                <tr> <td class="content-cell">
-                    <h1><?php echo esc_html($title); ?></h1>
-                    <?php echo wp_kses_post($content_html); ?>
-                    <?php if (!empty($summary_html)) echo $summary_html; ?>
-                    <?php if (!empty($button_html)) echo $button_html; ?>
-                </td> </tr>
-                <tr> <td class="footer"> <p>© <?php echo date('Y'); ?> CENTU. Todos los derechos reservados.<br /> <a href="<?php echo esc_url(home_url('/')); ?>">Visita nuestro sitio web</a> </p> </td> </tr>
-            </tbody> </table>
-            </td> </tr> </tbody> </table>
-        </body>
-        </html>
-        <?php
-        return ob_get_clean();
+        
+        // Usar un transient único para esta acción de reparto manual
+        $transient_key = 'sga_last_distributed_agent_index';
+        $agent_count = count($valid_agent_ids);
+        
+        $last_assigned_index = get_transient($transient_key);
+        
+        if (false === $last_assigned_index || $last_assigned_index >= $agent_count - 1) {
+            $next_index = 0;
+        } else {
+            $next_index = ($last_assigned_index + 1);
+        }
+        
+        set_transient($transient_key, $next_index, DAY_IN_SECONDS);
+        
+        // Necesitamos reindexar el array para usar el índice de rotación
+        $indexed_agents = array_values($valid_agent_ids);
+        return $indexed_agents[$next_index];
     }
-
+    
     /**
      * Envía el correo inicial al estudiante para que proceda con el pago.
      */
@@ -680,4 +655,3 @@ class SGA_Utils {
         return $count;
     }
 }
-

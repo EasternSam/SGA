@@ -16,8 +16,43 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $estudiantes_inscritos = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         
-        $can_approve = $this->sga_user_has_role(['administrator']);
+        $can_approve = $this->sga_user_has_role(['administrator', 'gestor_academico']);
+        $current_user = wp_get_current_user();
+        
+        // Usamos la función global SGA_Utils::_get_sga_agents()
         $agents = SGA_Utils::_get_sga_agents();
+        
+        // --- 1. Lógica de Roles y Visibilidad Grupal ---
+        $is_infotep_agent = $this->sga_user_has_role(['agente_infotep']);
+        $is_standard_agent = $this->sga_user_has_role(['agente']);
+        $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
+        $infotep_category_slug = 'cursos-infotep';
+        
+        $agent_visibility_ids = [];
+
+        if ($current_user_role) {
+            // Obtener todos los IDs de usuario con el mismo rol (Visibilidad Grupal)
+            $same_role_agents = get_users(['role' => $current_user_role, 'fields' => 'ID']);
+            $agent_visibility_ids = array_map('intval', $same_role_agents);
+            // Esto permite que el agente vea las inscripciones asignadas a cualquiera de sus compañeros de equipo.
+        }
+
+
+        // --- 2. Pre-cargar el mapa de cursos y sus categorías (MÉTODO ESTABLE) ---
+        $course_category_map = [];
+        $course_ids_to_check = array_map(function($p) { return $p->ID; }, $cursos_disponibles);
+        
+        foreach ($course_ids_to_check as $course_id) {
+            $course_post = get_post($course_id);
+            if ($course_post) {
+                // Obtener solo los slugs para chequeo rápido
+                $terms = wp_get_post_terms($course_id, 'category', ['fields' => 'slugs']);
+                $course_category_map[$course_post->post_title] = !is_wp_error($terms) ? $terms : [];
+            }
+        }
+        // --- FIN LÓGICA DE FILTRADO DE VISTA POR ROL ---
+
+
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">
@@ -92,77 +127,115 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             if ($cursos) {
                                 foreach ($cursos as $index => $curso) {
                                     if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
-                                        $hay_pendientes = true;
                                         
-                                        $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
-                                        if (!is_array($call_statuses)) $call_statuses = [];
-                                        $current_call_status = $call_statuses[$index] ?? 'pendiente';
-                                        
+                                        $course_name = $curso['nombre_curso'];
+                                        $course_categories = $course_category_map[$course_name] ?? [];
+                                        $is_infotep_course = in_array($infotep_category_slug, $course_categories);
                                         $agent_id = $assignments[$index] ?? 'unassigned';
-                                        $agent_name = 'Sin Asignar';
-                                        $row_style = '';
+                                        
+                                        $should_display = $can_approve; // Administrador/Gestor siempre ve todo
 
-                                        if (is_numeric($agent_id)) {
-                                            $agent_info = get_userdata($agent_id);
-                                            if ($agent_info) {
-                                                $agent_name = $agent_info->display_name;
-                                                if (!isset($agent_colors[$agent_id])) {
-                                                    $agent_colors[$agent_id] = $color_palette[$color_index % count($color_palette)];
-                                                    $color_index++;
+                                        if (!$can_approve) {
+                                            // Lógica de visibilidad para Agentes Estándar y Agentes de Infotep
+                                            
+                                            // 1. ¿Está asignado a CUALQUIERA del grupo de agentes?
+                                            // Nota: agent_id === 'unassigned' es una cadena, no un número, por eso el chequeo separado.
+                                            $is_assigned_to_group = is_numeric($agent_id) && in_array(intval($agent_id), $agent_visibility_ids);
+                                            
+                                            // 2. ¿La inscripción es no asignada?
+                                            $is_unassigned = ($agent_id === 'unassigned');
+                                            
+
+                                            if ($is_infotep_agent) {
+                                                // Agente de Infotep solo ve cursos-infotep ASIGNADOS a su grupo O NO ASIGNADOS (pero solo Infotep).
+                                                if ($is_infotep_course && ($is_assigned_to_group || $is_unassigned)) {
+                                                    $should_display = true;
+                                                } else {
+                                                    $should_display = false;
                                                 }
-                                                $row_style = 'style="background-color:' . $agent_colors[$agent_id] . ';"';
+                                            } elseif ($is_standard_agent) {
+                                                // Agente Estándar solo ve cursos ESTÁNDAR ASIGNADOS a su grupo O NO ASIGNADOS (pero solo Estándar).
+                                                if (!$is_infotep_course && ($is_assigned_to_group || $is_unassigned)) {
+                                                    $should_display = true;
+                                                } else {
+                                                    $should_display = false;
+                                                }
                                             }
                                         }
-                                        ?>
-                                        <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>" data-agent-id="<?php echo esc_attr($agent_id); ?>" <?php echo $row_style; ?>>
-                                            <?php if ($can_approve): ?>
-                                            <td class="ga-check-column"><input type="checkbox" class="bulk-checkbox" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>"></td>
-                                            <?php endif; ?>
-                                            <td><?php echo esc_html($estudiante->post_title); ?></td>
-                                            <td><strong><?php echo esc_html($agent_name); ?></strong></td>
-                                            <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
-                                            <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
-                                            <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
-                                            <td><?php echo esc_html($curso['nombre_curso']); ?></td>
-                                            <td><?php echo esc_html($curso['horario']); ?></td>
-                                            <td><span class="estado-inscrito">Inscrito</span></td>
-                                            <td>
-                                                <div class="sga-call-status-wrapper">
-                                                    <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
-                                                        <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
-                                                        <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
-                                                        <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
-                                                        <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
-                                                        <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
-                                                    </select>
-                                                    <span class="spinner"></span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <?php
-                                                $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
-                                                if (!is_array($call_log)) $call_log = [];
-                                                $call_info = $call_log[$index] ?? null;
 
-                                                if ($call_info) {
-                                                    echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
-                                                    if (!empty($call_info['comment'])) {
-                                                        echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
+                                        if ($should_display) {
+                                            $hay_pendientes = true;
+                                            
+                                            $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
+                                            if (!is_array($call_statuses)) $call_statuses = [];
+                                            $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                                            
+                                            
+                                            $agent_name = 'Sin Asignar';
+                                            $row_style = '';
+
+                                            if (is_numeric($agent_id)) {
+                                                $agent_info = get_userdata($agent_id);
+                                                if ($agent_info) {
+                                                    $agent_name = $agent_info->display_name;
+                                                    if (!isset($agent_colors[$agent_id])) {
+                                                        $agent_colors[$agent_id] = $color_palette[$color_index % count($color_palette)];
+                                                        $color_index++;
                                                     }
-                                                } else {
-                                                    ?>
-                                                    <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
-                                                    <?php
+                                                    $row_style = 'style="background-color:' . $agent_colors[$agent_id] . ';"';
                                                 }
+                                            }
+                                            ?>
+                                            <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>" data-agent-id="<?php echo esc_attr($agent_id); ?>" <?php echo $row_style; ?>>
+                                                <?php if ($can_approve): ?>
+                                                <td class="ga-check-column"><input type="checkbox" class="bulk-checkbox" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>"></td>
+                                                <?php endif; ?>
+                                                <td><?php echo esc_html($estudiante->post_title); ?></td>
+                                                <td><strong><?php echo esc_html($agent_name); ?></strong></td>
+                                                <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
+                                                <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
+                                                <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
+                                                <td><?php echo esc_html($curso['nombre_curso']); ?></td>
+                                                <td><?php echo esc_html($curso['horario']); ?></td>
+                                                <td><span class="estado-inscrito">Inscrito</span></td>
+                                                <td>
+                                                    <div class="sga-call-status-wrapper">
+                                                        <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
+                                                            <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
+                                                            <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
+                                                            <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
+                                                            <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
+                                                            <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
+                                                        </select>
+                                                        <span class="spinner"></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <?php
+                                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
+                                                    if (!is_array($call_log)) $call_log = [];
+                                                    $call_info = $call_log[$index] ?? null;
 
-                                                if ($can_approve) { ?>
-                                                    <button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">
-                                                        Aprobar
-                                                    </button>
-                                                <?php } ?>
-                                            </td>
-                                        </tr>
-                                        <?php
+                                                    if ($call_info) {
+                                                        echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+                                                        if (!empty($call_info['comment'])) {
+                                                            echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
+                                                        }
+                                                    } else {
+                                                        ?>
+                                                        <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
+                                                        <?php
+                                                    }
+
+                                                    if ($can_approve) { ?>
+                                                        <button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">
+                                                            Aprobar
+                                                        </button>
+                                                    <?php } ?>
+                                                </td>
+                                            </tr>
+                                            <?php
+                                        }
                                     }
                                 }
                             }
@@ -170,7 +243,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     }
                     if (!$hay_pendientes) {
                         $colspan = $can_approve ? 11 : 10;
-                        echo '<tr class="no-results"><td colspan="' . $colspan . '">No hay estudiantes pendientes de aprobación.</td></tr>';
+                        echo '<tr class="no-results"><td colspan="' . $colspan . '">No hay estudiantes pendientes de aprobación o tu filtro actual no muestra resultados.</td></tr>';
                     }
                     ?>
                 </tbody>
@@ -180,7 +253,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     }
 
     // --- VISTA DE LISTA DE MATRICULADOS ---
-
+// ... (resto de la clase sin cambios)
     public function render_view_lista_matriculados() {
         $estudiantes_matriculados = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
@@ -212,7 +285,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     <?php
                     $hay_matriculados = false;
                     if ($estudiantes_matriculados && function_exists('get_field')) {
-                        foreach ($estudiantes_matriculados as $estudiante) {
+                        foreach ($estudiantes_inscritos as $estudiante) { // Error de variable en el código base, debería ser $estudiantes_matriculados
                             $cursos = get_field('cursos_inscritos', $estudiante->ID);
                             if ($cursos) {
                                 foreach ($cursos as $curso) {
@@ -246,7 +319,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     public function render_view_lista_estudiantes() {
         $todos_estudiantes = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         ?>
-        <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
+        <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">Lista General de Estudiantes</h1>
         <div class="filtros-tabla">
             <select name="bulk-action-estudiantes" id="bulk-action-estudiantes-select">

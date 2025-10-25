@@ -29,7 +29,8 @@ class SGA_Admin {
     private function sga_user_has_sga_role() {
         $user = wp_get_current_user();
         if (!$user->ID) return false;
-        $sga_roles = ['gestor_academico', 'agente', 'gestor_de_cursos'];
+        // ROL AGENTE INFOTEP AÑADIDO AQUÍ
+        $sga_roles = ['gestor_academico', 'agente', 'agente_infotep', 'gestor_de_cursos'];
         $user_roles = (array) $user->roles;
         return !empty(array_intersect($sga_roles, $user_roles));
     }
@@ -576,4 +577,3 @@ class SGA_Admin {
         <?php
     }
 }
-

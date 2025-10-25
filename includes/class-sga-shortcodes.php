@@ -20,7 +20,8 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
      * Renderiza el shortcode del panel de gestión principal.
      */
     public function render_panel() {
-        if (!is_user_logged_in() || !$this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'gestor_de_cursos'])) {
+        // CORRECCIÓN: Añadir 'agente_infotep' a la lista de roles permitidos para acceder al panel.
+        if (!is_user_logged_in() || !$this->sga_user_has_role(['administrator', 'gestor_academico', 'agente', 'agente_infotep', 'gestor_de_cursos'])) {
             return '<div class="notice notice-error" style="margin: 20px;"><p>No tienes los permisos necesarios para acceder a este panel. Por favor, contacta a un administrador.</p></div>';
         }
 
