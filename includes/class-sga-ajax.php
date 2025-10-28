@@ -504,4 +504,61 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'La vista solicitada no existe.']);
         }
     }
+
+    /**
+     * AJAX: Obtiene los datos para el gráfico de inscripciones en el panel de reportes.
+     */
+    public function ajax_get_report_chart_data() {
+        if (!check_ajax_referer('sga_chart_nonce', '_ajax_nonce', false)) {
+            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        }
+        // Usamos la capacidad personalizada 'sga_access_reportes'
+        if (!current_user_can('sga_access_reportes')) {
+            wp_send_json_error(['message' => 'No tienes permisos para ver reportes.'], 403);
+        }
+
+        $labels = [];
+        $counts_by_month = [];
+
+        // Inicializar los últimos 12 meses
+        for ($i = 11; $i >= 0; $i--) {
+            $month_key = date('Y-m', strtotime("-$i months"));
+            // Usar 'M Y' para formato "Oct 2024" y forzar localización en español
+            $labels[] = date_i18n('M Y', strtotime($month_key . '-01'));
+            $counts_by_month[$month_key] = 0;
+        }
+
+        // Consultar a todos los estudiantes
+        $estudiantes = get_posts([
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'fields' => 'ids'
+        ]);
+
+        if ($estudiantes && function_exists('get_field')) {
+            foreach ($estudiantes as $estudiante_id) {
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                if ($cursos) {
+                    foreach ($cursos as $curso) {
+                        // Usar 'fecha_inscripcion' que se guarda en el repeater
+                        if (!empty($curso['fecha_inscripcion'])) {
+                            $inscription_date = strtotime($curso['fecha_inscripcion']);
+                            if ($inscription_date) {
+                                $month_key = date('Y-m', $inscription_date);
+                                // Contar solo si el mes está en nuestro rango de 12 meses
+                                if (array_key_exists($month_key, $counts_by_month)) {
+                                    $counts_by_month[$month_key]++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Preparar el array de datos final en el orden correcto
+        $data = array_values($counts_by_month);
+
+        wp_send_json_success(['labels' => $labels, 'data' => $data]);
+    }
 }
