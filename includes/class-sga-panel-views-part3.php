@@ -231,21 +231,27 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
     // --- VISTA DE REGISTRO DE LLAMADAS ---
 
     public function render_view_registro_llamadas() {
-        $all_call_authors_query = new WP_User_Query(array(
-            'who' => 'authors',
-            'has_published_posts' => array('sga_llamada'),
-            'fields' => 'all_with_meta',
-        ));
-        $authors = $all_call_authors_query->get_results();
+        // Corrección: Usar SGA_Utils para obtener TODOS los agentes (agente y agente_infotep)
+        $agents = array_merge(SGA_Utils::_get_sga_agents('agente'), SGA_Utils::_get_sga_agents('agente_infotep'));
+        // Obtener todos los cursos para el filtro
+        $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">Registro de Llamadas</h1>
+
         <div class="filtros-tabla">
-            <input type="text" id="buscador-registro-llamadas" placeholder="Buscar por estudiante o curso...">
+            <input type="text" id="buscador-registro-llamadas" placeholder="Buscar por estudiante, cédula, curso...">
+            <select id="filtro-curso-llamadas">
+                <option value="">Todos los cursos</option>
+                <?php foreach ($cursos_disponibles as $curso_filtro) : ?>
+                    <option value="<?php echo esc_attr($curso_filtro->post_title); ?>"><?php echo esc_html($curso_filtro->post_title); ?></option>
+                <?php endforeach; ?>
+            </select>
             <select id="filtro-agente-llamadas">
                 <option value="">Todos los agentes</option>
-                <?php foreach ($authors as $author) : ?>
-                    <option value="<?php echo esc_attr($author->display_name); ?>"><?php echo esc_html($author->display_name); ?></option>
+                <?php foreach ($agents as $agent) : ?>
+                    <option value="<?php echo esc_attr($agent->ID); ?>"><?php echo esc_html($agent->display_name); ?></option>
+                    <?php // Usamos ID como valor para el filtro JS ?>
                 <?php endforeach; ?>
             </select>
             <select id="filtro-estado-llamadas-registro">
@@ -257,16 +263,17 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                 <option value="rechazado">Rechazado</option>
             </select>
             <div class="export-actions-wrapper">
-                <button id="exportar-llamadas-btn" class="button">Exportar a Excel</button>
+                <button id="exportar-llamadas-btn" class="button button-secondary">Exportar a Excel</button>
             </div>
         </div>
 
-        <div id="sga-call-log-accordion">
+        <div id="sga-call-log-accordion" style="margin-top: 25px;">
             <?php
+            // La consulta principal busca en ambos CPTs (día actual y archivados)
             $args = array(
-                'post_type' => 'sga_llamada',
+                'post_type' => ['sga_llamada', 'sga_llamada_hist'],
                 'posts_per_page' => -1,
-                'orderby' => 'author',
+                'orderby' => 'author date', // Ordenar primero por autor, luego por fecha
                 'order' => 'ASC',
             );
             $call_logs_query = new WP_Query($args);
@@ -277,23 +284,31 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                     $call_logs_query->the_post();
                     $author_id = get_the_author_meta('ID');
                     if (!isset($calls_by_user[$author_id])) {
+                        $user_data = get_userdata($author_id);
                         $calls_by_user[$author_id] = [
-                            'user_info' => get_userdata($author_id),
+                            // Guardamos el objeto WP_User completo
+                            'user_info' => $user_data,
                             'calls' => []
                         ];
                     }
+                    // Guardamos el objeto WP_Post completo
                     $calls_by_user[$author_id]['calls'][] = get_post();
                 }
                 wp_reset_postdata();
             }
 
             if (!empty($calls_by_user)):
+                // Ordenar los agentes alfabéticamente por display_name
+                uasort($calls_by_user, function($a, $b) {
+                    return strcmp($a['user_info']->display_name, $b['user_info']->display_name);
+                });
+
                 foreach ($calls_by_user as $user_id => $data): ?>
-                    <div class="user-log-section" data-agent="<?php echo esc_attr($data['user_info']->display_name); ?>">
+                    <div class="user-log-section" data-agent-id="<?php echo esc_attr($user_id); ?>">
                         <h2 class="user-log-title">
                             <button aria-expanded="false">
                                 <span class="user-name"><?php echo esc_html($data['user_info']->display_name); ?></span>
-                                <span class="call-count"><?php echo count($data['calls']); ?> llamadas</span>
+                                <span class="call-count"><?php echo count($data['calls']); ?> registros</span>
                                 <span class="toggle-icon" aria-hidden="true"></span>
                             </button>
                         </h2>
@@ -307,8 +322,8 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                                             <th>Contacto</th>
                                             <th>Curso</th>
                                             <th>Estado</th>
-                                            <th>Comentario</th>
-                                            <th>Fecha</th>
+                                            <th>Comentario (Última Edición)</th>
+                                            <th>Fecha Registro</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -320,25 +335,43 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                                             'numero_incorrecto' => ['text' => 'Número Incorrecto', 'class' => 'ga-pill-llamada-numero_incorrecto'],
                                             'rechazado' => ['text' => 'Rechazado', 'class' => 'ga-pill-llamada-rechazado'],
                                         ];
-                                        foreach (array_reverse($data['calls']) as $call):
+                                        // Ordenar llamadas por fecha descendente DENTRO de cada agente
+                                        usort($data['calls'], function($a, $b) {
+                                            return strtotime($b->post_date) - strtotime($a->post_date);
+                                        });
+
+                                        foreach ($data['calls'] as $call):
                                             $student_id = get_post_meta($call->ID, '_student_id', true);
                                             $row_index = get_post_meta($call->ID, '_row_index', true);
+                                            $course_name = get_post_meta($call->ID, '_course_name', true); // Obtener nombre del curso
+
+                                            // Obtener estado directamente del meta del estudiante
                                             $call_statuses = get_post_meta($student_id, '_sga_call_statuses', true);
                                             if (!is_array($call_statuses)) { $call_statuses = []; }
                                             $current_status_key = $call_statuses[$row_index] ?? 'pendiente';
                                             $status_details = $status_map[$current_status_key] ?? ['text' => ucfirst($current_status_key), 'class' => ''];
+                                            
+                                            // Obtener el comentario más reciente y quién lo editó desde el meta _sga_call_log
+                                            $call_log_meta = get_post_meta($student_id, '_sga_call_log', true);
+                                            $call_info_meta = $call_log_meta[$row_index] ?? null;
+                                            $comment_text = $call_info_meta['comment'] ?? $call->post_content; // Fallback al contenido del CPT si no hay meta
+                                            $last_edited_by = $call_info_meta['last_edited_by'] ?? $data['user_info']->display_name; // Fallback al autor del CPT
+                                            $last_edited_timestamp = $call_info_meta['last_edited_timestamp'] ?? strtotime($call->post_date);
                                         ?>
-                                            <tr data-status="<?php echo esc_attr($current_status_key); ?>">
+                                            <tr data-status="<?php echo esc_attr($current_status_key); ?>" data-course="<?php echo esc_attr($course_name); ?>">
                                                 <td><?php echo esc_html(get_post_meta($call->ID, '_student_name', true)); ?></td>
                                                 <td><?php echo esc_html(get_field('cedula', $student_id)); ?></td>
                                                 <td>
                                                     <small><strong>Email:</strong> <?php echo esc_html(get_field('email', $student_id)); ?></small><br>
                                                     <small><strong>Tel:</strong> <?php echo esc_html(get_field('telefono', $student_id)); ?></small>
                                                 </td>
-                                                <td><?php echo esc_html(get_post_meta($call->ID, '_course_name', true)); ?></td>
+                                                <td><?php echo esc_html($course_name); ?></td>
                                                 <td><span class="ga-pill <?php echo esc_attr($status_details['class']); ?>"><?php echo esc_html($status_details['text']); ?></span></td>
-                                                <td><?php echo esc_html($call->post_content); ?></td>
-                                                <td><?php echo esc_html(get_the_date('d/m/Y h:i A', $call)); ?></td>
+                                                <td>
+                                                    <?php echo nl2br(esc_html($comment_text)); ?>
+                                                    <br><small>(Editado por: <?php echo esc_html($last_edited_by); ?> el <?php echo esc_html(date_i18n('d/m/Y H:i', $last_edited_timestamp)); ?>)</small>
+                                                </td>
+                                                <td><?php echo esc_html(get_the_date('d/m/Y H:i A', $call)); ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>

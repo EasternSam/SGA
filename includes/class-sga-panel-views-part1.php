@@ -1051,7 +1051,8 @@ class SGA_Panel_Views_Part1 {
                 $("#gestion-academica-app-container").on("click", "#exportar-llamadas-btn", function(e) {
                     e.preventDefault();
                     var searchTerm = $('#buscador-registro-llamadas').val();
-                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var agentFilter = $('#filtro-agente-llamadas').val(); // Filtro por ID
+                    var courseFilter = $('#filtro-curso-llamadas').val(); // Filtro por nombre curso
                     var statusFilter = $('#filtro-estado-llamadas-registro').val();
                     var nonce = '<?php echo wp_create_nonce("export_calls_nonce"); ?>';
 
@@ -1060,21 +1061,26 @@ class SGA_Panel_Views_Part1 {
                     url.searchParams.append('_wpnonce', nonce);
                     url.searchParams.append('search_term', searchTerm);
                     url.searchParams.append('agent_filter', agentFilter);
+                    url.searchParams.append('course_filter', courseFilter); // Añadir filtro curso
                     url.searchParams.append('status_filter', statusFilter);
                     
                     window.location.href = url.href;
                 });
 
+                // --- ACTUALIZACIÓN FUNCIÓN filterCallLog ---
                 function filterCallLog() {
                     var searchTerm = $('#buscador-registro-llamadas').val().toLowerCase();
-                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var agentFilter = $('#filtro-agente-llamadas').val(); // Filtro por ID
+                    var courseFilter = $('#filtro-curso-llamadas').val(); // Filtro por nombre curso
                     var statusFilter = $('#filtro-estado-llamadas-registro').val();
+                    var anySectionVisible = false;
                     
                     $('#sga-call-log-accordion .user-log-section').each(function() {
                         var userSection = $(this);
-                        var agentName = userSection.data('agent');
-                        var matchesAgent = (agentFilter === '' || agentName === agentFilter);
+                        var agentId = String(userSection.data('agent-id')); // Comparar por ID
+                        var matchesAgent = (agentFilter === '' || agentId === agentFilter);
                         
+                        // Si no coincide el agente, ocultar toda la sección y continuar
                         if (!matchesAgent) {
                             userSection.hide();
                             return; 
@@ -1085,13 +1091,19 @@ class SGA_Panel_Views_Part1 {
 
                         tableRows.each(function() {
                             var row = $(this);
-                            var rowText = row.text().toLowerCase();
+                            // Mejorar búsqueda: incluir cédula y contacto
+                            var studentName = row.find('td:nth-child(1)').text().toLowerCase();
+                            var studentCedula = row.find('td:nth-child(2)').text().toLowerCase();
+                            var studentContact = row.find('td:nth-child(3)').text().toLowerCase();
+                            var courseName = row.data('course').toLowerCase(); // Usar data attribute
                             var rowStatus = row.data('status');
+                            var rowTextForSearch = studentName + ' ' + studentCedula + ' ' + studentContact + ' ' + courseName;
 
-                            var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                            var matchesSearch = (searchTerm === '' || rowTextForSearch.includes(searchTerm));
                             var matchesStatus = (statusFilter === '' || rowStatus === statusFilter);
+                            var matchesCourse = (courseFilter === '' || row.data('course') === courseFilter); // Comparar con data attribute
 
-                            if (matchesSearch && matchesStatus) {
+                            if (matchesSearch && matchesStatus && matchesCourse) {
                                 row.show();
                                 matchingRowsInSection++;
                             } else {
@@ -1099,14 +1111,27 @@ class SGA_Panel_Views_Part1 {
                             }
                         });
 
-                        if (matchingRowsInSection > 0) {
+                        // Mostrar la sección del agente solo si tiene filas visibles Y coincide con el filtro de agente
+                        if (matchingRowsInSection > 0 && matchesAgent) {
                             userSection.show();
+                            anySectionVisible = true;
                         } else {
                             userSection.hide();
                         }
                     });
+
+                    // Mostrar mensaje si NINGUNA sección es visible
+                    var noResultsRow = $('#sga-call-log-accordion .no-results-calls');
+                    if (!anySectionVisible) {
+                        if (!noResultsRow.length) {
+                             $('#sga-call-log-accordion').append('<p class="no-results-calls" style="text-align: center; margin-top: 20px;">No se encontraron registros con los filtros aplicados.</p>');
+                        }
+                    } else {
+                        noResultsRow.remove();
+                    }
                 }
-                $('#buscador-registro-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro').on('keyup change', filterCallLog);
+                // Asegurar que los IDs de los nuevos filtros se usen aquí
+                $('#buscador-registro-llamadas, #filtro-curso-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro').on('keyup change', filterCallLog);
 
 
                 $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) {
