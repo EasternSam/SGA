@@ -15,19 +15,19 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     public function render_view_enviar_a_matriculacion() {
         $estudiantes_inscritos = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
-        
+
         $can_approve = $this->sga_user_has_role(['administrator', 'gestor_academico']);
         $current_user = wp_get_current_user();
-        
+
         // Usamos la función global SGA_Utils::_get_sga_agents()
         $agents = SGA_Utils::_get_sga_agents();
-        
+
         // --- 1. Lógica de Roles y Visibilidad Grupal ---
         $is_infotep_agent = $this->sga_user_has_role(['agente_infotep']);
         $is_standard_agent = $this->sga_user_has_role(['agente']);
         $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
         $infotep_category_slug = 'cursos-infotep';
-        
+
         $agent_visibility_ids = [];
 
         if ($current_user_role) {
@@ -41,7 +41,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         // --- 2. Pre-cargar el mapa de cursos y sus categorías (MÉTODO ESTABLE) ---
         $course_category_map = [];
         $course_ids_to_check = array_map(function($p) { return $p->ID; }, $cursos_disponibles);
-        
+
         foreach ($course_ids_to_check as $course_id) {
             $course_post = get_post($course_id);
             if ($course_post) {
@@ -108,7 +108,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                         <?php endif; ?>
                         <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
                         <th>Estado de Llamada</th>
-                        <th>Acción</th>
+                        <th style="min-width: 250px;">Registro de Llamadas / Acción</th> <!-- Ancho mínimo para comentarios -->
                     </tr>
                 </thead>
                 <tbody>
@@ -127,24 +127,24 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             if ($cursos) {
                                 foreach ($cursos as $index => $curso) {
                                     if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
-                                        
+
                                         $course_name = $curso['nombre_curso'];
                                         $course_categories = $course_category_map[$course_name] ?? [];
                                         $is_infotep_course = in_array($infotep_category_slug, $course_categories);
                                         $agent_id = $assignments[$index] ?? 'unassigned';
-                                        
+
                                         $should_display = $can_approve; // Administrador/Gestor siempre ve todo
 
                                         if (!$can_approve) {
                                             // Lógica de visibilidad para Agentes Estándar y Agentes de Infotep
-                                            
+
                                             // 1. ¿Está asignado a CUALQUIERA del grupo de agentes?
                                             // Nota: agent_id === 'unassigned' es una cadena, no un número, por eso el chequeo separado.
                                             $is_assigned_to_group = is_numeric($agent_id) && in_array(intval($agent_id), $agent_visibility_ids);
-                                            
+
                                             // 2. ¿La inscripción es no asignada?
                                             $is_unassigned = ($agent_id === 'unassigned');
-                                            
+
 
                                             if ($is_infotep_agent) {
                                                 // Agente de Infotep solo ve cursos-infotep ASIGNADOS a su grupo O NO ASIGNADOS (pero solo Infotep).
@@ -165,12 +165,12 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
 
                                         if ($should_display) {
                                             $hay_pendientes = true;
-                                            
+
                                             $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
                                             if (!is_array($call_statuses)) $call_statuses = [];
                                             $current_call_status = $call_statuses[$index] ?? 'pendiente';
-                                            
-                                            
+
+
                                             $agent_name = 'Sin Asignar';
                                             $row_style = '';
 
@@ -210,24 +210,9 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                                                         <span class="spinner"></span>
                                                     </div>
                                                 </td>
-                                                <td>
-                                                    <?php
-                                                    $call_log = get_post_meta($estudiante->ID, '_sga_call_log', true);
-                                                    if (!is_array($call_log)) $call_log = [];
-                                                    $call_info = $call_log[$index] ?? null;
-
-                                                    if ($call_info) {
-                                                        echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
-                                                        if (!empty($call_info['comment'])) {
-                                                            echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
-                                                        }
-                                                    } else {
-                                                        ?>
-                                                        <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
-                                                        <?php
-                                                    }
-
-                                                    if ($can_approve) { ?>
+                                                <td class="sga-call-log-cell" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>">
+                                                    <?php echo SGA_Utils::_get_call_log_html($estudiante->ID, $index); // Usar el helper para mostrar comentarios y botón ?>
+                                                    <?php if ($can_approve) { ?>
                                                         <button class="button button-primary aprobar-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>" data-nonce="<?php echo wp_create_nonce('aprobar_nonce'); ?>">
                                                             Aprobar
                                                         </button>

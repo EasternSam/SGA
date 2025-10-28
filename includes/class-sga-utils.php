@@ -77,15 +77,15 @@ class SGA_Utils {
 
         // Usar un transient separado para la rotación de cada rol
         $transient_key = 'sga_last_assigned_agent_index_' . $role_slug;
-        
+
         $last_assigned_index = get_transient($transient_key);
-        
+
         if (false === $last_assigned_index || $last_assigned_index >= count($agents) - 1) {
             $next_index = 0;
         } else {
             $next_index = ($last_assigned_index + 1);
         }
-        
+
         set_transient($transient_key, $next_index, DAY_IN_SECONDS);
         return $agents[$next_index]->ID;
     }
@@ -100,32 +100,105 @@ class SGA_Utils {
         if (empty($agent_ids)) {
             return null;
         }
-        
+
         // Asegurar que solo tengamos IDs únicos y válidos
         $valid_agent_ids = array_filter(array_unique(array_map('intval', $agent_ids)));
         if (empty($valid_agent_ids)) {
             return null;
         }
-        
+
         // Usar un transient único para esta acción de reparto manual
         $transient_key = 'sga_last_distributed_agent_index';
         $agent_count = count($valid_agent_ids);
-        
+
         $last_assigned_index = get_transient($transient_key);
-        
+
         if (false === $last_assigned_index || $last_assigned_index >= $agent_count - 1) {
             $next_index = 0;
         } else {
             $next_index = ($last_assigned_index + 1);
         }
-        
+
         set_transient($transient_key, $next_index, DAY_IN_SECONDS);
-        
+
         // Necesitamos reindexar el array para usar el índice de rotación
         $indexed_agents = array_values($valid_agent_ids);
         return $indexed_agents[$next_index];
     }
-    
+
+
+    /**
+     * Genera el HTML para mostrar el log de comentarios y el botón de acción.
+     *
+     * @param int $student_id ID del estudiante.
+     * @param int $row_index Índice del curso.
+     * @return string HTML generado.
+     */
+    public static function _get_call_log_html($student_id, $row_index) {
+        $call_log_all = get_post_meta($student_id, '_sga_call_log', true);
+        $comments_for_row = [];
+        if (is_array($call_log_all) && isset($call_log_all[$row_index]) && is_array($call_log_all[$row_index])) {
+            $comments_for_row = $call_log_all[$row_index];
+        }
+
+        $current_user_id = get_current_user_id();
+        $last_comment = !empty($comments_for_row) ? end($comments_for_row) : null;
+        $can_edit_last = ($last_comment && isset($last_comment['user_id']) && $last_comment['user_id'] == $current_user_id);
+
+        ob_start();
+
+        if (!empty($comments_for_row)) {
+            echo '<div class="sga-call-comments-wrapper" style="max-height: 150px; overflow-y: auto; margin-bottom: 10px; padding-right: 5px;">'; // Contenedor scrollable
+            foreach ($comments_for_row as $comment_info) {
+                ?>
+                <div class="sga-call-comment-block">
+                    <p class="sga-call-comment-meta">
+                        <strong><?php echo esc_html($comment_info['user_name'] ?? 'N/A'); ?></strong>
+                        <small>(<?php echo esc_html(isset($comment_info['timestamp']) ? date_i18n('d/m/Y H:i', $comment_info['timestamp']) : 'Fecha desconocida'); ?>)</small>
+                    </p>
+                    <p class="sga-call-comment-text">
+                        <?php echo nl2br(esc_html($comment_info['comment'] ?? '')); ?>
+                        <?php if (isset($comment_info['edited']) && $comment_info['edited']) : ?>
+                            <em>(editado)</em>
+                        <?php endif; ?>
+                    </p>
+                </div>
+                <?php
+            }
+            echo '</div>'; // Fin del contenedor scrollable
+        } else {
+            echo '<p style="font-size: 12px; color: var(--sga-text-light); margin-bottom: 10px;"><em>No hay comentarios previos.</em></p>';
+        }
+
+        // Mostrar botón de Añadir/Editar
+        $button_text = 'Añadir Comentario';
+        $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>';
+        $last_comment_text_attr = '';
+        $last_author_id_attr = '';
+
+        if ($can_edit_last) {
+            $button_text = 'Editar Último';
+            $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/></svg>';
+            $last_comment_text_attr = esc_attr($last_comment['comment'] ?? '');
+            $last_author_id_attr = esc_attr($last_comment['user_id'] ?? 0);
+        } else if ($last_comment){
+             // Si hay comentarios pero no puede editar, el botón sigue siendo "Añadir Comentario"
+             // pero pasamos el ID del último autor para que JS sepa que no puede editar.
+             $last_author_id_attr = esc_attr($last_comment['user_id'] ?? 0);
+        }
+        ?>
+        <button class="button button-secondary button-small sga-manage-comment-btn"
+                data-last-author-id="<?php echo $last_author_id_attr; ?>"
+                data-last-comment="<?php echo $last_comment_text_attr; ?>">
+            <?php echo $button_icon; ?>
+            <?php echo esc_html($button_text); ?>
+        </button>
+        <?php
+
+        return ob_get_clean();
+    }
+
+
     /**
      * Envía el correo inicial al estudiante para que proceda con el pago.
      */
@@ -134,7 +207,7 @@ class SGA_Utils {
             self::_log_activity('Error de Correo', "Intento de envío de correo de pago pendiente a dirección inválida: " . esc_html($student_email));
             return;
         }
-        
+
         $payment_options = get_option('sga_payment_options');
         $payments_enabled = isset($payment_options['enable_payments']) && $payment_options['enable_payments'] == 1;
 
@@ -172,7 +245,7 @@ class SGA_Utils {
                 'url' => $payment_url_with_cedula,
                 'text' => 'Pagar Ahora'
             ];
-            
+
             $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data, $button_data);
             self::_log_activity('Correo Enviado', "Correo de pago pendiente enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
 
@@ -200,7 +273,7 @@ class SGA_Utils {
         $headers = ['Content-Type: text/html; charset=UTF-8'];
         wp_mail($student_email, $subject, $body, $headers);
     }
-    
+
     /**
      * Lógica central para aprobar un estudiante, generar matrícula y enviar correo de confirmación.
      * @param int $post_id ID del post del estudiante.
@@ -321,7 +394,7 @@ class SGA_Utils {
                 if ($cursos) {
                     foreach ($cursos as $curso) {
                         $is_status_match = empty($status_filter) || (isset($curso['estado']) && $curso['estado'] == $status_filter);
-                        
+
                         if ($is_status_match) {
                             $cedula = get_field('cedula', $estudiante->ID);
                             $email = get_field('email', $estudiante->ID);
@@ -413,7 +486,7 @@ class SGA_Utils {
         $headers = ['Content-Type: text/html; charset=UTF-8'];
         wp_mail($student_email, $subject, $body, $headers);
     }
-    
+
     /**
      * Genera el HTML para la vista de perfil de un estudiante.
      * @param WP_Post $student_post El objeto post del estudiante.
@@ -431,7 +504,7 @@ class SGA_Utils {
         $telefono = get_field('telefono', $student_id);
         $direccion = get_field('direccion', $student_id);
         $cursos = get_field('cursos_inscritos', $student_id);
-        
+
         // Determinar si el usuario actual tiene permisos para imprimir
         // FIX: Se cambió para que sea visible para todos los que accedan a esta vista.
         $can_print = true; //<- Permite que todos vean el botón
@@ -515,7 +588,7 @@ class SGA_Utils {
         <?php
         return ob_get_clean();
     }
-    
+
     /**
      * Envía un correo con un reporte en PDF adjunto.
      */
@@ -577,12 +650,12 @@ class SGA_Utils {
                     if ($curso['nombre_curso'] === $context_course_name) {
                         $matricula = !empty($curso['matricula']) ? $curso['matricula'] : 'Pendiente';
                         $nombre_curso = $curso['nombre_curso'];
-                        break; 
+                        break;
                     }
                 }
             }
         }
-        
+
         $replacements['[nombre_curso]'] = $nombre_curso;
         $replacements['[matricula]'] = $matricula;
 
@@ -653,5 +726,52 @@ class SGA_Utils {
             }
         }
         return $count;
+    }
+
+     /**
+     * Genera la plantilla HTML base para los correos electrónicos.
+     * @param string $title Título principal del correo.
+     * @param string $content_html Contenido principal en HTML.
+     * @param string|null $summary_table_title Título para la tabla resumen (opcional).
+     * @param array|null $summary_data Datos para la tabla resumen (array asociativo 'Clave' => 'Valor') (opcional).
+     * @param array|null $button_data Datos para el botón de acción ['url' => '...', 'text' => '...'] (opcional).
+     * @return string HTML completo del correo.
+     */
+    public static function _get_email_template($title, $content_html, $summary_table_title = null, $summary_data = null, $button_data = null) {
+        $logo_id = 5754; // ID de tu logo en la mediateca
+        $logo_url = wp_get_attachment_url($logo_id);
+        $site_name = get_bloginfo('name');
+        $site_url = home_url('/');
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>body{margin:0;padding:0;background-color:#f4f4f7;font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#333}.container{max-width:600px;margin:20px auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 0 15px rgba(0,0,0,0.05)}.header{background-color:#141f53;padding:30px 20px;text-align:center}.header img{max-width:180px;height:auto}.content{padding:30px 40px}.content h1{color:#141f53;font-size:24px;margin:0 0 20px}.content p{margin:0 0 15px}.content p.last{margin-bottom:0}.summary-table{width:100%;margin:25px 0;border-collapse:collapse}.summary-table th,.summary-table td{border:1px solid #e0e0e0;padding:10px 12px;text-align:left}.summary-table th{background-color:#f8f9fa;font-weight:600;width:35%}.button-container{text-align:center;margin:30px 0}.button{display:inline-block;background-color:#4f46e5;color:#ffffff;padding:12px 25px;text-decoration:none;border-radius:5px;font-weight:600;font-size:16px}.footer{background-color:#f4f4f7;padding:20px 40px;text-align:center;font-size:12px;color:#777}.footer a{color:#4f46e5;text-decoration:none}</style>
+        </head><body>
+            <div class="container">
+                <div class="header"><?php if ($logo_url): ?><img src="<?php echo esc_url($logo_url); ?>" alt="<?php echo esc_attr($site_name); ?>"><?php endif; ?></div>
+                <div class="content">
+                    <h1><?php echo esc_html($title); ?></h1>
+                    <?php echo wp_kses_post($content_html); ?>
+                    <?php if ($summary_table_title && $summary_data): ?>
+                        <h2 style="font-size: 20px; color: #141f53; margin-top: 30px; margin-bottom: 15px;"><?php echo esc_html($summary_table_title); ?></h2>
+                        <table class="summary-table">
+                            <?php foreach ($summary_data as $key => $value): ?>
+                                <tr><th><?php echo esc_html($key); ?>:</th><td><?php echo esc_html($value); ?></td></tr>
+                            <?php endforeach; ?>
+                        </table>
+                    <?php endif; ?>
+                    <?php if ($button_data): ?>
+                        <div class="button-container"><a href="<?php echo esc_url($button_data['url']); ?>" class="button"><?php echo esc_html($button_data['text']); ?></a></div>
+                    <?php endif; ?>
+                </div>
+                <div class="footer">
+                    &copy; <?php echo date('Y'); ?> <?php echo esc_html($site_name); ?>. Todos los derechos reservados.<br>
+                    <a href="<?php echo esc_url($site_url); ?>"><?php echo esc_html($site_url); ?></a>
+                </div>
+            </div>
+        </body></html>
+        <?php
+        return ob_get_clean();
     }
 }

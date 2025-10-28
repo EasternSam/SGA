@@ -25,7 +25,7 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_test_api_connection', array($this, 'ajax_test_api_connection'));
         add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
         add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status'));
-        add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
+        add_action('wp_ajax_sga_manage_call_comment', array($this, 'ajax_manage_call_comment')); // Renombrado y actualizado
         add_action('wp_ajax_sga_get_panel_view_html', array($this, 'ajax_get_panel_view_html'));
         add_action('wp_ajax_sga_check_pending_inscriptions', array($this, 'ajax_check_pending_inscriptions'));
         add_action('wp_ajax_sga_distribute_inscriptions', array($this, 'ajax_distribute_pending_inscriptions'));
@@ -36,7 +36,80 @@ class SGA_Ajax {
     }
 
     /**
+     * AJAX: Gestiona la adición o edición de comentarios de llamada.
+     */
+    public function ajax_manage_call_comment() {
+        // Verificar nonce y permisos (asegúrate que el nonce coincida con el enviado desde JS)
+        if (!check_ajax_referer('sga_manage_comment_nonce', 'security', false)) {
+             wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        }
+        if (!current_user_can('edit_estudiantes')) { // O una capacidad más específica si la tienes
+            wp_send_json_error(['message' => 'No tienes permisos.'], 403);
+        }
+
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        $row_index = isset($_POST['row_index']) ? intval($_POST['row_index']) : -1;
+        $comment_text = isset($_POST['comment']) ? sanitize_textarea_field($_POST['comment']) : '';
+        $edit_mode = isset($_POST['edit_mode']) && $_POST['edit_mode'] === 'true';
+        $current_user_id = get_current_user_id();
+        $user_info = get_userdata($current_user_id);
+        $user_name = $user_info ? $user_info->display_name : 'Usuario Desconocido';
+
+        if ($post_id <= 0 || $row_index < 0) {
+            wp_send_json_error(['message' => 'Datos inválidos.']);
+        }
+
+        $call_log = get_post_meta($post_id, '_sga_call_log', true);
+        if (!is_array($call_log)) {
+            $call_log = [];
+        }
+        if (!isset($call_log[$row_index]) || !is_array($call_log[$row_index])) {
+             $call_log[$row_index] = []; // Inicializar como array si no existe o no es un array
+        }
+
+        $last_comment_index = count($call_log[$row_index]) - 1;
+        $can_edit = false;
+
+        if ($last_comment_index >= 0 && isset($call_log[$row_index][$last_comment_index]['user_id'])) {
+            $can_edit = ($call_log[$row_index][$last_comment_index]['user_id'] == $current_user_id);
+        }
+
+        if ($edit_mode && $can_edit) {
+            // Editar el último comentario
+            $call_log[$row_index][$last_comment_index]['comment'] = $comment_text;
+            $call_log[$row_index][$last_comment_index]['timestamp'] = current_time('timestamp');
+            $call_log[$row_index][$last_comment_index]['edited'] = true; // Marcar como editado (opcional)
+             $log_action = 'Comentario Editado';
+        } else {
+            // Añadir un nuevo comentario
+            $new_comment = [
+                'user_id'   => $current_user_id,
+                'user_name' => $user_name,
+                'timestamp' => current_time('timestamp'),
+                'comment'   => $comment_text,
+            ];
+            $call_log[$row_index][] = $new_comment; // Añadir al final del array para este índice
+            $log_action = 'Comentario Añadido';
+        }
+
+        // Guardar el log actualizado
+        update_post_meta($post_id, '_sga_call_log', $call_log);
+
+        // Registrar actividad general
+        $student_post = get_post($post_id);
+        $student_name = $student_post ? $student_post->post_title : "ID: {$post_id}";
+        SGA_Utils::_log_activity($log_action, "Se gestionó un comentario para {$student_name} (Índice curso: {$row_index}) por {$user_name}.");
+
+        // Devolver el HTML actualizado para la celda
+        $updated_html = SGA_Utils::_get_call_log_html($post_id, $row_index);
+        wp_send_json_success(['html' => $updated_html]);
+    }
+
+
+    /**
      * AJAX: Reparte las inscripciones pendientes no asignadas entre los agentes seleccionados.
+     * Lógica actualizada: Prioridad 1 para agente que llamó (si está en lista).
+     * Prioridad 2 (Rotación) para TODOS los demás casos, forzando reasignación equitativa.
      */
     public function ajax_distribute_pending_inscriptions() {
         if (!check_ajax_referer('sga_distribute_nonce', 'security', false)) {
@@ -50,27 +123,42 @@ class SGA_Ajax {
         if (empty($agent_ids)) {
             wp_send_json_error(['message' => 'No se seleccionaron agentes.']);
         }
-        
-        // 1. Recolectar TODAS las inscripciones pendientes ('Inscrito').
-        // Se incluyen todas para aplicar la lógica de prioridad y sobreescritura.
+
+        // 1. Recolectar TODAS las inscripciones pendientes ('Inscrito') con sus datos de prioridad.
         $all_pending_inscriptions = [];
         $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
 
         foreach ($estudiantes as $estudiante) {
             $cursos = get_field('cursos_inscritos', $estudiante->ID);
-            
+            $assignments = get_post_meta($estudiante->ID, '_sga_agent_assignments', true);
+            $call_log_raw = get_post_meta($estudiante->ID, '_sga_call_log', true); // Ahora puede ser un array de arrays
+
+            if (!is_array($assignments)) $assignments = [];
+            if (!is_array($call_log_raw)) $call_log_raw = [];
+
             if ($cursos) {
                 foreach ($cursos as $index => $curso) {
                     if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
+                        // Obtener el ID del agente de la *última* llamada para este índice, si existe
+                        $calling_agent_id = null;
+                        if (isset($call_log_raw[$index]) && is_array($call_log_raw[$index]) && !empty($call_log_raw[$index])) {
+                            $last_call = end($call_log_raw[$index]);
+                            if (isset($last_call['user_id'])) {
+                                $calling_agent_id = intval($last_call['user_id']);
+                            }
+                        }
+
                         $all_pending_inscriptions[] = [
                             'student_id' => $estudiante->ID,
                             'row_index'  => $index,
-                            'course_name' => $curso['nombre_curso'],
+                            'current_agent_id' => isset($assignments[$index]) ? intval($assignments[$index]) : null,
+                            'calling_agent_id' => $calling_agent_id, // ID del último que llamó
                         ];
                     }
                 }
             }
         }
+
 
         if (empty($all_pending_inscriptions)) {
             wp_send_json_success(['message' => 'No hay inscripciones pendientes para repartir.']);
@@ -78,45 +166,41 @@ class SGA_Ajax {
 
         $assignments_log = [];
         $total_assigned = 0;
-        
+        $total_updated = 0; // Contador para saber cuántas asignaciones realmente cambiaron
+
         // 2. Procesar el reparto con lógica de prioridad
         foreach ($all_pending_inscriptions as $inscription) {
             $student_id = $inscription['student_id'];
             $row_index = $inscription['row_index'];
             $agent_to_assign = null;
-            
-            // A. PRIORIDAD 1: Agente de la última llamada
-            $call_log = get_post_meta($student_id, '_sga_call_log', true);
-            $call_info = $call_log[$row_index] ?? null;
 
-            if ($call_info && isset($call_info['user_id'])) {
-                $calling_agent_id = intval($call_info['user_id']);
-                
-                // Si el agente que llamó está en la lista de agentes seleccionados, se le asigna.
-                if (in_array($calling_agent_id, $agent_ids)) {
-                    $agent_to_assign = $calling_agent_id;
-                }
+            // **A. PRIORIDAD 1: Agente de la última llamada (si está en la lista)**
+            if ($inscription['calling_agent_id'] && in_array($inscription['calling_agent_id'], $agent_ids)) {
+                $agent_to_assign = $inscription['calling_agent_id'];
             }
-            
-            // B. PRIORIDAD 2: Rotación forzada si no se encontró un agente llamador válido
-            if (!$agent_to_assign) {
-                // Usa _get_next_agent_from_list para obtener el siguiente agente rotativo
+            // **B. PRIORIDAD 2: Rotación (PARA TODOS LOS DEMÁS CASOS)**
+            // Esto fuerza la reasignación equitativa incluso si ya estaba asignado a alguien de la lista.
+            else {
                 $agent_to_assign = SGA_Utils::_get_next_agent_from_list($agent_ids);
             }
-            
+
             // C. Asignar y registrar el log
             if ($agent_to_assign) {
-                SGA_Utils::_assign_inscription_to_agent($student_id, $row_index, $agent_to_assign);
-                
+                // Solo actualizamos la DB si la asignación es nueva o diferente
+                if ($agent_to_assign !== $inscription['current_agent_id']) {
+                    SGA_Utils::_assign_inscription_to_agent($student_id, $row_index, $agent_to_assign);
+                    $total_updated++;
+                }
+
                 if (!isset($assignments_log[$agent_to_assign])) $assignments_log[$agent_to_assign] = 0;
                 $assignments_log[$agent_to_assign]++;
-                $total_assigned++;
+                $total_assigned++; // Contamos todas las inscripciones procesadas
             }
         }
 
 
         // 3. Registrar la actividad final.
-        $log_details = "Se repartieron {$total_assigned} inscripciones pendientes entre " . count($agent_ids) . " agentes. Resumen:\n";
+        $log_details = "Se procesaron {$total_assigned} inscripciones pendientes para " . count($agent_ids) . " agentes. {$total_updated} asignaciones fueron actualizadas. Resumen del reparto:\n";
         foreach ($assignments_log as $agent_id => $count) {
             $agent_info = get_userdata($agent_id);
             $agent_name = $agent_info ? $agent_info->display_name : "ID Desconocido ({$agent_id})";
@@ -124,7 +208,7 @@ class SGA_Ajax {
         }
         SGA_Utils::_log_activity('Inscripciones Repartidas', $log_details);
 
-        wp_send_json_success(['message' => "Proceso de reparto completado. Se asignaron {$total_assigned} inscripciones."]);
+        wp_send_json_success(['message' => "Proceso de reparto completado. Se procesaron {$total_assigned} inscripciones ({$total_updated} actualizadas)."]);
     }
 
 
@@ -138,7 +222,7 @@ class SGA_Ajax {
         if (!current_user_can('edit_estudiantes')) {
             wp_send_json_error(['message' => 'No tienes permisos.'], 403);
         }
-        
+
         $count = SGA_Utils::_get_pending_inscriptions_count();
 
         wp_send_json_success(['count' => $count]);
@@ -205,7 +289,7 @@ class SGA_Ajax {
             wp_send_json_error(array('message' => 'No se pudo procesar ningún estudiante.'));
         }
     }
-    
+
     /**
      * AJAX: Genera y descarga un archivo Excel con los estudiantes matriculados.
      */
@@ -231,7 +315,7 @@ class SGA_Ajax {
         $reports_handler = new SGA_Reports();
         $reports_handler->ajax_sga_print_invoice();
     }
-    
+
     /**
      * AJAX: Imprime el expediente de un estudiante en PDF.
      */
@@ -318,7 +402,7 @@ class SGA_Ajax {
                 update_sub_field(['cursos_inscritos', $row_index + 1, 'estado'], $estado, $student_id);
             }
         }
-        
+
         SGA_Utils::_log_activity('Perfil Actualizado', 'Se actualizó el perfil del estudiante ID: ' . $student_id);
         wp_send_json_success(['message' => 'Perfil actualizado.']);
     }
@@ -338,7 +422,7 @@ class SGA_Ajax {
         $curso_especifico = sanitize_text_field($_POST['curso']);
         $subject = sanitize_text_field($_POST['subject']);
         $body_template = wp_kses_post(stripslashes_deep($_POST['body']));
-        
+
         $recipients_data = [];
 
         if ($recipient_group === 'especificos') {
@@ -395,13 +479,13 @@ class SGA_Ajax {
         if (empty($recipients_data)) {
             wp_send_json_error(['message' => 'No se encontraron destinatarios para los criterios seleccionados.']);
         }
-        
+
         $sent_count = 0;
         foreach ($recipients_data as $student_id => $recipient_email) {
             $personalized_body = SGA_Utils::_replace_dynamic_tags($body_template, $student_id, $recipient_group, $curso_especifico);
             $email_template = SGA_Utils::_get_email_template($subject, $personalized_body);
             $headers = ['Content-Type: text/html; charset=UTF-8'];
-            
+
             if (wp_mail($recipient_email, $subject, $email_template, $headers)) {
                 $sent_count++;
             }
@@ -562,3 +646,4 @@ class SGA_Ajax {
         wp_send_json_success(['labels' => $labels, 'data' => $data]);
     }
 }
+
