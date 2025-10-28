@@ -44,12 +44,12 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
 
         <div id="ga-modal-comentario-llamada" class="ga-modal" style="display:none;">
             <div class="ga-modal-content">
-                <h4>Gestionar Comentario de Llamada</h4>
-                <p>Añade o edita tu comentario sobre esta interacción.</p>
+                <h4>Añadir Comentario a la Llamada</h4>
+                <p>Puedes añadir una nota o comentario sobre esta llamada (opcional).</p>
                 <textarea id="sga-comentario-llamada-texto" placeholder="Escribe tu comentario aquí..." rows="4" style="width: 100%;"></textarea>
                 <div class="ga-modal-actions">
                     <button id="ga-modal-comentario-cancelar" class="button button-secondary">Cancelar</button>
-                    <button id="ga-modal-comentario-guardar" class="button button-primary">Guardar</button>
+                    <button id="ga-modal-comentario-guardar" class="button button-primary">Marcar y Guardar</button>
                 </div>
             </div>
         </div>

@@ -144,7 +144,7 @@ class SGA_Panel_Views_Part1 {
     }
 
     // --- VISTA DE MATRICULACIÓN (Menú Secundario) ---
-
+    
     public function render_view_matriculacion() {
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
@@ -248,7 +248,7 @@ class SGA_Panel_Views_Part1 {
         </div>
         <?php
     }
-
+    
     // --- MÉTODOS DE ESTILOS Y SCRIPTS ---
 
     public function render_panel_styles() {
@@ -266,9 +266,9 @@ class SGA_Panel_Views_Part1 {
             }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             #gestion-academica-app-container { padding: 20px; }
-            .gestion-academica-wrapper {
+            .gestion-academica-wrapper { 
                 position: relative;
-                background-color: var(--sga-white); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: var(--shadow-lg);
+                background-color: var(--sga-white); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; box-shadow: var(--shadow-lg); 
             }
             #sga-panel-loader {
                 position: absolute;
@@ -286,7 +286,7 @@ class SGA_Panel_Views_Part1 {
             }
             .panel-view { display: none; padding: 30px 40px; animation: fadeIn 0.5s ease-out; }
             .panel-view.active { display: block; }
-
+            
             /* Header */
             .panel-header-info { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--sga-gray); }
             .user-welcome p { margin: 0; color: var(--sga-text-light); font-size: 14px; }
@@ -341,18 +341,10 @@ class SGA_Panel_Views_Part1 {
             .button-secondary { background-color: var(--sga-light) !important; color: var(--sga-text) !important; border-color: var(--sga-gray) !important; }
             .button-secondary:hover { background-color: var(--sga-gray) !important; }
             .ga-check-column { width: 2.2em; }
-
+            
             /* Status Pills & Comments */
             .estado-inscrito { color: var(--sga-yellow); background-color: #fffbeb; padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: 12px; }
-            .sga-call-log-cell .sga-call-comment-block { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--sga-gray); }
-            .sga-call-log-cell .sga-call-comment-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-            .sga-call-comment-meta { font-size: 11px; color: var(--sga-text-light); margin-bottom: 3px; }
-            .sga-call-comment-meta strong { color: var(--sga-text); }
-            .sga-call-comment-text { font-size: 13px; color: var(--sga-text); margin: 0; white-space: pre-wrap; word-wrap: break-word; }
-            .sga-call-comment-text em { color: var(--sga-text-light); } /* Para el "(editado)" */
-            .sga-manage-comment-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 5px; } /* Ajuste del botón */
-            .sga-manage-comment-btn svg { width: 16px; height: 16px; }
-
+            .sga-call-comment { font-size: 12px; color: var(--sga-text-light); margin: 5px 0 0 0; padding-left: 5px; border-left: 2px solid var(--sga-gray); }
             .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 16px; color: var(--sga-white); }
             .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
             .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
@@ -362,7 +354,7 @@ class SGA_Panel_Views_Part1 {
             .ga-pill-llamada-no_contesta { background-color: #94a3b8; }
             .ga-pill-llamada-numero_incorrecto { background-color: var(--sga-pink); }
             .ga-pill-llamada-rechazado { background-color: var(--sga-red); }
-
+            
             /* Course View Switcher */
             .view-switcher { display: flex; gap: 5px; background-color: var(--sga-gray); padding: 4px; border-radius: 8px; margin-left: auto; }
             .view-btn { background-color: transparent; border: none; padding: 6px 8px; cursor: pointer; border-radius: 6px; color: var(--sga-text-light); transition: all 0.2s ease; }
@@ -407,7 +399,7 @@ class SGA_Panel_Views_Part1 {
             .ga-modal-icon-wrapper { width: 50px; height: 50px; margin: 0 auto 20px; background-color: var(--sga-green); color: var(--sga-white); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
             .ga-modal-content h4 { margin-top: 0; font-size: 18px; color: var(--sga-text); }
             .ga-modal-actions { margin-top: 25px; display: flex; justify-content: center; gap: 10px; }
-
+            
             /* Student Profile View */
             #panel-view-perfil_estudiante .sga-profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; }
             #panel-view-perfil_estudiante .sga-profile-card { background-color: var(--sga-light); border: 1px solid var(--sga-gray); border-radius: 12px; padding: 25px; }
@@ -442,7 +434,7 @@ class SGA_Panel_Views_Part1 {
             .report-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
             .chart-container { position: relative; height: 300px; }
             @media (max-width: 960px) { .report-grid { grid-template-columns: 1fr; } }
-
+            
             /* Call Log Accordion */
             #sga-call-log-accordion .user-log-section {
                 border: 1px solid var(--sga-gray);
@@ -516,59 +508,7 @@ class SGA_Panel_Views_Part1 {
         foreach($agents as $agent) {
             $agents_for_js[] = ['id' => $agent->ID, 'name' => $agent->display_name];
         }
-        // Pasar el ID del usuario actual al JavaScript
-        wp_localize_script('sga-panel-script', 'sgaPanelData', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'current_user_id' => get_current_user_id(),
-            'agents' => $agents_for_js,
-            'nonces' => [
-                'get_view' => wp_create_nonce('sga_get_view_nonce'),
-                'approve_single' => wp_create_nonce('aprobar_nonce'),
-                'approve_bulk' => wp_create_nonce('aprobar_bulk_nonce'),
-                'update_call_status' => wp_create_nonce('sga_update_call_status_general_nonce'), // Usar un nonce general o generar dinámicamente
-                'manage_comment' => wp_create_nonce('sga_manage_comment_nonce'),
-                'get_profile' => wp_create_nonce('sga_get_profile_nonce'),
-                'update_profile' => wp_create_nonce('sga_update_profile_nonce'),
-                'send_bulk_email' => wp_create_nonce('sga_send_bulk_email_nonce'),
-                'chart' => wp_create_nonce('sga_chart_nonce'),
-                'distribute' => wp_create_nonce('sga_distribute_nonce'),
-                'export_excel' => wp_create_nonce('export_nonce'),
-                'export_moodle' => wp_create_nonce('export_nonce'), // Mismo nonce para exportación
-                'export_calls' => wp_create_nonce('export_calls_nonce'),
-                 'test_api' => wp_create_nonce('sga_test_api_nonce'),
-                 'pending_check' => wp_create_nonce("sga_pending_nonce")
-            ]
-        ));
-        // Asegúrate de que 'sga-panel-script' sea el handle de tu script principal si lo tienes encolado
-        // Si no, puedes simplemente imprimir los datos JS directamente.
         ?>
-        <script>
-            // Imprimir los datos localizados si no usas wp_enqueue_script/wp_localize_script
-             if (typeof sgaPanelData === 'undefined') {
-                var sgaPanelData = {
-                    ajax_url: "<?php echo admin_url('admin-ajax.php'); ?>",
-                    current_user_id: <?php echo get_current_user_id(); ?>,
-                    agents: <?php echo json_encode($agents_for_js); ?>,
-                    nonces: {
-                        get_view: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>',
-                        approve_single: '<?php echo wp_create_nonce("aprobar_nonce"); ?>',
-                        approve_bulk: '<?php echo wp_create_nonce("aprobar_bulk_nonce"); ?>',
-                        update_call_status: '<?php echo wp_create_nonce("sga_update_call_status_general_nonce"); ?>',
-                        manage_comment: '<?php echo wp_create_nonce("sga_manage_comment_nonce"); ?>',
-                        get_profile: '<?php echo wp_create_nonce("sga_get_profile_nonce"); ?>',
-                        update_profile: '<?php echo wp_create_nonce("sga_update_profile_nonce"); ?>',
-                        send_bulk_email: '<?php echo wp_create_nonce("sga_send_bulk_email_nonce"); ?>',
-                        chart: '<?php echo wp_create_nonce("sga_chart_nonce"); ?>',
-                        distribute: '<?php echo wp_create_nonce("sga_distribute_nonce"); ?>',
-                        export_excel: '<?php echo wp_create_nonce("export_nonce"); ?>',
-                        export_moodle: '<?php echo wp_create_nonce("export_nonce"); ?>',
-                        export_calls: '<?php echo wp_create_nonce("export_calls_nonce"); ?>',
-                        test_api: '<?php echo wp_create_nonce("sga_test_api_nonce"); ?>',
-                        pending_check: '<?php echo wp_create_nonce("sga_pending_nonce"); ?>'
-                    }
-                };
-             }
-        </script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
             jQuery(document).ready(function($) {
@@ -585,15 +525,14 @@ class SGA_Panel_Views_Part1 {
                 }
                 setDynamicDateTime();
                 setInterval(setDynamicDateTime, 1000);
-
-                var ajaxurl = sgaPanelData.ajax_url;
-                var currentUserId = sgaPanelData.current_user_id;
-                var nonces = sgaPanelData.nonces;
+                
+                // RESTO DEL CÓDIGO JS DE NAVEGACIÓN Y FUNCIONALIDAD (SIN CAMBIOS FUNCIONALES)
+                var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
                 var approvalData = {};
-                var commentData = {}; // Objeto para guardar datos del comentario actual
+                var callData = {};
                 var inscriptionsChart;
                 var viewsToRefresh = {};
-                var sgaAgents = sgaPanelData.agents;
+                var sgaAgents = <?php echo json_encode($agents_for_js); ?>;
 
                 $("#gestion-academica-app-container").on("click", ".panel-nav-link", function(e) {
                     e.preventDefault();
@@ -621,7 +560,7 @@ class SGA_Panel_Views_Part1 {
                         $.post(ajaxurl, {
                             action: 'sga_get_panel_view_html',
                             view: view,
-                            _ajax_nonce: nonces.get_view
+                            _ajax_nonce: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>'
                         }).done(function(response) {
                             if (response.success) {
                                 targetPanel.html(response.data.html);
@@ -635,16 +574,15 @@ class SGA_Panel_Views_Part1 {
                             switchView();
                         });
                     } else {
-                        setTimeout(switchView, 200);
+                        setTimeout(switchView, 200); 
                     }
                 });
 
-                // --- Lógica Aprobación (Sin cambios) ---
                 $("#tabla-pendientes").on("click", ".aprobar-btn", function() {
                     var btn = $(this);
                     approvalData = {
                         type: 'single',
-                        nonce: nonces.approve_single, // Usar nonce general si no se genera dinámico
+                        nonce: btn.data('nonce'),
                         post_id: btn.data('postid'),
                         row_index: btn.data('rowindex'),
                         cedula: btn.data('cedula'),
@@ -653,199 +591,700 @@ class SGA_Panel_Views_Part1 {
                     };
                     $("#ga-modal-confirmacion").fadeIn(200);
                 });
-                $("#apply-bulk-action").on("click", function() { /* ... */ });
-                $("#ga-modal-confirmar").on("click", function() { /* ... */ });
-                $("#ga-modal-cancelar, .ga-modal").on("click", function(e) {
-                     if (e.target == this || $(this).is("#ga-modal-cancelar")) {
-                         closeModal();
-                         $('#ga-modal-comentario-llamada').fadeOut(200); // Cerrar modal comentario también
-                         $('#ga-modal-repartir-agentes').fadeOut(200);
-                     }
-                 });
-                function closeModal() {
-                     $("#ga-modal-confirmacion").fadeOut(200);
-                     $("#ga-modal-confirmar").text('Confirmar y Enviar').prop('disabled', false);
-                     $("#ga-modal-cancelar").prop('disabled', false);
-                     approvalData = {};
-                 }
 
-                // --- Lógica Comentarios Llamada (Actualizada) ---
-                $("#gestion-academica-app-container").on("click", ".sga-manage-comment-btn", function() {
-                    var btn = $(this);
-                    var cell = btn.closest('.sga-call-log-cell');
-                    var postId = cell.data('postid');
-                    var rowIndex = cell.data('rowindex');
-                    
-                    // --- LÓGICA JS MODIFICADA ---
-                    var lastCommentAuthorId = btn.data('last-author-id') || 0;
-                    var lastCommentText = btn.data('last-comment') || '';
-                    var hasComments = btn.data('has-comments') == '1';
-                    
-                    // Determinar modo edición
-                    var editMode = (hasComments && lastCommentAuthorId == currentUserId);
-
-                    // Capturar el texto del botón (sin el HTML del icono)
-                    var buttonText = btn.clone().children().remove().end().text().trim(); 
-                    // --- FIN LÓGICA JS MODIFICADA ---
-
-
-                    commentData = { // Guardar datos para el guardado
-                        post_id: postId,
-                        row_index: rowIndex,
-                        edit_mode: editMode,
-                        cell_element: cell // Guardar la celda para actualizarla después
-                    };
-
-                    // Configurar el modal
-                    var modal = $('#ga-modal-comentario-llamada');
-                    
-                    // --- LÓGICA DE MODAL ACTUALIZADA ---
-                    if (buttonText === 'Editar comentario') {
-                        modal.find('h4').text('Editar Último Comentario');
-                        modal.find('#sga-comentario-llamada-texto').val(lastCommentText);
-                        modal.find('#ga-modal-comentario-guardar').text('Guardar Cambios');
-                    } else if (buttonText === 'Añadir comentario') {
-                        modal.find('h4').text('Añadir Nuevo Comentario');
-                        modal.find('#sga-comentario-llamada-texto').val('');
-                        modal.find('#ga-modal-comentario-guardar').text('Añadir Comentario');
-                    } else { // 'Marcar como llamado'
-                        modal.find('h4').text('Marcar como Llamado y Añadir Comentario');
-                        modal.find('#sga-comentario-llamada-texto').val('');
-                        modal.find('#ga-modal-comentario-guardar').text('Marcar y Guardar');
+                $("#apply-bulk-action").on("click", function() {
+                    if ($("#bulk-action-select").val() !== 'aprobar') {
+                        alert('Por favor, selecciona una acción válida.');
+                        return;
                     }
-                    // --- FIN LÓGICA DE MODAL ACTUALIZADA ---
-
-                    modal.fadeIn(200);
+                    var seleccionados = [];
+                    $("#tabla-pendientes .bulk-checkbox:checked").each(function() {
+                        var checkbox = $(this);
+                        seleccionados.push({
+                            post_id: checkbox.data('postid'),
+                            row_index: checkbox.data('rowindex')
+                        });
+                    });
+                    if (seleccionados.length > 0) {
+                        approvalData = {
+                            type: 'bulk',
+                            nonce: '<?php echo wp_create_nonce("aprobar_bulk_nonce"); ?>',
+                            seleccionados: seleccionados,
+                            element: $(this)
+                        };
+                        $("#ga-modal-confirmacion").fadeIn(200);
+                    } else {
+                        alert('Por favor, selecciona al menos un estudiante.');
+                    }
                 });
 
-                // Guardar comentario (Añadir o Editar)
-                $('#ga-modal-comentario-guardar').on('click', function() {
+                $("#ga-modal-confirmar").on("click", function() {
                     var btn = $(this);
-                    var commentText = $('#sga-comentario-llamada-texto').val();
+                    btn.text('Procesando...').prop('disabled', true);
+                    $("#ga-modal-cancelar").prop('disabled', true);
 
-                    btn.prop('disabled', true).text('Guardando...');
-                    $('#ga-modal-comentario-cancelar').prop('disabled', true); // Deshabilitar cancelar también
+                    if (approvalData.type === 'single') {
+                        $.post(ajaxurl, {
+                            action: 'aprobar_para_matriculacion',
+                            _ajax_nonce: approvalData.nonce,
+                            post_id: approvalData.post_id,
+                            row_index: approvalData.row_index,
+                            cedula: approvalData.cedula,
+                            nombre: approvalData.nombre
+                        }).done(function(response) {
+                            if (response.success) {
+                                viewsToRefresh['lista_matriculados'] = true;
+                                viewsToRefresh['cursos'] = true;
+                                approvalData.element.closest('tr').fadeOut(500, function() {
+                                    $(this).remove();
+                                    checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                });
+                            } else {
+                                alert('Hubo un error: ' + (response.data || 'Error desconocido'));
+                            }
+                            closeModal();
+                        }).fail(function(jqXHR, textStatus, errorThrown) {
+                            console.error("AJAX Error:", textStatus, errorThrown);
+                            alert('Hubo un error de comunicación con el servidor.');
+                            closeModal();
+                        });
+                    } else if (approvalData.type === 'bulk') {
+                        $.post(ajaxurl, {
+                            action: 'aprobar_seleccionados',
+                            _ajax_nonce: approvalData.nonce,
+                            seleccionados: approvalData.seleccionados
+                        }).done(function(response) {
+                            if (response.success) {
+                                if (response.data.approved && response.data.approved.length > 0) {
+                                    viewsToRefresh['lista_matriculados'] = true;
+                                    viewsToRefresh['cursos'] = true;
+                                    response.data.approved.forEach(function(estudiante) {
+                                        $('#tabla-pendientes .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
+                                            $(this).remove();
+                                            checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                        });
+                                    });
+                                }
+                                if (response.data.failed && response.data.failed.length > 0) {
+                                    var errorMsg = 'No se pudo aprobar a ' + response.data.failed.length + ' estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.';
+                                    alert(errorMsg);
+                                    console.log("Estudiantes no aprobados:", response.data.failed);
+                                }
+                            } else {
+                                alert('Hubo un error al procesar la solicitud: ' + (response.data.message || 'Error desconocido'));
+                            }
+                            closeModal();
+                            $("#select-all-pendientes").prop("checked", false);
+                            $("#tabla-pendientes .bulk-checkbox").prop("checked", false);
+                        }).fail(function(jqXHR, textStatus, errorThrown) {
+                            console.error("AJAX Error:", textStatus, errorThrown);
+                            alert('Hubo un error de comunicación con el servidor.');
+                            closeModal();
+                        });
+                    }
+                });
+
+                $("#gestion-academica-app-container").on('change', '.sga-call-status-select', function(e) {
+                    var select = $(this);
+                    var post_id = select.data('postid');
+                    var row_index = select.data('rowindex');
+                    var nonce = select.data('nonce');
+                    var status = select.val();
+                    var spinner = select.next('.spinner');
+
+                    select.prop('disabled', true);
+                    spinner.addClass('is-active');
 
                     $.post(ajaxurl, {
-                        action: 'sga_manage_call_comment',
-                        security: nonces.manage_comment, // Usar el nonce correcto
-                        post_id: commentData.post_id,
-                        row_index: commentData.row_index,
-                        comment: commentText,
-                        edit_mode: commentData.edit_mode
+                        action: 'sga_update_call_status',
+                        _ajax_nonce: nonce,
+                        post_id: post_id,
+                        row_index: row_index,
+                        status: status
                     }).done(function(response) {
-                        if (response.success) {
-                            // Reemplazar contenido de la celda con el HTML actualizado
-                            commentData.cell_element.html(response.data.html);
-                            
-                            // Si fue una acción de "Marcar como llamado" (nuevo comentario), actualizamos el dropdown
-                            if (response.data.status_updated) {
-                                var dropdown = commentData.cell_element.closest('tr').find('.sga-call-status-select');
-                                if (dropdown.length) {
-                                    dropdown.val('contactado');
-                                    // Actualizar el data-attribute para el filtrado
-                                    dropdown.closest('tr').data('call-status', 'contactado');
-                                }
-                            }
-
-                            viewsToRefresh['registro_llamadas'] = true; // Marcar para refrescar si se navega
-                            $('#ga-modal-comentario-llamada').fadeOut(200);
+                        if (!response.success) {
+                            alert('Error: ' + (response.data.message || 'Error desconocido'));
                         } else {
-                            alert('Error al guardar: ' + (response.data.message || 'Error desconocido'));
+                            select.closest('tr').data('call-status', status);
+                            viewsToRefresh['registro_llamadas'] = true;
                         }
                     }).fail(function() {
-                        alert('Error de conexión al guardar comentario.');
+                        alert('Error de conexión.');
                     }).always(function() {
-                        // Restaurar botón y modal independientemente del resultado
-                        btn.prop('disabled', false);
-                        $('#ga-modal-comentario-cancelar').prop('disabled', false);
-                        // El texto del botón se restaura al abrir el modal la próxima vez
+                        select.prop('disabled', false);
+                        spinner.removeClass('is-active');
                     });
                 });
 
-                 $('#ga-modal-comentario-cancelar').on('click', function() {
-                     $('#ga-modal-comentario-llamada').fadeOut(200);
-                 });
+                $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
+                    var btn = $(this);
+                    callData = {
+                        post_id: btn.data('postid'),
+                        row_index: btn.data('rowindex'),
+                        nonce: btn.data('nonce'),
+                        element: btn
+                    };
+                    $('#sga-comentario-llamada-texto').val('');
+                    $('#ga-modal-comentario-llamada').fadeIn(200);
+                });
 
+                $('#ga-modal-comentario-guardar').on('click', function() {
+                    var btn = $(this);
+                    var comment = $('#sga-comentario-llamada-texto').val();
+                    var cell = callData.element.parent();
 
-                // --- Lógica Filtros, Exportación, Perfil, Comunicación, Reportes (Sin cambios funcionales relevantes aquí) ---
-                function filterPendientesTable() { /* ... */ }
-                function filterTable(tableSelector, searchInputSelector, courseFilterSelector) { /* ... */ }
-                function filterLogTable() { /* ... */ }
-                function filterCourses() { /* ... */ }
+                    btn.prop('disabled', true).text('Guardando...');
+                    callData.element.prop('disabled', true);
+
+                    $.post(ajaxurl, {
+                        action: 'sga_marcar_llamado',
+                        _ajax_nonce: callData.nonce,
+                        post_id: callData.post_id,
+                        row_index: callData.row_index,
+                        comment: comment
+                    }).done(function(response) {
+                        if (response.success) {
+                            cell.html(response.data.html);
+                            viewsToRefresh['registro_llamadas'] = true;
+                            $('#ga-modal-comentario-llamada').fadeOut(200);
+                        } else {
+                            alert('Error: ' + (response.data.message || 'Error desconocido'));
+                        }
+                    }).fail(function() {
+                        alert('Error de conexión.');
+                    }).always(function() {
+                        btn.prop('disabled', false).text('Marcar y Guardar');
+                        callData.element.prop('disabled', false);
+                    });
+                });
+
+                $('#ga-modal-comentario-cancelar').on('click', function() {
+                    $('#ga-modal-comentario-llamada').fadeOut(200);
+                });
+
+                function closeModal() {
+                    $("#ga-modal-confirmacion").fadeOut(200);
+                    $("#ga-modal-confirmar").text('Confirmar y Enviar').prop('disabled', false);
+                    $("#ga-modal-cancelar").prop('disabled', false);
+                    approvalData = {};
+                }
+
+                function checkEmptyTable(tableId, colspan, message) {
+                    if ($(tableId + ' tbody tr:not(.no-results-search)').length === 0 && !$(tableId + ' .no-results').length) {
+                        $(tableId + ' tbody').append('<tr class="no-results"><td colspan="' + colspan + '">' + message + '</td></tr>');
+                    }
+                }
+
+                $("#ga-modal-cancelar, .ga-modal").on("click", function(e) {
+                    if (e.target == this || $(this).is("#ga-modal-cancelar")) {
+                        closeModal();
+                        $('#ga-modal-repartir-agentes').fadeOut(200);
+                    }
+                });
+
+                $("#select-all-pendientes").on("click", function() {
+                    $("#tabla-pendientes .bulk-checkbox").prop('checked', this.checked);
+                });
+
+                function filterPendientesTable() {
+                    var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
+                    var courseFilter = $('#filtro-curso-pendientes').val();
+                    var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
+                    var agentFilter = $('#filtro-agente-asignado').val() || '';
+                    var rowsFound = 0;
+
+                    $('#tabla-pendientes tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
+                            return;
+                        }
+
+                        var rowText = row.text().toLowerCase();
+                        var rowCourse = row.data('curso');
+                        var rowCallStatus = row.data('call-status');
+                        var rowAgentId = String(row.data('agent-id'));
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesCourse = (courseFilter === '' || rowCourse === courseFilter);
+                        var matchesCallStatus = (callStatusFilter === '' || rowCallStatus === callStatusFilter);
+                        var matchesAgent = (agentFilter === '' || rowAgentId === agentFilter);
+
+                        if (matchesSearch && matchesCourse && matchesCallStatus && matchesAgent) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+
+                    $('#tabla-pendientes .no-results-search').remove();
+                    if (rowsFound === 0 && !$('#tabla-pendientes .no-results').is(':visible')) {
+                        var colspan = $('#tabla-pendientes thead th').length;
+                        $('#tabla-pendientes tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
+
+                function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
+                    var searchTerm = $(searchInputSelector).val().toLowerCase();
+                    var courseFilter = courseFilterSelector ? $(courseFilterSelector).val() : '';
+                    var rowsFound = 0;
+
+                    $(tableSelector + ' tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
+                            return;
+                        }
+
+                        var rowText = row.text().toLowerCase();
+                        var rowCourse = row.data('curso');
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesCourse = (!courseFilterSelector || courseFilter === '' || rowCourse === courseFilter);
+
+                        if (matchesSearch && matchesCourse) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+
+                    $(tableSelector + ' .no-results-search').remove();
+                    if (rowsFound === 0 && !$(tableSelector + ' .no-results').is(':visible')) {
+                        $(tableSelector + ' tbody').append('<tr class="no-results-search"><td colspan="100%">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
+                
+                function filterLogTable() {
+                    var searchTerm = $('#buscador-log').val().toLowerCase();
+                    var userFilter = $('#filtro-usuario-log').val();
+                    var dateFrom = $('#filtro-fecha-inicio').val();
+                    var dateTo = $('#filtro-fecha-fin').val();
+                    var rowsFound = 0;
+
+                    $('#tabla-log tbody tr').each(function() {
+                        var row = $(this);
+                        if (row.hasClass('no-results')) {
+                            return;
+                        }
+                        var rowText = row.text().toLowerCase();
+                        var rowUser = row.data('usuario');
+                        var rowDate = row.data('fecha');
+
+                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesUser = (userFilter === '' || rowUser === userFilter);
+                        var matchesDate = true;
+                        
+                        if(dateFrom && dateTo) {
+                            matchesDate = rowDate >= dateFrom && rowDate <= dateTo;
+                        } else if (dateFrom) {
+                            matchesDate = rowDate >= dateFrom;
+                        } else if (dateTo) {
+                            matchesDate = rowDate <= dateTo;
+                        }
+
+                        if (matchesSearch && matchesUser && matchesDate) {
+                            row.show();
+                            rowsFound++;
+                        } else {
+                            row.hide();
+                        }
+                    });
+                    
+                    $('#tabla-log .no-results-search').remove();
+                    if (rowsFound === 0 && !$('#tabla-log .no-results').is(':visible')) {
+                         $('#tabla-log tbody').append('<tr class="no-results-search"><td colspan="4">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    }
+                }
+
+                function filterCourses() {
+                    var searchTerm = $('#buscador-cursos').val().toLowerCase();
+                    var escuelaFilter = $('#filtro-escuela-cursos').val();
+                    var visibilidadFilter = $('#filtro-visibilidad-cursos').val();
+
+                    $('.curso-card, #tabla-cursos-lista tbody tr').each(function() {
+                        var element = $(this);
+                        if (element.hasClass('no-results')) return;
+
+                        var elementText = element.data('search-term');
+                        var elementEscuelas = element.data('escuela').split(' ');
+                        var elementVisibilidad = element.data('visibilidad');
+
+                        var matchesSearch = (searchTerm === '' || elementText.includes(searchTerm));
+                        var matchesEscuela = (escuelaFilter === '' || elementEscuelas.includes(escuelaFilter));
+                        var matchesVisibilidad = (visibilidadFilter === '' || elementVisibilidad === visibilidadFilter);
+
+                        if (matchesSearch && matchesEscuela && matchesVisibilidad) {
+                            element.show();
+                        } else {
+                            element.hide();
+                        }
+                    });
+                }
                 $("#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos").on("keyup change", filterCourses);
                 $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() { filterPendientesTable(); });
                 $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
                 $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
                 $("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change", function() { filterLogTable(); });
-                $("#exportar-btn").on("click", function(e) { /* ... */ });
-                $("#gestion-academica-app-container").on("click", "#exportar-llamadas-btn", function(e) { /* ... */ });
-                function filterCallLog() { /* ... */ }
+
+                $("#exportar-btn").on("click", function(e) {
+                    e.preventDefault();
+                    var format = $('#export-format-select').val();
+                    var searchTerm = $('#buscador-matriculados').val();
+                    var courseFilter = $('#filtro-curso-matriculados').val();
+                    var nonce = '<?php echo wp_create_nonce("export_nonce"); ?>';
+                    var url = new URL(ajaxurl);
+                    url.searchParams.append('action', format === 'excel' ? 'exportar_excel' : 'exportar_moodle_csv');
+                    url.searchParams.append('_wpnonce', nonce);
+                    url.searchParams.append('search_term', searchTerm);
+                    url.searchParams.append('course_filter', courseFilter);
+                    window.location.href = url.href;
+                });
+
+                $("#gestion-academica-app-container").on("click", "#exportar-llamadas-btn", function(e) {
+                    e.preventDefault();
+                    var searchTerm = $('#buscador-registro-llamadas').val();
+                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var statusFilter = $('#filtro-estado-llamadas-registro').val();
+                    var nonce = '<?php echo wp_create_nonce("export_calls_nonce"); ?>';
+
+                    var url = new URL(ajaxurl);
+                    url.searchParams.append('action', 'sga_exportar_registro_llamadas');
+                    url.searchParams.append('_wpnonce', nonce);
+                    url.searchParams.append('search_term', searchTerm);
+                    url.searchParams.append('agent_filter', agentFilter);
+                    url.searchParams.append('status_filter', statusFilter);
+                    
+                    window.location.href = url.href;
+                });
+
+                function filterCallLog() {
+                    var searchTerm = $('#buscador-registro-llamadas').val().toLowerCase();
+                    var agentFilter = $('#filtro-agente-llamadas').val();
+                    var statusFilter = $('#filtro-estado-llamadas-registro').val();
+                    
+                    $('#sga-call-log-accordion .user-log-section').each(function() {
+                        var userSection = $(this);
+                        var agentName = userSection.data('agent');
+                        var matchesAgent = (agentFilter === '' || agentName === agentFilter);
+                        
+                        if (!matchesAgent) {
+                            userSection.hide();
+                            return; 
+                        }
+
+                        var tableRows = userSection.find('.user-log-content tbody tr');
+                        var matchingRowsInSection = 0;
+
+                        tableRows.each(function() {
+                            var row = $(this);
+                            var rowText = row.text().toLowerCase();
+                            var rowStatus = row.data('status');
+
+                            var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                            var matchesStatus = (statusFilter === '' || rowStatus === statusFilter);
+
+                            if (matchesSearch && matchesStatus) {
+                                row.show();
+                                matchingRowsInSection++;
+                            } else {
+                                row.hide();
+                            }
+                        });
+
+                        if (matchingRowsInSection > 0) {
+                            userSection.show();
+                        } else {
+                            userSection.hide();
+                        }
+                    });
+                }
                 $('#buscador-registro-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro').on('keyup change', filterCallLog);
-                $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) { /* ... */ });
+
+
+                $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) {
+                    e.preventDefault();
+                    var courseName = $(this).data('curso-nombre');
+                    $('.panel-view').removeClass('active').hide();
+                    $('#panel-view-lista_matriculados').addClass('active').show();
+                    $('#filtro-curso-matriculados').val(courseName).change();
+                    $('#buscador-matriculados').val('');
+                });
+                
                 $("#buscador-pagos").on("keyup", function() { filterTable('#tabla-pagos', '#buscador-pagos', null); });
-                $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() { /* ... */ });
-                $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() { /* ... */ });
-                $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() { /* ... */ });
-                $('#sga-email-recipient-group').on('change', function() { /* ... */ });
-                $('#sga-estudiantes-search').on('keyup', function() { /* ... */ });
-                $('#sga-send-bulk-email-btn').on('click', function() { /* ... */ });
-                $('#report_type').on('change', function() { /* ... */ }).trigger('change');
-                $('.view-switcher').on('click', '.view-btn', function(e) { /* ... */ });
-                function renderInscriptionsChart() { /* ... */ }
-                $('#gestion-academica-app-container').on('click', '#sga-call-log-accordion .user-log-title button', function() { /* ... */ });
 
-                // --- Lógica de Reparto de Agentes (Sin cambios) ---
-                $('#panel-view-enviar_a_matriculacion').on('click', '#sga-distribute-btn', function() { /* ... */ });
-                $('#ga-modal-repartir-confirmar').on('click', function() { /* ... */ });
-                $('#ga-modal-repartir-cancelar').on('click', function() { /* ... */ });
+                $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
+                    var studentId = $(this).data('estudiante-id');
+                    var profileContainer = $("#sga-student-profile-content");
+                    profileContainer.html('<div class="sga-profile-loading"><div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>Cargando perfil del estudiante...</div>');
+                    
+                    $(".panel-view.active").fadeOut(200, function() {
+                        $(this).removeClass("active");
+                        $("#panel-view-perfil_estudiante").fadeIn(200).addClass("active");
+                    });
 
-                 // Checkbox general
-                 $("#select-all-pendientes").on("click", function() {
-                     $("#tabla-pendientes .bulk-checkbox").prop('checked', this.checked);
-                 });
+                    $.post(ajaxurl, {
+                        action: 'sga_get_student_profile_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_get_profile_nonce"); ?>',
+                        student_id: studentId
+                    }).done(function(response) {
+                        if (response.success) {
+                            profileContainer.html(response.data.html);
+                        } else {
+                            profileContainer.html('<div class="sga-profile-error">Error al cargar el perfil: ' + response.data.message + '</div>');
+                        }
+                    }).fail(function() {
+                        profileContainer.html('<div class="sga-profile-error">Error de comunicación con el servidor.</div>');
+                    });
+                });
 
-                 // Helper para tabla vacía
-                 function checkEmptyTable(tableId, colspan, message) {
-                     if ($(tableId + ' tbody tr:not(.no-results-search)').length === 0 && !$(tableId + ' .no-results').length) {
-                         $(tableId + ' tbody').append('<tr class="no-results"><td colspan="' + colspan + '">' + message + '</td></tr>');
-                     }
-                 }
+                $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() {
+                    $(".panel-view.active").fadeOut(200, function() {
+                        $(this).removeClass("active");
+                        $("#panel-view-estudiantes").fadeIn(200).addClass("active");
+                    });
+                });
 
-                 // Actualizar estado llamada (sin cambios funcionales)
-                 $("#gestion-academica-app-container").on('change', '.sga-call-status-select', function(e) {
-                     var select = $(this);
-                     var post_id = select.data('postid');
-                     var row_index = select.data('rowindex');
-                     var nonce = select.data('nonce'); // Asegúrate que el nonce se genera correctamente en PHP
-                     var status = select.val();
-                     var spinner = select.next('.spinner');
+                $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
+                    var btn = $(this);
+                    btn.text('Guardando...').prop('disabled', true);
+                    var studentId = btn.data('student-id');
+                    var profileData = {
+                        nombre_completo: $('#sga-profile-nombre_completo').val(),
+                        cedula: $('#sga-profile-cedula').val(),
+                        email: $('#sga-profile-email').val(),
+                        telefono: $('#sga-profile-telefono').val(),
+                        direccion: $('#sga-profile-direccion').val(),
+                        cursos: []
+                    };
+                    $('#sga-profile-cursos-tbody tr').each(function() {
+                        var row = $(this);
+                        profileData.cursos.push({
+                            row_index: row.data('row-index'),
+                            estado: row.find('.sga-profile-curso-estado').val()
+                        });
+                    });
 
-                     select.prop('disabled', true);
-                     spinner.addClass('is-active');
+                    $.post(ajaxurl, {
+                        action: 'sga_update_student_profile_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_update_profile_nonce"); ?>',
+                        student_id: studentId,
+                        profile_data: profileData
+                    }).done(function(response) {
+                        if (response.success) {
+                            alert('Perfil actualizado correctamente.');
+                            viewsToRefresh['estudiantes'] = true;
+                            viewsToRefresh['lista_matriculados'] = true;
+                            viewsToRefresh['enviar_a_matriculacion'] = true;
+                        } else {
+                            alert('Error al guardar: ' + response.data.message);
+                        }
+                        btn.text('Guardar Cambios').prop('disabled', false);
+                    }).fail(function() {
+                        alert('Error de comunicación al guardar.');
+                        btn.text('Guardar Cambios').prop('disabled', false);
+                    });
+                });
 
-                     $.post(ajaxurl, {
-                         action: 'sga_update_call_status',
-                         _ajax_nonce: nonce, // Usa el nonce específico si lo generas por fila
-                         // O usa el general: security: nonces.update_call_status,
-                         post_id: post_id,
-                         row_index: row_index,
-                         status: status
-                     }).done(function(response) {
-                         if (!response.success) {
-                             alert('Error: ' + (response.data.message || 'Error desconocido'));
-                         } else {
-                             select.closest('tr').data('call-status', status); // Actualizar el data-attribute
-                             viewsToRefresh['registro_llamadas'] = true;
-                         }
-                     }).fail(function() {
-                         alert('Error de conexión.');
-                     }).always(function() {
-                         select.prop('disabled', false);
-                         spinner.removeClass('is-active');
-                     });
-                 });
+                $('#sga-email-recipient-group').on('change', function() {
+                    var selectedGroup = $(this).val();
+                    if (selectedGroup === 'por_curso') {
+                        $('#sga-curso-selector-group').slideDown();
+                        $('#sga-estudiantes-especificos-group').slideUp();
+                    } else if (selectedGroup === 'especificos') {
+                        $('#sga-curso-selector-group').slideUp();
+                        $('#sga-estudiantes-especificos-group').slideDown();
+                    } else {
+                        $('#sga-curso-selector-group').slideUp();
+                        $('#sga-estudiantes-especificos-group').slideUp();
+                    }
+                });
 
+                $('#sga-estudiantes-search').on('keyup', function() {
+                    var searchTerm = $(this).val().toLowerCase();
+                    $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
+                        var itemText = $(this).data('search-term');
+                        if (itemText.includes(searchTerm)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                });
+
+                $('#sga-send-bulk-email-btn').on('click', function() {
+                    var btn = $(this);
+                    var statusDiv = $('#sga-email-status');
+                    var editorContent = typeof tinymce !== 'undefined' && tinymce.get('sga-email-body') ? tinymce.get('sga-email-body').getContent() : $('#sga-email-body').val();
+
+                    if (!$('#sga-email-subject').val() || !editorContent) {
+                        alert('Por favor, completa el asunto y el mensaje.');
+                        return;
+                    }
+
+                    btn.prop('disabled', true).siblings('.spinner').addClass('is-active');
+                    statusDiv.hide().removeClass('success error');
+                    
+                    var recipientGroup = $('#sga-email-recipient-group').val();
+                    var postData = {
+                        action: 'sga_send_bulk_email',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_send_bulk_email_nonce"); ?>',
+                        recipient_group: recipientGroup,
+                        curso: $('#sga-email-curso-select').val(),
+                        subject: $('#sga-email-subject').val(),
+                        body: editorContent,
+                    };
+
+                    if (recipientGroup === 'especificos') {
+                        var selectedStudents = [];
+                        $('.sga-specific-student-checkbox:checked').each(function() {
+                            selectedStudents.push($(this).val());
+                        });
+
+                        if (selectedStudents.length === 0) {
+                            alert('Por favor, selecciona al menos un estudiante.');
+                            btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                            return;
+                        }
+                        postData.student_ids = JSON.stringify(selectedStudents);
+                    }
+
+                    $.post(ajaxurl, postData).done(function(response) {
+                        if (response.success) {
+                            statusDiv.addClass('success').html(response.data.message).slideDown();
+                            $('#sga-email-subject').val('');
+                            if (typeof tinymce !== 'undefined' && tinymce.get('sga-email-body')) {
+                                tinymce.get('sga-email-body').setContent('');
+                            } else {
+                                $('#sga-email-body').val('');
+                            }
+                        } else {
+                            statusDiv.addClass('error').html('Error: ' + response.data.message).slideDown();
+                        }
+                    }).fail(function() {
+                        statusDiv.addClass('error').html('Error de comunicación con el servidor.').slideDown();
+                    }).always(function() {
+                        btn.prop('disabled', false).siblings('.spinner').removeClass('is-active');
+                    });
+                });
+
+                $('#report_type').on('change', function() {
+                    const reportType = $(this).val();
+                    const cursoFilter = $('#report-curso-filter-container');
+                    const agenteFilter = $('#report-agente-filter-container');
+                    cursoFilter.hide();
+                    agenteFilter.hide();
+                    if (reportType === 'matriculados' || reportType === 'pendientes' || reportType === 'historial_llamadas') {
+                        cursoFilter.slideDown();
+                    }
+                    if (reportType === 'historial_llamadas') {
+                        agenteFilter.slideDown();
+                    }
+                }).trigger('change');
+                
+                $('.view-switcher').on('click', '.view-btn', function(e) {
+                    e.preventDefault();
+                    var $this = $(this);
+                    if ($this.hasClass('active')) return;
+                    var targetView = $this.data('view');
+                    $('.view-btn').removeClass('active');
+                    $this.addClass('active');
+                    if (targetView === 'grid') {
+                        $('.cursos-list-view').fadeOut(200, function() { $('.cursos-grid').fadeIn(200); });
+                    } else {
+                        $('.cursos-grid').fadeOut(200, function() { $('.cursos-list-view').fadeIn(200); });
+                    }
+                });
+
+                function renderInscriptionsChart() {
+                    if (inscriptionsChart) { inscriptionsChart.destroy(); }
+                    var ctx = document.getElementById('inscriptionsChart').getContext('2d');
+                    var chartContainer = $('.chart-container');
+                    chartContainer.html('<canvas id="inscriptionsChart"></canvas><div class="chart-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);"><span class="spinner is-active"></span></div>');
+                    ctx = document.getElementById('inscriptionsChart').getContext('2d');
+
+                    $.post(ajaxurl, {
+                        action: 'sga_get_report_chart_data',
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_chart_nonce"); ?>'
+                    }).done(function(response) {
+                        chartContainer.find('.chart-loading').remove();
+                        if(response.success) {
+                            inscriptionsChart = new Chart(ctx, {
+                                type: 'line',
+                                data: { labels: response.data.labels, datasets: [{ label: 'Inscripciones por Mes', data: response.data.data, backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: 'rgba(79, 70, 229, 1)', borderWidth: 2, tension: 0.4, fill: true }] },
+                                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                            });
+                        } else {
+                            chartContainer.html('<p>No se pudieron cargar los datos.</p>');
+                        }
+                    }).fail(function() {
+                        chartContainer.find('.chart-loading').remove();
+                        chartContainer.html('<p>Error al contactar al servidor.</p>');
+                    });
+                }
+                
+                $('#gestion-academica-app-container').on('click', '#sga-call-log-accordion .user-log-title button', function() {
+                    var button = $(this);
+                    var content = button.closest('.user-log-section').find('.user-log-content');
+                    var isExpanded = button.attr('aria-expanded') === 'true';
+                    button.attr('aria-expanded', !isExpanded);
+                    content.slideToggle(200);
+                });
+
+                // --- Lógica de Reparto de Agentes ---
+                $('#panel-view-enviar_a_matriculacion').on('click', '#sga-distribute-btn', function() {
+                    var agentListHtml = '';
+                    if (sgaAgents.length > 0) {
+                        sgaAgents.forEach(function(agent) {
+                            agentListHtml += '<label><input type="checkbox" class="sga-distribute-agent" value="' + agent.id + '"> ' + agent.name + '</label><br>';
+                        });
+                    } else {
+                        agentListHtml = '<p>No hay agentes disponibles para asignar.</p>';
+                    }
+                    $('#sga-distribute-agent-list').html(agentListHtml);
+                    $('#ga-modal-repartir-agentes').fadeIn(200);
+                });
+
+                $('#ga-modal-repartir-confirmar').on('click', function() {
+                    var btn = $(this);
+                    var selectedAgents = [];
+                    $('.sga-distribute-agent:checked').each(function() {
+                        selectedAgents.push($(this).val());
+                    });
+
+                    if (selectedAgents.length === 0) {
+                        alert('Por favor, selecciona al menos un agente.');
+                        return;
+                    }
+
+                    btn.prop('disabled', true).text('Repartiendo...');
+                    $('#sga-panel-loader').fadeIn(150);
+
+                    $.post(ajaxurl, {
+                        action: 'sga_distribute_inscriptions',
+                        security: '<?php echo wp_create_nonce("sga_distribute_nonce"); ?>',
+                        agent_ids: selectedAgents
+                    }).done(function(response) {
+                        if (response.success) {
+                            alert(response.data.message);
+                            viewsToRefresh['enviar_a_matriculacion'] = true;
+                            // Forzar recarga de la vista actual
+                            $(".panel-nav-link[data-view='enviar_a_matriculacion']").first().trigger('click');
+                        } else {
+                            alert('Error: ' + response.data.message);
+                        }
+                    }).fail(function() {
+                        alert('Error de comunicación con el servidor.');
+                    }).always(function() {
+                        btn.prop('disabled', false).text('Confirmar Reparto');
+                        $('#ga-modal-repartir-agentes').fadeOut(200);
+                        $('#sga-panel-loader').fadeOut(150);
+                    });
+                });
+
+                 $('#ga-modal-repartir-cancelar').on('click', function() {
+                    $('#ga-modal-repartir-agentes').fadeOut(200);
+                });
 
             });
         </script>
