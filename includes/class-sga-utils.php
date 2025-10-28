@@ -113,6 +113,7 @@ class SGA_Utils {
         
         $last_assigned_index = get_transient($transient_key);
         
+        // La rotación siempre se basa en el índice del array $valid_agent_ids
         if (false === $last_assigned_index || $last_assigned_index >= $agent_count - 1) {
             $next_index = 0;
         } else {
@@ -436,11 +437,9 @@ class SGA_Utils {
         // FIX: Se cambió para que sea visible para todos los que accedan a esta vista.
         $can_print = true; //<- Permite que todos vean el botón
 
-        $print_url = add_query_arg([
-            'action' => 'sga_print_student_profile',
-            'student_id' => $student_id,
-            '_wpnonce' => wp_create_nonce('sga_print_profile_' . $student_id)
-        ], admin_url('admin-ajax.php'));
+        // La URL ya no es para descarga directa de PDF, sino para abrir el modal de impresión.
+        $print_nonce = wp_create_nonce('sga_render_print_profile_' . $student_id);
+        $print_url = "#"; // Se maneja con JS
 
         ob_start();
         ?>
@@ -504,11 +503,13 @@ class SGA_Utils {
         </div>
         <div class="sga-profile-actions">
             <?php if ($can_print) { ?>
-            <!-- BOTÓN PARA IMPRIMIR EL EXPEDIENTE -->
-            <a href="<?php echo esc_url($print_url); ?>" class="button button-secondary" target="_blank" style="margin-right: auto;">
+            <!-- BOTÓN PARA IMPRIMIR EL EXPEDIENTE (Abre diálogo de impresión vía JS) -->
+            <button id="sga-print-expediente-btn" class="button button-secondary" style="margin-right: auto;" 
+                data-student-id="<?php echo $student_id; ?>"
+                data-nonce="<?php echo esc_attr($print_nonce); ?>">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
                 Imprimir Expediente
-            </a>
+            </button>
             <?php } ?>
             <button id="sga-profile-save-btn" class="button button-primary" data-student-id="<?php echo $student_id; ?>">Guardar Cambios</button>
         </div>
@@ -653,5 +654,269 @@ class SGA_Utils {
             }
         }
         return $count;
+    }
+    
+    /**
+     * Busca y retorna el ID del último CPT 'sga_llamada' para una inscripción específica.
+     * @param int $student_id ID del post del estudiante.
+     * @param int $row_index Índice de la fila del curso en el repeater.
+     * @return int|null ID del post sga_llamada si se encuentra, o null.
+     */
+    public static function _get_last_call_log_post_id($student_id, $row_index) {
+        $args = array(
+            'post_type'      => 'sga_llamada',
+            'posts_per_page' => 1,
+            'meta_query'     => array(
+                array('key' => '_student_id', 'value' => $student_id, 'compare' => '='),
+                array('key' => '_row_index', 'value' => $row_index, 'compare' => '='),
+            ),
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+        );
+        $posts = get_posts($args);
+        return !empty($posts) ? $posts[0] : null;
+    }
+
+    /**
+     * Actualiza el comentario en el CPT 'sga_llamada' y el meta de la inscripción.
+     * @param int $call_log_post_id ID del post sga_llamada.
+     * @param int $student_id ID del post del estudiante.
+     * @param int $row_index Índice de la fila del curso en el repeater.
+     * @param string $new_comment Nuevo comentario.
+     * @param string $user_name Nombre del usuario que edita.
+     * @return bool
+     */
+    public static function _update_call_log_comment($call_log_post_id, $student_id, $row_index, $new_comment, $user_name) {
+        if (!get_post($call_log_post_id)) {
+            self::_log_activity('Error de Edición de Comentario', "No se encontró el post de registro de llamada ID: {$call_log_post_id}.", null);
+            return false;
+        }
+
+        // 1. Actualizar el CPT sga_llamada (post_content)
+        $updated = wp_update_post(array(
+            'ID'           => $call_log_post_id,
+            'post_content' => sanitize_textarea_field($new_comment),
+            'post_modified' => current_time('mysql'), // Asegurar que la fecha de CPT se actualice
+        ));
+
+        // 2. Actualizar el meta de la inscripción (_sga_call_log)
+        $call_log = get_post_meta($student_id, '_sga_call_log', true);
+        if (!is_array($call_log)) {
+            $call_log = [];
+        }
+
+        if (isset($call_log[$row_index])) {
+            $call_log[$row_index]['comment'] = sanitize_textarea_field($new_comment);
+            // Opcional: registrar quién y cuándo editó.
+            $call_log[$row_index]['last_edited_by'] = $user_name;
+            $call_log[$row_index]['last_edited_timestamp'] = time();
+
+            update_post_meta($student_id, '_sga_call_log', $call_log);
+            self::_log_activity('Comentario de Llamada Editado', "El comentario de la inscripción ID: {$student_id} (fila {$row_index}) fue editado por {$user_name}.", null);
+            return true;
+        }
+
+        self::_log_activity('Error de Edición de Comentario', "No se encontró el índice de la inscripción para el estudiante ID: {$student_id}.", null);
+        return false;
+    }
+
+    /**
+     * Genera el HTML para mostrar la información del registro de llamada en la tabla.
+     * @param int $student_id ID del post del estudiante.
+     * @param int $row_index Índice de la fila del curso en el repeater.
+     * @param array $call_info Datos del registro de llamada (del meta _sga_call_log).
+     * @param int $call_log_post_id ID del CPT sga_llamada.
+     * @param bool $can_edit Determina si se deben incluir los botones de edición/añadir.
+     * @return string HTML generado.
+     */
+    public static function _get_call_log_html($student_id, $row_index, $call_info, $call_log_post_id, $can_edit = true) {
+        $html = 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
+        
+        $comment = $call_info['comment'] ?? '';
+        
+        if ($can_edit) {
+            // El nonce debe ser dinámico para el contexto de edición, no de marcado
+            $edit_nonce = wp_create_nonce('sga_edit_llamado_' . $student_id . '_' . $row_index);
+            $edit_btn_text = empty($comment) ? '(Añadir Comentario)' : '(Editar)';
+
+            if (!empty($comment)) {
+                $html .= '<p class="sga-call-comment"><em>' . esc_html($comment) . '</em>';
+            } else {
+                $html .= '<p class="sga-call-comment-placeholder" style="margin: 5px 0 0 0; padding-left: 5px; border-left: 2px solid var(--sga-gray); font-size: 12px; color: var(--sga-text-light);"><em>Sin comentario.</em>';
+            }
+            
+            $html .= '<button class="button-link sga-edit-llamado-btn" ';
+            $html .= 'data-postid="' . $student_id . '" ';
+            $html .= 'data-rowindex="' . $row_index . '" ';
+            $html .= 'data-log-id="' . $call_log_post_id . '" '; 
+            $html .= 'data-comment="' . esc_attr($comment) . '" ';
+            $html .= 'data-nonce="' . $edit_nonce . '" ';
+            $html .= 'style="margin-left: 5px; color: var(--sga-secondary); font-size: 12px; border: none; background: none; padding: 0; cursor: pointer; text-decoration: underline;">' . $edit_btn_text . '</button></p>';
+        } else {
+            if (!empty($comment)) {
+                 $html .= '<p class="sga-call-comment"><em>' . esc_html($comment) . '</em></p>';
+            }
+        }
+        
+        return $html;
+    }
+
+    /**
+     * Renderiza el expediente del estudiante en formato HTML puro para la impresión.
+     * Este es el contenido que se debe usar en la ventana de impresión.
+     * @param int $student_id ID del post del estudiante.
+     * @return string|false HTML del expediente o false si el estudiante no existe.
+     */
+    public static function _get_student_profile_print_html($student_id) {
+        $student_post = get_post($student_id);
+        if (!$student_post || 'estudiante' !== $student_post->post_type) return false;
+
+        $nombre_completo = $student_post->post_title;
+        $cedula = get_field('cedula', $student_id);
+        $email = get_field('email', $student_id);
+        $telefono = get_field('telefono', $student_id);
+        $direccion = get_field('direccion', $student_id);
+        $cursos = get_field('cursos_inscritos', $student_id);
+
+        $logo_id = 5024; // ID de ejemplo para el logo
+        $logo_src = '';
+        // Intenta obtener la URL del logo
+        if ($logo_id && $logo_url = wp_get_attachment_url($logo_id)) {
+            $logo_src = $logo_url;
+        }
+        
+        $report_title = 'Expediente Estudiantil: ' . $nombre_completo;
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+        <title><?php echo esc_html($report_title); ?></title>
+        <style>
+            @media print {
+                /* Estilos específicos para impresión */
+                body {
+                    font-family: Arial, sans-serif;
+                    font-size: 11pt;
+                    color: #333;
+                    margin: 0;
+                    padding: 0;
+                    -webkit-print-color-adjust: exact; /* Para imprimir colores de fondo */
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                    border-bottom: 3px solid #141f53;
+                    padding-bottom: 15px;
+                }
+                .header img {
+                    max-height: 60px;
+                    margin-bottom: 10px;
+                }
+                h1 {
+                    font-size: 20pt;
+                    color: #141f53;
+                    margin: 0;
+                }
+                .subtitle {
+                    font-size: 9pt;
+                    color: #555;
+                    margin-top: 5px;
+                }
+                .section-title {
+                    font-size: 14pt;
+                    color: #4f46e5;
+                    border-bottom: 2px solid #e0e0e0;
+                    padding-bottom: 5px;
+                    margin-top: 25px;
+                    margin-bottom: 15px;
+                }
+                .data-grid {
+                    display: table;
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 15px;
+                }
+                .data-row {
+                    display: table-row;
+                }
+                .data-label, .data-value {
+                    display: table-cell;
+                    padding: 5px 0;
+                    vertical-align: top;
+                    font-size: 10pt;
+                }
+                .data-label {
+                    font-weight: 700;
+                    width: 25%;
+                }
+                .data-value {
+                    width: 75%;
+                }
+                .curso-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                    font-size: 9pt;
+                }
+                .curso-table th, .curso-table td {
+                    border: 1px solid #ccc;
+                    padding: 8px;
+                    text-align: left;
+                }
+                .curso-table thead th {
+                    background-color: #141f53 !important;
+                    color: #fff !important;
+                    font-weight: 700;
+                }
+                .curso-table tbody tr:nth-child(even) {
+                    background-color: #f8f9fa !important;
+                }
+                /* Ocultar elementos irrelevantes en la impresión si fuera necesario */
+                .actions { display: none; }
+            }
+        </style>
+        </head><body>
+            <div class="print-container">
+                <div class="header">
+                    <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                    <h1><?php echo esc_html($report_title); ?></h1>
+                    <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
+                </div>
+                
+                <h2 class="section-title">Datos Personales y de Contacto</h2>
+                <div class="data-grid">
+                    <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
+                    <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
+                    <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
+                    <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
+                    <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
+                </div>
+
+                <h2 class="section-title">Historial Académico y Cursos</h2>
+                <?php if ($cursos): ?>
+                    <table class="curso-table">
+                        <thead><tr><th>Curso</th><th>Horario</th><th>Fecha Inscripción</th><th>Matrícula</th><th>Estado</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($cursos as $curso): 
+                                $estado_display = esc_html($curso['estado']);
+                            ?>
+                                <tr>
+                                    <td><?php echo esc_html($curso['nombre_curso']); ?></td>
+                                    <td><?php echo esc_html($curso['horario']); ?></td>
+                                    <td><?php echo esc_html($curso['fecha_inscripcion']); ?></td>
+                                    <td><?php echo esc_html($curso['matricula'] ?? 'N/A'); ?></td>
+                                    <td><?php echo $estado_display; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p>No hay cursos inscritos para este estudiante.</p>
+                <?php endif; ?>
+            </div>
+        </body></html>
+        <?php
+        return ob_get_clean();
     }
 }

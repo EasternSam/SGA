@@ -17,7 +17,7 @@ class SGA_Ajax {
         add_action('wp_ajax_exportar_moodle_csv', array($this, 'ajax_exportar_moodle_csv'));
         add_action('wp_ajax_sga_exportar_registro_llamadas', array($this, 'ajax_exportar_registro_llamadas'));
         add_action('wp_ajax_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
-        add_action('wp_ajax_sga_print_student_profile', array($this, 'ajax_print_student_profile')); // <- HOOK EXISTENTE
+        add_action('wp_ajax_sga_print_student_profile', array($this, 'ajax_print_student_profile')); // <- HOOK EXISTENTE (Descarga PDF)
         add_action('wp_ajax_sga_get_student_profile_data', array($this, 'ajax_get_student_profile_data'));
         add_action('wp_ajax_sga_update_student_profile_data', array($this, 'ajax_update_student_profile_data'));
         add_action('wp_ajax_sga_send_bulk_email', array($this, 'ajax_send_bulk_email'));
@@ -26,21 +26,57 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
         add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status'));
         add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
+        add_action('wp_ajax_sga_edit_llamado_comment', array($this, 'ajax_sga_edit_llamado_comment'));
         add_action('wp_ajax_sga_get_panel_view_html', array($this, 'ajax_get_panel_view_html'));
         add_action('wp_ajax_sga_check_pending_inscriptions', array($this, 'ajax_check_pending_inscriptions'));
         add_action('wp_ajax_sga_distribute_inscriptions', array($this, 'ajax_distribute_pending_inscriptions'));
 
+        // NUEVO HOOK para renderizar HTML del expediente para impresión directa
+        add_action('wp_ajax_sga_render_student_profile_for_print', array($this, 'ajax_render_student_profile_for_print'));
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
     }
 
     /**
-     * AJAX: Reparte las inscripciones pendientes no asignadas entre los agentes seleccionados.
+     * AJAX: Renderiza el HTML del expediente para impresión directa (no PDF).
+     */
+    public function ajax_render_student_profile_for_print() {
+        if (!isset($_POST['student_id']) || !isset($_POST['_ajax_nonce'])) {
+            wp_send_json_error(['message' => 'Parámetros inválidos.'], 400);
+        }
+
+        $student_id = intval($_POST['student_id']);
+        $nonce = sanitize_text_field($_POST['_ajax_nonce']);
+
+        if (!wp_verify_nonce($nonce, 'sga_render_print_profile_' . $student_id)) {
+            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        }
+        
+        if (!current_user_can('read')) {
+            wp_send_json_error(['message' => 'No tienes permisos para acceder a esta acción.'], 403);
+        }
+
+        // Utilizamos la nueva función para obtener el HTML con estilos de impresión
+        $html_content = SGA_Utils::_get_student_profile_print_html($student_id);
+
+        if ($html_content) {
+            SGA_Utils::_log_activity('Expediente para Impresión', "El expediente del estudiante ID: {$student_id} fue cargado para impresión.", get_current_user_id());
+            wp_send_json_success(['html' => $html_content]);
+        } else {
+            wp_send_json_error(['message' => 'No se pudo generar el HTML del expediente.'], 500);
+        }
+    }
+
+
+    /**
+     * AJAX: Reparte las inscripciones pendientes no asignadas entre los agentes seleccionados,
+     * respetando la prioridad del agente que ya llamó.
      */
     public function ajax_distribute_pending_inscriptions() {
-        if (!check_ajax_referer('sga_distribute_nonce', 'security', false)) {
-            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        // CORRECCIÓN: Usar check_ajax_referer con die=false y manejar el error
+        if (check_ajax_referer('sga_distribute_nonce', 'security', false) === false) {
+             wp_send_json_error(['message' => 'Error de seguridad (Nonce distribute).'], 403);
         }
         if (!current_user_can('manage_options') && !current_user_can('gestor_academico')) {
             wp_send_json_error(['message' => 'No tienes permisos para realizar esta acción.'], 403);
@@ -51,8 +87,7 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'No se seleccionaron agentes.']);
         }
         
-        // 1. Recolectar TODAS las inscripciones pendientes ('Inscrito').
-        // Se incluyen todas para aplicar la lógica de prioridad y sobreescritura.
+        // 1. Recolectar TODAS las inscripciones pendientes.
         $all_pending_inscriptions = [];
         $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
 
@@ -84,6 +119,7 @@ class SGA_Ajax {
             $student_id = $inscription['student_id'];
             $row_index = $inscription['row_index'];
             $agent_to_assign = null;
+            $should_apply_rotation = true;
             
             // A. PRIORIDAD 1: Agente de la última llamada
             $call_log = get_post_meta($student_id, '_sga_call_log', true);
@@ -95,12 +131,13 @@ class SGA_Ajax {
                 // Si el agente que llamó está en la lista de agentes seleccionados, se le asigna.
                 if (in_array($calling_agent_id, $agent_ids)) {
                     $agent_to_assign = $calling_agent_id;
+                    $should_apply_rotation = false; // Cumple la prioridad 1, no entra en rotación
                 }
             }
             
             // B. PRIORIDAD 2: Rotación forzada si no se encontró un agente llamador válido
-            if (!$agent_to_assign) {
-                // Usa _get_next_agent_from_list para obtener el siguiente agente rotativo
+            if ($should_apply_rotation) {
+                // Si no se asignó por prioridad 1 (o si no hay llamada registrada), usa la rotación.
                 $agent_to_assign = SGA_Utils::_get_next_agent_from_list($agent_ids);
             }
             
@@ -132,8 +169,9 @@ class SGA_Ajax {
      * AJAX: Verifica el número de inscripciones pendientes para la notificación en tiempo real.
      */
     public function ajax_check_pending_inscriptions() {
-        if (!check_ajax_referer('sga_pending_nonce', 'security', false)) {
-            wp_send_json_error(['message' => 'Error de seguridad.'], 403);
+        // CORRECCIÓN: Usar 'security' como nombre del campo nonce si no se especifica explícitamente en JS
+        if (check_ajax_referer('sga_pending_nonce', 'security', false) === false) {
+            wp_send_json_error(['message' => 'Error de seguridad (Nonce check).'], 403);
         }
         if (!current_user_can('edit_estudiantes')) {
             wp_send_json_error(['message' => 'No tienes permisos.'], 403);
@@ -148,7 +186,10 @@ class SGA_Ajax {
      * AJAX: Aprueba una única inscripción.
      */
     public function ajax_aprobar_para_matriculacion() {
-        check_ajax_referer('aprobar_nonce');
+        // CORRECCIÓN: Usar check_ajax_referer con die=false y manejar el error
+        if (check_ajax_referer('aprobar_nonce', '_ajax_nonce', false) === false) {
+             wp_send_json_error(['message' => 'Error de seguridad (Nonce aprobar).'], 403);
+        }
         if (!isset($_POST['post_id'], $_POST['row_index'], $_POST['cedula'], $_POST['nombre'])) {
             wp_send_json_error('Faltan datos.');
         }
@@ -169,7 +210,10 @@ class SGA_Ajax {
      * AJAX: Aprueba un lote de inscripciones seleccionadas.
      */
     public function ajax_aprobar_seleccionados() {
-        check_ajax_referer('aprobar_bulk_nonce');
+        // CORRECCIÓN: Usar check_ajax_referer con die=false y manejar el error
+        if (check_ajax_referer('aprobar_bulk_nonce', '_ajax_nonce', false) === false) {
+             wp_send_json_error(['message' => 'Error de seguridad (Nonce aprobar bulk).'], 403);
+        }
         if (!isset($_POST['seleccionados']) || !is_array($_POST['seleccionados'])) {
             wp_send_json_error(array('message' => 'No se seleccionaron estudiantes o el formato es incorrecto.'));
         }
@@ -248,6 +292,9 @@ class SGA_Ajax {
         if (!current_user_can('read')) {
             wp_die('No tienes permisos para realizar esta acción.');
         }
+        
+        // Esta función ya no se usa para generar PDF. Ahora se usa 'ajax_render_student_profile_for_print' para impresión directa.
+        // Mantenemos este código por si hay enlaces directos en el sistema, pero el botón principal ya no lo usa.
 
         $reports_handler = new SGA_Reports();
         $pdf_data = $reports_handler->_generate_student_profile_pdf($student_id);
@@ -562,3 +609,4 @@ class SGA_Ajax {
         wp_send_json_success(['labels' => $labels, 'data' => $data]);
     }
 }
+

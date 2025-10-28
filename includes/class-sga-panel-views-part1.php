@@ -116,7 +116,7 @@ class SGA_Panel_Views_Part1 {
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
             <?php
             $options = get_option('sga_payment_options');
-            if (isset($options['enable_online_payments']) && $options['enable_online_payments'] == 1) :
+            if (isset($options['enable_online_payments']) && $options->enable_online_payments == 1) :
             ?>
             <a href="#" data-view="registro_pagos" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
@@ -158,7 +158,7 @@ class SGA_Panel_Views_Part1 {
             </a>
             <?php else: // Botón de Seguimiento para Agente (y Agente Infotep) ?>
             <a href="#" data-view="enviar_a_matriculacion" class="panel-card panel-nav-link">
-                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></div>
+                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path><path d="M14.05 2a9 9 0 0 1 8 7.94"></path><path d="M14.05 6A5 5 0 0 1 18 10"></path></svg></div>
                 <h2>Seguimiento de Inscripciones</h2>
                 <p>Contactar a estudiantes inscritos</p>
             </a>
@@ -391,6 +391,9 @@ class SGA_Panel_Views_Part1 {
             #tabla-cursos-lista .horarios-list-inline { list-style: none; margin: 0; padding: 0; }
             #tabla-cursos-lista .horarios-list-inline li { padding: 8px 0; border-bottom: 1px dashed var(--sga-gray); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
             #tabla-cursos-lista .horarios-list-inline li:last-child { border-bottom: none; }
+            .horario-info { display: flex; align-items: center; gap: 8px; }
+            .horario-dia-hora { font-weight: 500; }
+            .horario-cupos span { color: var(--sga-text-light); }
 
 
             /* Modal */
@@ -526,10 +529,10 @@ class SGA_Panel_Views_Part1 {
                 setDynamicDateTime();
                 setInterval(setDynamicDateTime, 1000);
                 
-                // RESTO DEL CÓDIGO JS DE NAVEGACIÓN Y FUNCIONALIDAD (SIN CAMBIOS FUNCIONALES)
+                // RESTO DEL CÓDIGO JS DE NAVEGACIÓN Y FUNCIONALIDAD
                 var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
                 var approvalData = {};
-                var callData = {};
+                var callData = {}; // Usado para Marcar/Editar Llamada
                 var inscriptionsChart;
                 var viewsToRefresh = {};
                 var sgaAgents = <?php echo json_encode($agents_for_js); ?>;
@@ -718,43 +721,147 @@ class SGA_Panel_Views_Part1 {
 
                 $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
                     var btn = $(this);
+                    // Reiniciar y configurar campos del modal para la acción MARCAR
+                    $('#sga-comentario-action-type').val('marcar');
+                    $('#ga-modal-comentario-title').text('Añadir Comentario a la Llamada');
+                    $('#ga-modal-comentario-guardar').text('Marcar y Guardar');
+                    
+                    // Almacenar data de la nueva llamada
                     callData = {
                         post_id: btn.data('postid'),
                         row_index: btn.data('rowindex'),
-                        nonce: btn.data('nonce'),
+                        nonce: btn.data('nonce'), // Este nonce es para 'sga_marcar_llamado'
                         element: btn
                     };
+                    
+                    $('#sga-comentario-post-id').val(callData.post_id);
+                    $('#sga-comentario-row-index').val(callData.row_index);
+                    $('#sga-comentario-nonce').val(callData.nonce);
+                    $('#sga-comentario-log-id').val(''); // No hay log ID al marcar por primera vez
+
                     $('#sga-comentario-llamada-texto').val('');
+                    $('#ga-modal-comentario-llamada').fadeIn(200);
+                });
+
+                // NUEVO: Click en el botón Editar/Añadir Comentario
+                $("#gestion-academica-app-container").on("click", ".sga-edit-llamado-btn", function() {
+                    var btn = $(this);
+                    
+                    // Configurar campos del modal para la acción EDITAR
+                    $('#sga-comentario-action-type').val('editar');
+                    
+                    var currentComment = btn.data('comment');
+                    
+                    if(currentComment && currentComment.length > 0) {
+                         $('#ga-modal-comentario-title').text('Editar Comentario de Llamada');
+                         $('#sga-comentario-llamada-texto').val(currentComment);
+                    } else {
+                         $('#ga-modal-comentario-title').text('Añadir Comentario a la Llamada');
+                         $('#sga-comentario-llamada-texto').val('');
+                    }
+                    $('#ga-modal-comentario-guardar').text('Guardar Comentario');
+                    
+                    // Almacenar data de la llamada existente
+                    callData = {
+                        post_id: btn.data('postid'),
+                        row_index: btn.data('rowindex'),
+                        log_id: btn.data('log-id'),
+                        nonce: btn.data('nonce'), // Este nonce es para 'sga_edit_llamado_comment'
+                        element: btn
+                    };
+                    
+                    $('#sga-comentario-post-id').val(callData.post_id);
+                    $('#sga-comentario-row-index').val(callData.row_index);
+                    $('#sga-comentario-log-id').val(callData.log_id);
+                    $('#sga-comentario-nonce').val(callData.nonce);
+
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
                 $('#ga-modal-comentario-guardar').on('click', function() {
                     var btn = $(this);
                     var comment = $('#sga-comentario-llamada-texto').val();
-                    var cell = callData.element.parent();
+                    var actionType = $('#sga-comentario-action-type').val();
+                    
+                    var post_id = $('#sga-comentario-post-id').val();
+                    var row_index = $('#sga-comentario-row-index').val();
+                    var nonce = $('#sga-comentario-nonce').val();
+                    var log_id = $('#sga-comentario-log-id').val();
+                    
+                    var ajaxAction, postData;
+
+                    if (actionType === 'marcar') {
+                        ajaxAction = 'sga_marcar_llamado';
+                        postData = {
+                            action: ajaxAction,
+                            _ajax_nonce: nonce,
+                            post_id: post_id,
+                            row_index: row_index,
+                            comment: comment
+                        };
+                    } else if (actionType === 'editar') {
+                        ajaxAction = 'sga_edit_llamado_comment';
+                        // El nonce de edición es el mismo que el guardado en el data del botón de editar/añadir
+                        postData = {
+                            action: ajaxAction,
+                            _ajax_nonce: nonce, 
+                            student_id: post_id,
+                            row_index: row_index,
+                            log_id: log_id,
+                            comment: comment
+                        };
+                    } else {
+                        alert('Acción de comentario desconocida.');
+                        return;
+                    }
 
                     btn.prop('disabled', true).text('Guardando...');
-                    callData.element.prop('disabled', true);
+                    $('#ga-modal-comentario-cancelar').prop('disabled', true);
 
-                    $.post(ajaxurl, {
-                        action: 'sga_marcar_llamado',
-                        _ajax_nonce: callData.nonce,
-                        post_id: callData.post_id,
-                        row_index: callData.row_index,
-                        comment: comment
-                    }).done(function(response) {
+                    // Deshabilitar elemento original si existe (solo aplica al marcar la primera vez)
+                    if (callData.element && actionType === 'marcar') {
+                        callData.element.prop('disabled', true);
+                    }
+                    
+                    $.post(ajaxurl, postData).done(function(response) {
                         if (response.success) {
-                            cell.html(response.data.html);
-                            viewsToRefresh['registro_llamadas'] = true;
+                            // Reemplazamos la celda de acción con el nuevo HTML
+                            if (actionType === 'marcar') {
+                                // Reemplaza 'Marcar como Llamado' con el HTML de la llamada + botón aprobar (si aplica)
+                                callData.element.parent().html(response.data.html + (callData.element.parent().find('.aprobar-btn').prop('outerHTML') || ''));
+                            } else {
+                                // Buscamos la celda de la columna "Acción" para actualizar los botones de Aprobar/Marcar
+                                var actionCell = $('.sga-edit-llamado-btn[data-postid="' + post_id + '"][data-rowindex="' + row_index + '"]').closest('td').get(0);
+                                if(actionCell) {
+                                    // Preservamos el botón 'Aprobar' (si existe) y actualizamos la información de la llamada.
+                                    var aprobarBtn = $(actionCell).find('.aprobar-btn').prop('outerHTML');
+                                    var newContent = response.data.html + (aprobarBtn ? aprobarBtn : '');
+                                    $(actionCell).html(newContent);
+                                }
+                            }
+                            
+                            viewsToRefresh['registro_llamadas'] = true; // Forzar recarga del log
                             $('#ga-modal-comentario-llamada').fadeOut(200);
                         } else {
-                            alert('Error: ' + (response.data.message || 'Error desconocido'));
+                            // Manejo de error más detallado
+                            var errorMsg = response.data && response.data.message ? response.data.message : 'Error desconocido al guardar.';
+                            alert('Error: ' + errorMsg);
+                            console.error('Error AJAX:', response);
                         }
-                    }).fail(function() {
-                        alert('Error de conexión.');
+                    }).fail(function(jqXHR, textStatus, errorThrown) {
+                        // Error de comunicación con el servidor (código 500, timeout, etc.)
+                        var errorMessage = 'Error de comunicación. Revisa la consola para más detalles.';
+                        if (jqXHR.status) {
+                            errorMessage += ' (Status: ' + jqXHR.status + ')';
+                        }
+                        alert(errorMessage);
+                        console.error("AJAX Fail:", textStatus, errorThrown, jqXHR);
                     }).always(function() {
-                        btn.prop('disabled', false).text('Marcar y Guardar');
-                        callData.element.prop('disabled', false);
+                        btn.prop('disabled', false).text(actionType === 'marcar' ? 'Marcar y Guardar' : 'Guardar Comentario');
+                        $('#ga-modal-comentario-cancelar').prop('disabled', false);
+                        if (callData.element && actionType === 'marcar') {
+                            callData.element.prop('disabled', false);
+                        }
                     });
                 });
 
@@ -1045,6 +1152,53 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
 
+                // NUEVO: Manejo del botón de impresión directa
+                $("#gestion-academica-app-container").on("click", "#sga-print-expediente-btn", function(e) {
+                    e.preventDefault();
+                    var btn = $(this);
+                    var studentId = btn.data('student-id');
+                    var nonce = btn.data('nonce');
+                    var originalText = btn.html();
+                    
+                    btn.prop('disabled', true).html('<span class="spinner is-active" style="float:none; margin: 0 5px;"></span> Cargando...');
+                    
+                    $.post(ajaxurl, {
+                        action: 'sga_render_student_profile_for_print',
+                        _ajax_nonce: nonce,
+                        student_id: studentId
+                    }).done(function(response) {
+                        if (response.success) {
+                            var printWindow = window.open('', '_blank', 'height=600,width=800');
+                            
+                            // Verificar que la ventana se haya abierto correctamente
+                            if (printWindow) {
+                                printWindow.document.write(response.data.html);
+                                printWindow.document.close();
+                                
+                                // Esperar a que el contenido esté cargado antes de imprimir
+                                printWindow.onload = function() {
+                                    // La espera es crucial para que los estilos CSS se apliquen
+                                    setTimeout(function() {
+                                        printWindow.focus();
+                                        printWindow.print();
+                                        printWindow.close();
+                                    }, 250); // Pequeña pausa adicional para asegurar la carga
+                                };
+                            } else {
+                                // Si el pop-up fue bloqueado
+                                alert('El diálogo de impresión fue bloqueado por el navegador. Por favor, permítelo.');
+                            }
+                            
+                        } else {
+                            alert('Error al preparar la impresión: ' + response.data.message);
+                        }
+                    }).fail(function() {
+                        alert('Error de comunicación con el servidor al intentar imprimir.');
+                    }).always(function() {
+                        btn.prop('disabled', false).html(originalText);
+                    });
+                });
+                
                 $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
                     var btn = $(this);
                     btn.text('Guardando...').prop('disabled', true);

@@ -288,7 +288,8 @@ class SGA_Reports {
                 break;
             case 'historial_llamadas':
                 $report_title = 'Reporte de Historial de Llamadas';
-                $headers = ['Agente', 'Estudiante', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Comentario', 'Fecha'];
+                // Aumentamos el tamaño de la columna de Comentario.
+                $headers = ['Agente', 'Estudiante', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Comentario (Última Edición)', 'Fecha (Llamada)'];
                 
                 // 1. Obtener llamadas archivadas
                 $query_args_hist = [
@@ -327,6 +328,19 @@ class SGA_Reports {
                     foreach ($todas_las_llamadas as $llamada) {
                          $user_info = get_userdata($llamada->post_author);
                          $student_id = get_post_meta($llamada->ID, '_student_id', true);
+                         
+                         // Obtener los datos de la última llamada/comentario desde el meta del estudiante
+                         $assignments = get_post_meta($student_id, '_sga_agent_assignments', true);
+                         $row_index = get_post_meta($llamada->ID, '_row_index', true);
+                         $call_log = get_post_meta($student_id, '_sga_call_log', true);
+                         $call_info = $call_log[$row_index] ?? null;
+
+                         $comment = $call_info['comment'] ?? $llamada->post_content;
+                         $last_edited_by = $call_info['last_edited_by'] ?? ($user_info ? $user_info->display_name : 'N/A');
+                         $last_edited_timestamp = $call_info['last_edited_timestamp'] ?? $llamada->post_date;
+                         // $last_edited_date ya no es necesaria en el output simplificado
+                         // $last_edited_date = is_numeric($last_edited_timestamp) ? date_i18n('Y-m-d H:i:s', $last_edited_timestamp) : get_the_date('Y-m-d H:i:s', $llamada);
+
                         $rows[] = [
                             esc_html($user_info ? $user_info->display_name : 'N/A'),
                             esc_html(get_post_meta($llamada->ID, '_student_name', true)),
@@ -334,7 +348,8 @@ class SGA_Reports {
                             esc_html(get_field('email', $student_id)),
                             esc_html(get_field('telefono', $student_id)),
                             esc_html(get_post_meta($llamada->ID, '_course_name', true)),
-                            esc_html($llamada->post_content),
+                            // MODIFICACIÓN AQUI: Simplificar el texto de la última edición
+                            wp_strip_all_tags($comment) . " (por: " . esc_html($last_edited_by) . ")",
                             get_the_date('Y-m-d H:i:s', $llamada),
                         ];
                     }
@@ -362,7 +377,14 @@ class SGA_Reports {
         ob_start();
         ?>
         <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-        <style>body{font-family:Arial,sans-serif;font-size:10pt;color:#333}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #002060;padding-bottom:15px}.header img{max-height:60px;margin-bottom:10px}h1{font-size:16pt;color:#002060;margin:0}.subtitle{font-size:9pt;color:#555}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:9pt}th,td{border:1px solid #ccc;padding:8px;text-align:left}thead th{background-color:#002060;color:#fff;font-weight:700}tbody tr:nth-child(2n){background-color:#f2f2f2}</style>
+        <style>body{font-family:Arial,sans-serif;font-size:10pt;color:#333}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #002060;padding-bottom:15px}.header img{max-height:60px;margin-bottom:10px}h1{font-size:16pt;color:#002060;margin:0}.subtitle{font-size:9pt;color:#555}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:9pt}th,td{border:1px solid #ccc;padding:8px;text-align:left}thead th{background-color:#002060;color:#fff;font-weight:700}tbody tr:nth-child(2n){background-color:#f2f2f2}
+        
+        /* Aumentar ancho de la columna de comentarios en el reporte de llamadas */
+        <?php if ($type === 'historial_llamadas'): ?>
+        table th:nth-child(7), table td:nth-child(7) { width: 30%; }
+        <?php endif; ?>
+
+        </style>
         </head><body>
             <div class="header">
                 <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
@@ -383,8 +405,13 @@ class SGA_Reports {
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isRemoteEnabled', true);
         $dompdf = new Dompdf($options);
+        // Si es el historial de llamadas, usar papel apaisado para acomodar más columnas
+        if ($type === 'historial_llamadas') {
+            $dompdf->setPaper('A4', 'landscape');
+        } else {
+             $dompdf->setPaper('A4', 'portrait');
+        }
         $dompdf->loadHtml($html_content);
-        $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
         $pdf_output = $dompdf->output();
 
@@ -535,48 +562,49 @@ class SGA_Reports {
             body{font-family:Arial,sans-serif;font-size:12pt;color:#333;margin:0;padding:0}.header{text-align:center;margin-bottom:30px;border-bottom:3px solid #141f53;padding-bottom:15px}.header img{max-height:80px;margin-bottom:10px}h1{font-size:24pt;color:#141f53;margin:0}.subtitle{font-size:10pt;color:#555;margin-top:5px}.section-title{font-size:16pt;color:#4f46e5;border-bottom:2px solid #e0e0e0;padding-bottom:5px;margin-top:30px;margin-bottom:15px}.data-grid{display:table;width:100%;border-collapse:collapse;margin-bottom:20px}.data-row{display:table-row;}.data-label{display:table-cell;font-weight:700;padding:8px 0;width:30%;vertical-align:top;font-size:11pt}.data-value{display:table-cell;padding:8px 0;width:70%;vertical-align:top;font-size:11pt}.curso-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10pt}th,td{border:1px solid #ccc;padding:10px;text-align:left}thead th{background-color:#141f53;color:#fff;font-weight:700}tbody tr:nth-child(even){background-color:#f8f9fa}.pill{display:inline-block;padding:4px 10px;font-size:10pt;font-weight:700;border-radius:12px;color:#fff;}.pill-inscrito{background-color:#f59e0b}.pill-matriculado{background-color:#10b981}.pill-completado{background-color:#3b82f6}.pill-cancelado{background-color:#ef4444}
         </style>
         </head><body>
-            <div class="header">
-                <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
-                <h1><?php echo esc_html($report_title); ?></h1>
-                <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
-            </div>
-            
-            <h2 class="section-title">Datos Personales y de Contacto</h2>
-            <div class="data-grid">
-                <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
-                <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
-                <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
-                <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
-                <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
-            </div>
+            <div class="invoice-box">
+                <div class="header">
+                    <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                    <h1><?php echo esc_html($report_title); ?></h1>
+                    <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
+                </div>
+                
+                <h2 class="section-title">Datos Personales y de Contacto</h2>
+                <div class="data-grid">
+                    <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
+                    <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
+                    <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
+                    <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
+                    <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
+                </div>
 
-            <h2 class="section-title">Historial Académico y Cursos</h2>
-            <?php if ($cursos): ?>
-                <table class="curso-table">
-                    <thead><tr><th>Curso</th><th>Horario</th><th>Fecha Inscripción</th><th>Matrícula</th><th>Estado</th></tr></thead>
-                    <tbody>
-                        <?php foreach ($cursos as $curso): 
-                            $estado_class = 'pill-inscrito';
-                            switch ($curso['estado']) {
-                                case 'Matriculado': $estado_class = 'pill-matriculado'; break;
-                                case 'Completado': $estado_class = 'pill-completado'; break;
-                                case 'Cancelado': $estado_class = 'pill-cancelado'; break;
-                            }
-                        ?>
-                            <tr>
-                                <td><?php echo esc_html($curso['nombre_curso']); ?></td>
-                                <td><?php echo esc_html($curso['horario']); ?></td>
-                                <td><?php echo esc_html($curso['fecha_inscripcion']); ?></td>
-                                <td><?php echo esc_html($curso['matricula'] ?? 'N/A'); ?></td>
-                                <td><span class="pill <?php echo $estado_class; ?>"><?php echo esc_html($curso['estado']); ?></span></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php else: ?>
-                <p>No hay cursos inscritos para este estudiante.</p>
-            <?php endif; ?>
-
+                <h2 class="section-title">Historial Académico y Cursos</h2>
+                <?php if ($cursos): ?>
+                    <table class="curso-table">
+                        <thead><tr><th>Curso</th><th>Horario</th><th>Fecha Inscripción</th><th>Matrícula</th><th>Estado</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($cursos as $curso): 
+                                $estado_class = 'pill-inscrito';
+                                switch ($curso['estado']) {
+                                    case 'Matriculado': $estado_class = 'pill-matriculado'; break;
+                                    case 'Completado': $estado_class = 'pill-completado'; break;
+                                    case 'Cancelado': $estado_class = 'pill-cancelado'; break;
+                                }
+                            ?>
+                                <tr>
+                                    <td><?php echo esc_html($curso['nombre_curso']); ?></td>
+                                    <td><?php echo esc_html($curso['horario']); ?></td>
+                                    <td><?php echo esc_html($curso['fecha_inscripcion']); ?></td>
+                                    <td><?php echo esc_html($curso['matricula'] ?? 'N/A'); ?></td>
+                                    <td><span class="pill <?php echo $estado_class; ?>"><?php echo esc_html($curso['estado']); ?></span></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p>No hay cursos inscritos para este estudiante.</p>
+                <?php endif; ?>
+            </div>
         </body></html>
         <?php
         $html_content = ob_get_clean();
@@ -739,17 +767,26 @@ class SGA_Reports {
         $status_filter = isset($_GET['status_filter']) ? sanitize_text_field(stripslashes($_GET['status_filter'])) : '';
         
         $filename = 'registro-llamadas-' . date('Y-m-d') . '.xls';
+        // Para exportar la data completa y legible, generamos una tabla HTML que Excel puede abrir.
         header('Content-Type: application/vnd.ms-excel; charset=utf-8');
         header('Content-Disposition: attachment; filename=' . $filename);
         header('Pragma: no-cache');
         header('Expires: 0');
 
         $args = array(
-            'post_type' => 'sga_llamada',
+            'post_type' => ['sga_llamada', 'sga_llamada_hist'], // Buscar en registros del día y archivados
             'posts_per_page' => -1,
             'orderby' => 'date',
             'order' => 'DESC',
         );
+
+        // Agente y Curso se filtrarán en PHP ya que son meta querys complejas o campos de post
+        if (!empty($_GET['agent_filter'])) {
+            $args['author'] = intval($_GET['agent_filter']);
+        }
+        if (!empty($_GET['course_filter'])) {
+            $args['meta_query'] = [['key' => '_course_name', 'value' => sanitize_text_field($_GET['course_filter'])]];
+        }
 
         $call_logs_query = new WP_Query($args);
         $filtered_calls = [];
@@ -769,12 +806,6 @@ class SGA_Reports {
                 $post_id = get_the_ID();
                 $author_info = get_userdata(get_the_author_meta('ID'));
                 $agent_name = $author_info->display_name;
-
-                // Agent filter
-                if (!empty($agent_filter) && $agent_name != $agent_filter) {
-                    continue;
-                }
-
                 $student_id = get_post_meta($post_id, '_student_id', true);
                 $row_index = get_post_meta($post_id, '_row_index', true);
                 
@@ -789,10 +820,19 @@ class SGA_Reports {
                 
                 $student_name = get_post_meta($post_id, '_student_name', true);
                 $course_name = get_post_meta($post_id, '_course_name', true);
+
+                // Obtener el comentario más reciente y la información de edición
+                $call_log_meta = get_post_meta($student_id, '_sga_call_log', true);
+                $call_info = $call_log_meta[$row_index] ?? null;
+
+                $comment = $call_info['comment'] ?? get_the_content();
+                $last_edited_by = $call_info['last_edited_by'] ?? $agent_name;
+                $last_edited_timestamp = $call_info['last_edited_timestamp'] ?? get_the_date('U', $post_id);
+                $last_edited_date = date_i18n('d/m/Y h:i A', $last_edited_timestamp);
                 
-                // Search term filter (for meta fields)
+                // Search term filter (for meta fields and comment)
                 if (!empty($search_term)) {
-                    $searchable_string = strtolower($student_name . ' ' . $course_name . ' ' . get_the_content());
+                    $searchable_string = strtolower($student_name . ' ' . $course_name . ' ' . $comment . ' ' . get_field('cedula', $student_id));
                     if (strpos($searchable_string, strtolower($search_term)) === false) {
                         continue;
                     }
@@ -808,8 +848,10 @@ class SGA_Reports {
                     'telefono' => get_field('telefono', $student_id),
                     'course' => $course_name,
                     'status' => $status_text,
-                    'comment' => get_the_content(),
-                    'date' => get_the_date('d/m/Y h:i A', $post_id)
+                    'comment' => $comment, // Usar el comentario más reciente
+                    'last_edited_by' => $last_edited_by,
+                    'last_edited_date' => $last_edited_date,
+                    'call_date' => get_the_date('d/m/Y h:i A', $post_id)
                 ];
             }
             wp_reset_postdata();
@@ -832,7 +874,9 @@ class SGA_Reports {
                         <th>Curso</th>
                         <th>Estado de Llamada</th>
                         <th>Comentario</th>
-                        <th>Fecha</th>
+                        <th>Última Edición por</th>
+                        <th>Fecha de Última Edición</th>
+                        <th>Fecha de Registro de Llamada</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -847,12 +891,14 @@ class SGA_Reports {
                                 <td><?php echo esc_html($call['course']); ?></td>
                                 <td><?php echo esc_html($call['status']); ?></td>
                                 <td><?php echo esc_html($call['comment']); ?></td>
-                                <td><?php echo esc_html($call['date']); ?></td>
+                                <td><?php echo esc_html($call['last_edited_by']); ?></td>
+                                <td><?php echo esc_html($call['last_edited_date']); ?></td>
+                                <td><?php echo esc_html($call['call_date']); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="9">No se encontraron registros con los filtros aplicados.</td>
+                            <td colspan="11">No se encontraron registros con los filtros aplicados.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

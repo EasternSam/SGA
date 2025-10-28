@@ -217,10 +217,12 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                                                     $call_info = $call_log[$index] ?? null;
 
                                                     if ($call_info) {
-                                                        echo 'Llamado por <strong>' . esc_html($call_info['user_name']) . '</strong><br><small>' . esc_html(date_i18n('d/m/Y H:i', $call_info['timestamp'])) . '</small>';
-                                                        if (!empty($call_info['comment'])) {
-                                                            echo '<p class="sga-call-comment"><em>' . esc_html($call_info['comment']) . '</em></p>';
-                                                        }
+                                                        // BUSCAMOS EL ID DEL CPT sga_llamada para la edición del comentario
+                                                        $call_log_post_id = SGA_Utils::_get_last_call_log_post_id($estudiante->ID, $index);
+                                                        
+                                                        // Usamos la nueva función utilitaria para generar el HTML con botón de Editar
+                                                        echo SGA_Utils::_get_call_log_html($estudiante->ID, $index, $call_info, $call_log_post_id, true);
+                                                        
                                                     } else {
                                                         ?>
                                                         <button class="button button-secondary sga-marcar-llamado-btn" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-nonce="<?php echo wp_create_nonce('sga_marcar_llamado_' . $estudiante->ID . '_' . $index); ?>">Marcar como Llamado</button>
