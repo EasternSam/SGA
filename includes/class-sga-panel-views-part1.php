@@ -675,9 +675,19 @@ class SGA_Panel_Views_Part1 {
                     var cell = btn.closest('.sga-call-log-cell');
                     var postId = cell.data('postid');
                     var rowIndex = cell.data('rowindex');
+                    
+                    // --- LÓGICA JS MODIFICADA ---
                     var lastCommentAuthorId = btn.data('last-author-id') || 0;
                     var lastCommentText = btn.data('last-comment') || '';
-                    var editMode = (lastCommentAuthorId == currentUserId);
+                    var hasComments = btn.data('has-comments') == '1';
+                    
+                    // Determinar modo edición
+                    var editMode = (hasComments && lastCommentAuthorId == currentUserId);
+
+                    // Capturar el texto del botón (sin el HTML del icono)
+                    var buttonText = btn.clone().children().remove().end().text().trim(); 
+                    // --- FIN LÓGICA JS MODIFICADA ---
+
 
                     commentData = { // Guardar datos para el guardado
                         post_id: postId,
@@ -688,9 +698,22 @@ class SGA_Panel_Views_Part1 {
 
                     // Configurar el modal
                     var modal = $('#ga-modal-comentario-llamada');
-                    modal.find('h4').text(editMode ? 'Editar Último Comentario' : 'Añadir Comentario a la Llamada');
-                    modal.find('#sga-comentario-llamada-texto').val(editMode ? lastCommentText : '');
-                    modal.find('#ga-modal-comentario-guardar').text(editMode ? 'Guardar Cambios' : 'Añadir Comentario');
+                    
+                    // --- LÓGICA DE MODAL ACTUALIZADA ---
+                    if (buttonText === 'Editar comentario') {
+                        modal.find('h4').text('Editar Último Comentario');
+                        modal.find('#sga-comentario-llamada-texto').val(lastCommentText);
+                        modal.find('#ga-modal-comentario-guardar').text('Guardar Cambios');
+                    } else if (buttonText === 'Añadir comentario') {
+                        modal.find('h4').text('Añadir Nuevo Comentario');
+                        modal.find('#sga-comentario-llamada-texto').val('');
+                        modal.find('#ga-modal-comentario-guardar').text('Añadir Comentario');
+                    } else { // 'Marcar como llamado'
+                        modal.find('h4').text('Marcar como Llamado y Añadir Comentario');
+                        modal.find('#sga-comentario-llamada-texto').val('');
+                        modal.find('#ga-modal-comentario-guardar').text('Marcar y Guardar');
+                    }
+                    // --- FIN LÓGICA DE MODAL ACTUALIZADA ---
 
                     modal.fadeIn(200);
                 });
@@ -714,6 +737,17 @@ class SGA_Panel_Views_Part1 {
                         if (response.success) {
                             // Reemplazar contenido de la celda con el HTML actualizado
                             commentData.cell_element.html(response.data.html);
+                            
+                            // Si fue una acción de "Marcar como llamado" (nuevo comentario), actualizamos el dropdown
+                            if (response.data.status_updated) {
+                                var dropdown = commentData.cell_element.closest('tr').find('.sga-call-status-select');
+                                if (dropdown.length) {
+                                    dropdown.val('contactado');
+                                    // Actualizar el data-attribute para el filtrado
+                                    dropdown.closest('tr').data('call-status', 'contactado');
+                                }
+                            }
+
                             viewsToRefresh['registro_llamadas'] = true; // Marcar para refrescar si se navega
                             $('#ga-modal-comentario-llamada').fadeOut(200);
                         } else {

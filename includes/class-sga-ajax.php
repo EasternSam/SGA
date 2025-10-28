@@ -37,13 +37,15 @@ class SGA_Ajax {
 
     /**
      * AJAX: Gestiona la adición o edición de comentarios de llamada.
+     * MODIFICADO: Ahora también actualiza el estado a 'contactado' y
+     * crea un post 'sga_llamada' al añadir un *nuevo* comentario.
      */
     public function ajax_manage_call_comment() {
-        // Verificar nonce y permisos (asegúrate que el nonce coincida con el enviado desde JS)
+        // Verificar nonce y permisos
         if (!check_ajax_referer('sga_manage_comment_nonce', 'security', false)) {
              wp_send_json_error(['message' => 'Error de seguridad.'], 403);
         }
-        if (!current_user_can('edit_estudiantes')) { // O una capacidad más específica si la tienes
+        if (!current_user_can('edit_estudiantes')) {
             wp_send_json_error(['message' => 'No tienes permisos.'], 403);
         }
 
@@ -74,6 +76,9 @@ class SGA_Ajax {
             $can_edit = ($call_log[$row_index][$last_comment_index]['user_id'] == $current_user_id);
         }
 
+        $log_action = '';
+        $status_updated = false;
+
         if ($edit_mode && $can_edit) {
             // Editar el último comentario
             $call_log[$row_index][$last_comment_index]['comment'] = $comment_text;
@@ -89,20 +94,65 @@ class SGA_Ajax {
                 'comment'   => $comment_text,
             ];
             $call_log[$row_index][] = $new_comment; // Añadir al final del array para este índice
-            $log_action = 'Comentario Añadido';
+            $log_action = 'Comentario Añadido y Marcado como Llamado';
+
+            // --- INICIO DE NUEVA LÓGICA ---
+        
+            // 1. Actualizar el estado de la llamada a 'contactado'
+            $call_statuses = get_post_meta($post_id, '_sga_call_statuses', true);
+            if (!is_array($call_statuses)) {
+                $call_statuses = [];
+            }
+            // Solo actualiza si estaba pendiente, para no sobrescribir "no contesta", etc.
+            // O mejor, siempre actualizamos a "contactado" ya que el agente está comentando.
+            $call_statuses[$row_index] = 'contactado';
+            update_post_meta($post_id, '_sga_call_statuses', $call_statuses);
+            $status_updated = true;
+
+            // 2. Crear el post 'sga_llamada'
+            $student_post = get_post($post_id);
+            $student_name = $student_post ? $student_post->post_title : 'Estudiante ID ' . $post_id;
+            
+            $course_name = 'N/A';
+            if (function_exists('get_field')) {
+                $cursos = get_field('cursos_inscritos', $post_id);
+                if ($cursos && isset($cursos[$row_index])) {
+                    $course_name = $cursos[$row_index]['nombre_curso'];
+                }
+            }
+
+            wp_insert_post([
+                'post_title'   => "Llamada a {$student_name} por {$user_name}",
+                'post_content' => $comment_text,
+                'post_type'    => 'sga_llamada',
+                'post_status'  => 'publish',
+                'post_author'  => $current_user_id,
+                'meta_input'   => [
+                    '_student_id'   => $post_id,
+                    '_student_name' => $student_name,
+                    '_row_index'    => $row_index,
+                    '_course_name'  => $course_name,
+                ],
+            ]);
+            
+            // --- FIN DE NUEVA LÓGICA ---
         }
 
         // Guardar el log actualizado
         update_post_meta($post_id, '_sga_call_log', $call_log);
 
-        // Registrar actividad general
-        $student_post = get_post($post_id);
-        $student_name = $student_post ? $student_post->post_title : "ID: {$post_id}";
-        SGA_Utils::_log_activity($log_action, "Se gestionó un comentario para {$student_name} (Índice curso: {$row_index}) por {$user_name}.");
+        // Registrar actividad general (actualizado)
+        $student_post_log = get_post($post_id);
+        $student_name_log = $student_post_log ? $student_post_log->post_title : "ID: {$post_id}";
+        $log_message = "Se gestionó un comentario para {$student_name_log} (Índice curso: {$row_index}) por {$user_name}.";
+        if ($status_updated) {
+            $log_message .= " Estado actualizado a 'contactado'.";
+        }
+        SGA_Utils::_log_activity($log_action, $log_message);
 
         // Devolver el HTML actualizado para la celda
         $updated_html = SGA_Utils::_get_call_log_html($post_id, $row_index);
-        wp_send_json_success(['html' => $updated_html]);
+        wp_send_json_success(['html' => $updated_html, 'status_updated' => $status_updated]);
     }
 
 
@@ -646,4 +696,3 @@ class SGA_Ajax {
         wp_send_json_success(['labels' => $labels, 'data' => $data]);
     }
 }
-

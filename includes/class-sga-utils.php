@@ -170,30 +170,37 @@ class SGA_Utils {
             echo '<p style="font-size: 12px; color: var(--sga-text-light); margin-bottom: 10px;"><em>No hay comentarios previos.</em></p>';
         }
 
-        // Mostrar botón de Añadir/Editar
-        $button_text = 'Añadir Comentario';
-        $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>';
+        // --- INICIO LÓGICA DE BOTÓN MODIFICADA ---
         $last_comment_text_attr = '';
         $last_author_id_attr = '';
 
-        if ($can_edit_last) {
-            $button_text = 'Editar Último';
+        if (empty($comments_for_row)) {
+            $button_text = 'Marcar como llamado';
+            // Icono de teléfono
+            $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-telephone-outbound" viewBox="0 0 16 16"><path d="M3.654 1.318a.678.678 0 0 0-1.015-.063L1.605 2.3c-.483.484-.661 1.169-.45 1.77a17.6 17.6 0 0 0 4.168 6.608 17.6 17.6 0 0 0 6.608 4.168c.601.211 1.286.033 1.77-.45l1.034-1.034a.678.678 0 0 0-.063-1.015l-2.307-1.794a.68.68 0 0 0-.58-.122l-2.19.547a1.75 1.75 0 0 1-1.657-.459L5.482 8.062a1.75 1.75 0 0 1-.46-1.657l.548-2.19a.68.68 0 0 0-.122-.58L3.654 1.318zM1.884.511a1.745 1.745 0 0 1 2.612.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.612l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.363-1.031-.038-2.137.703-2.877L1.885.511zM11 .5a.5.5 0 0 1 .5.5V3h2.5a.5.5 0 0 1 0 1H11.5v2.5a.5.5 0 0 1-1 0V4H8a.5.5 0 0 1 0-1h2.5V1a.5.5 0 0 1 .5-.5z"/></svg>';
+            $last_author_id_attr = '0'; // No hay autor previo
+        } else if ($can_edit_last) {
+            $button_text = 'Editar comentario';
+            // Icono de lápiz
             $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/></svg>';
             $last_comment_text_attr = esc_attr($last_comment['comment'] ?? '');
             $last_author_id_attr = esc_attr($last_comment['user_id'] ?? 0);
-        } else if ($last_comment){
-             // Si hay comentarios pero no puede editar, el botón sigue siendo "Añadir Comentario"
-             // pero pasamos el ID del último autor para que JS sepa que no puede editar.
-             $last_author_id_attr = esc_attr($last_comment['user_id'] ?? 0);
+        } else {
+            $button_text = 'Añadir comentario';
+            // Icono de más
+            $button_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>';
+            $last_author_id_attr = esc_attr($last_comment['user_id'] ?? 0); // Pasamos el ID del último autor para que JS sepa que no puede editar.
         }
         ?>
         <button class="button button-secondary button-small sga-manage-comment-btn"
                 data-last-author-id="<?php echo $last_author_id_attr; ?>"
-                data-last-comment="<?php echo $last_comment_text_attr; ?>">
+                data-last-comment="<?php echo $last_comment_text_attr; ?>"
+                data-has-comments="<?php echo empty($comments_for_row) ? '0' : '1'; ?>">
             <?php echo $button_icon; ?>
             <?php echo esc_html($button_text); ?>
         </button>
         <?php
+        // --- FIN LÓGICA DE BOTÓN MODIFICADA ---
 
         return ob_get_clean();
     }
