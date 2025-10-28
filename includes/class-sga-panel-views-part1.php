@@ -505,50 +505,86 @@ class SGA_Panel_Views_Part1 {
             }
 
             /* --- ESTILOS MEJORADOS PARA SECCIONES DE INSCRIPCIONES --- */
-            #panel-view-enviar_a_matriculacion h2 {
+            /* Las secciones H2 de las vistas originales de la tabla se ocultarán y usaremos nuevos títulos */
+            #panel-view-enviar_a_matriculacion h2:not(.sga-section-title-toggle) {
+                display: none !important;
+            }
+            /* El nuevo título se diseñará así */
+            #panel-view-enviar_a_matriculacion .sga-section-title-toggle {
                 font-size: 20px;
                 font-weight: 600;
                 color: var(--sga-primary);
-                margin-top: 35px; /* Más espacio arriba */
+                margin-top: 35px; 
                 margin-bottom: 10px;
                 padding-bottom: 10px;
                 border-bottom: 2px solid var(--sga-secondary);
-                display: flex;
-                align-items: center;
-                gap: 10px;
             }
-            #panel-view-enviar_a_matriculacion h2 .ga-pill { /* Contador */
-                font-size: 14px;
-                padding: 5px 12px;
-                line-height: 1;
-                margin-left: 5px;
-            }
-            #panel-view-enviar_a_matriculacion h2:first-of-type {
-                margin-top: 10px; /* Menos espacio para el primer título */
-            }
-            #panel-view-enviar_a_matriculacion h2::before { /* Iconos */
-                content: '';
-                display: inline-block;
-                width: 24px;
-                height: 24px;
-                background-size: contain;
-                background-repeat: no-repeat;
-                background-position: center;
-            }
-            #panel-view-enviar_a_matriculacion h2:nth-of-type(1)::before { /* Icono para Nuevas */
-                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'%3E%3C/path%3E%3Cpath d='M14.05 2a9 9 0 0 1 8 7.94'%3E%3C/path%3E%3Cpath d='M14.05 6A5 5 0 0 1 18 10'%3E%3C/path%3E%3C/svg%3E");
-            }
-            #panel-view-enviar_a_matriculacion h2:nth-of-type(2)::before { /* Icono para Seguimiento */
-                 background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='9' cy='7' r='4'%3E%3C/circle%3E%3Cpath d='m16 11 2 2 4-4'%3E%3C/path%3E%3C/svg%3E");
-            }
+            
             #panel-view-enviar_a_matriculacion p.description {
                 font-size: 14px;
                 color: var(--sga-text-light);
                 margin-top: -5px;
                 margin-bottom: 25px; /* Más espacio antes de la tabla */
-                padding-left: 34px; /* Alinear con el texto del título */
             }
-            /* --- FIN ESTILOS MEJORADOS --- */
+
+            /* --- ESTILOS DEL TOGGLE SWITCH --- */
+            .sga-table-switcher-wrapper {
+                display: flex;
+                justify-content: center;
+                margin: 25px 0;
+            }
+            .sga-toggle-switch-container {
+                position: relative;
+                display: flex;
+                background-color: var(--sga-gray);
+                border-radius: 8px;
+                padding: 4px;
+                box-shadow: var(--shadow-sm);
+                width: 100%;
+                max-width: 500px;
+            }
+            .sga-toggle-input {
+                display: none;
+            }
+            .sga-toggle-label {
+                flex-grow: 1;
+                text-align: center;
+                padding: 10px 15px;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--sga-text-light);
+                cursor: pointer;
+                z-index: 2;
+                transition: color 0.3s;
+                border-radius: 6px; /* Para que coincida con el slider */
+            }
+            .sga-toggle-label.active {
+                color: var(--sga-primary-dark);
+            }
+            .sga-toggle-slider {
+                position: absolute;
+                top: 4px;
+                left: 4px;
+                width: calc(50% - 4px); /* (100% / 2) - padding */
+                height: calc(100% - 8px); /* 100% - (padding top + padding bottom) */
+                background-color: var(--sga-white);
+                border-radius: 6px;
+                box-shadow: var(--shadow-md);
+                transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+                z-index: 1;
+            }
+            .sga-toggle-input:checked ~ .sga-toggle-slider {
+                transform: translateX(100%);
+            }
+            
+            .sga-table-section {
+                display: none;
+            }
+            .sga-table-section.active {
+                display: block;
+            }
+            /* --- FIN ESTILOS TOGGLE SWITCH --- */
+
 
         </style>
         <?php
@@ -605,6 +641,11 @@ class SGA_Panel_Views_Part1 {
                         if (view === 'reportes' && (!inscriptionsChart || viewsToRefresh['reportes'])) {
                             renderInscriptionsChart();
                         }
+                        // NUEVO: Asegurarse de que el toggle de Seguimiento esté en la posición por defecto al cargar la vista
+                        if (view === 'enviar_a_matriculacion') {
+                            // Cargar siempre la vista "Nuevas" por defecto
+                            $('#sga-table-toggle').prop('checked', false).trigger('change'); 
+                        }
                         loader.fadeOut(150);
                     }
 
@@ -629,7 +670,23 @@ class SGA_Panel_Views_Part1 {
                         setTimeout(switchView, 200); 
                     }
                 });
+                
+                // --- NUEVA LÓGICA DEL TOGGLE SWITCH ---
+                $('#gestion-academica-app-container').on('change', '#sga-table-toggle', function() {
+                    const isChecked = $(this).is(':checked');
+                    const targetSection = isChecked ? 'seguimiento' : 'nuevas';
+                    const otherSection = isChecked ? 'nuevas' : 'seguimiento';
+                    
+                    $('#sga-table-section-' + otherSection).removeClass('active').slideUp(200);
+                    $('#sga-table-section-' + targetSection).addClass('active').slideDown(200);
+                    
+                    $('.sga-toggle-label').removeClass('active');
+                    $('.sga-toggle-label[data-target="' + targetSection + '"]').addClass('active');
 
+                    // Al cambiar el toggle, re-aplicar los filtros
+                    filterPendientesTable(isChecked ? '#tabla-pendientes-seguimiento' : '#tabla-pendientes-nuevas');
+                });
+                
                 // Se adjuntará a ambas tablas de inscripciones:
                 $("#gestion-academica-app-container").on("click", "#tabla-pendientes-nuevas .aprobar-btn, #tabla-pendientes-seguimiento .aprobar-btn", function() {
                     var btn = $(this);
@@ -692,8 +749,10 @@ class SGA_Panel_Views_Part1 {
                                 approvalData.element.closest('tr').fadeOut(500, function() {
                                     $(this).remove();
                                     // Comprobar ambas tablas al eliminar
-                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
-                                    checkEmptyTable('#tabla-pendientes-seguimiento', 9, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 11, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-seguimiento', 11, 'No hay inscripciones en esta sección.');
+                                    // Actualizar el contador del toggle
+                                    updateToggleCounters();
                                 });
                             } else {
                                 alert('Hubo un error: ' + (response.data || 'Error desconocido'));
@@ -722,8 +781,9 @@ class SGA_Panel_Views_Part1 {
                                             $(this).remove();
                                         });
                                     });
-                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
-                                    checkEmptyTable('#tabla-pendientes-seguimiento', 9, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 11, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-seguimiento', 11, 'No hay inscripciones en esta sección.');
+                                    updateToggleCounters();
                                 }
                                 if (response.data.failed && response.data.failed.length > 0) {
                                     var errorMsg = 'No se pudo aprobar a ' + response.data.failed.length + ' estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.';
@@ -768,6 +828,9 @@ class SGA_Panel_Views_Part1 {
                         } else {
                             select.closest('tr').data('call-status', status);
                             viewsToRefresh['registro_llamadas'] = true;
+                            // Re-filtrar para asegurar que el color y la visibilidad de la fila se actualicen
+                            filterPendientesTable('#tabla-pendientes-nuevas');
+                            filterPendientesTable('#tabla-pendientes-seguimiento');
                         }
                     }).fail(function() {
                         alert('Error de conexión.');
@@ -901,6 +964,8 @@ class SGA_Panel_Views_Part1 {
                             if (actionType === 'marcar' && affectedRow.length > 0) {
                                 // 2. Si se marcó, mover la fila de 'Nuevas' a 'Seguimiento'
                                 var targetBody = $('#tabla-pendientes-seguimiento tbody');
+                                
+                                // Reemplazar el botón "Marcar como Llamado" por el nuevo HTML con botón de "Editar"
                                 affectedRow.find('td:last-child').html(response.data.html + (affectedRow.find('.aprobar-btn').prop('outerHTML') || ''));
                                 
                                 // Eliminar el mensaje de "no results" si existe en la tabla de destino
@@ -908,16 +973,20 @@ class SGA_Panel_Views_Part1 {
 
                                 affectedRow.fadeOut(300, function() {
                                     $(this).appendTo(targetBody).fadeIn(300);
-                                    // Actualizar conteo de las secciones (simple DOM manipulation, no AJAX)
-                                    var countNew = $('#tabla-pendientes-nuevas tbody tr').length - $('#tabla-pendientes-nuevas tbody tr.no-results').length;
-                                    var countFollowup = $('#tabla-pendientes-seguimiento tbody tr').length;
                                     
+                                    // APLICAR FILTROS de nuevo para asegurar que la fila es visible en la tabla de destino
+                                    filterPendientesTable('#tabla-pendientes-seguimiento');
+
                                     // Si la tabla de origen queda vacía, mostrar mensaje de no results
-                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 11, 'No hay inscripciones en esta sección.');
                                     
                                     // REFRESCAR EL CONTADOR VISUAL
-                                    $('#panel-view-enviar_a_matriculacion h2:nth-of-type(1) .ga-pill-yellow').text(countNew); // Corrected Selector
-                                    $('#panel-view-enviar_a_matriculacion h2:nth-of-type(2) .ga-pill-blue').text(countFollowup); // Corrected Selector
+                                    updateToggleCounters();
+
+                                    // Mover el toggle a la vista de Seguimiento si el usuario estaba en Nuevas
+                                    if(!$('#sga-table-toggle').is(':checked')) {
+                                        $('#sga-table-toggle').prop('checked', true).trigger('change');
+                                    }
                                 });
                             } else if (actionType === 'editar') {
                                 // 2. Si se editó, solo actualizar el contenido en la fila actual (en cualquier tabla)
@@ -953,6 +1022,17 @@ class SGA_Panel_Views_Part1 {
                         }
                     });
                 });
+                
+                // --- NUEVA FUNCIÓN PARA ACTUALIZAR CONTADORES DEL TOGGLE ---
+                function updateToggleCounters() {
+                    // Contar solo filas visibles después del filtro de búsqueda
+                    const countNew = $('#tabla-pendientes-nuevas tbody tr').not('.no-results, .no-results-search').length;
+                    const countFollowup = $('#tabla-pendientes-seguimiento tbody tr').not('.no-results, .no-results-search').length;
+                    
+                    $('.sga-toggle-label-left').html('Nuevas (' + countNew + ')');
+                    $('.sga-toggle-label-right').html('Seguimiento (' + countFollowup + ')');
+                }
+                // --- FIN NUEVA FUNCIÓN ---
 
                 $('#ga-modal-comentario-cancelar').on('click', function() {
                     $('#ga-modal-comentario-llamada').fadeOut(200);
@@ -988,16 +1068,17 @@ class SGA_Panel_Views_Part1 {
                     // Esta función ya no es necesaria con los nuevos selectores específicos
                 });
 
-                function filterPendientesTable(tableId) {
+                // --- FUNCIÓN DE FILTRADO UNIFICADA ---
+                function filterPendientesTable() {
                     var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
                     var courseFilter = $('#filtro-curso-pendientes').val();
                     var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
                     var agentFilter = $('#filtro-agente-asignado').val() || '';
-                    var rowsFound = 0;
 
-                    $(tableId + ' tbody tr').each(function() {
+                    // 1. Filtrar AMBAS tablas internamente
+                    $('#tabla-pendientes-nuevas tbody tr, #tabla-pendientes-seguimiento tbody tr').each(function() {
                         var row = $(this);
-                        if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
+                        if (row.hasClass('no-results')) {
                             return;
                         }
 
@@ -1012,25 +1093,33 @@ class SGA_Panel_Views_Part1 {
                         var matchesAgent = (agentFilter === '' || rowAgentId === agentFilter);
 
                         if (matchesSearch && matchesCourse && matchesCallStatus && matchesAgent) {
-                            row.show();
-                            rowsFound++;
+                            row.addClass('sga-filtered-visible').show();
                         } else {
-                            row.hide();
+                            row.removeClass('sga-filtered-visible').hide();
                         }
                     });
 
-                    $(tableId + ' .no-results-search').remove();
-                    // IMPORTANTE: El mensaje de no results SÓLO se debe añadir si no existe el .no-results (que es el mensaje fijo)
-                    if (rowsFound === 0 && !$(tableId + ' .no-results').length) {
-                        var colspan = $(tableId + ' thead th').length;
-                        $(tableId + ' tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    // 2. Aplicar mensajes de "no results search"
+                    function updateTableDisplay(tableId, colspan) {
+                        $(tableId + ' .no-results-search').remove();
+                        // Contar solo las filas con la clase 'sga-filtered-visible'
+                        var rowsFound = $(tableId + ' tbody tr.sga-filtered-visible').length;
+
+                        if (rowsFound === 0 && !$(tableId + ' .no-results').length) {
+                            $(tableId + ' tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                        }
                     }
+
+                    updateTableDisplay('#tabla-pendientes-nuevas', 11);
+                    updateTableDisplay('#tabla-pendientes-seguimiento', 11);
+                    
+                    // 3. Actualizar contadores del toggle
+                    updateToggleCounters();
                 }
 
                 // NUEVO MANEJO DE FILTRADO PARA AMBAS TABLAS PENDIENTES
                 $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() {
-                    filterPendientesTable('#tabla-pendientes-nuevas');
-                    filterPendientesTable('#tabla-pendientes-seguimiento');
+                    filterPendientesTable();
                 });
 
                 function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
@@ -1571,4 +1660,3 @@ class SGA_Panel_Views_Part1 {
         <?php
     }
 }
-

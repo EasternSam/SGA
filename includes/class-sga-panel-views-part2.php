@@ -174,49 +174,68 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
             <?php endif; ?>
         </div>
         
-        <!-- --- SECCIÓN 1: INSCRIPCIONES NUEVAS Y PENDIENTES DE PRIMERA LLAMADA --- -->
-        <h2>Inscripciones Nuevas (Pendientes de Primer Contacto) <span class="ga-pill-yellow"><?php echo count($pending_calls_data); ?></span></h2>
-        <p class="description">Estas inscripciones tienen el estado "Pendiente" y aún no tienen registro de llamada. Deben ser tu primera prioridad.</p>
+        <!-- --- NUEVO WRAPPER Y TOGGLE SWITCH --- -->
+        <div class="sga-table-switcher-wrapper">
+            <div class="sga-toggle-switch-container">
+                <label for="sga-table-toggle" class="sga-toggle-label sga-toggle-label-left active" data-target="nuevas">
+                    Nuevas (<?php echo count($pending_calls_data); ?>)
+                </label>
+                <input type="checkbox" id="sga-table-toggle" class="sga-toggle-input">
+                <label for="sga-table-toggle" class="sga-toggle-label sga-toggle-label-right" data-target="seguimiento">
+                    Seguimiento (<?php echo count($in_progress_data); ?>)
+                </label>
+                <div class="sga-toggle-slider"></div>
+            </div>
+        </div>
+        
+        <div id="sga-table-section-nuevas" class="sga-table-section active">
+            <!-- --- SECCIÓN 1: INSCRIPCIONES NUEVAS Y PENDIENTES DE PRIMERA LLAMADA --- -->
+            <h2 class="sga-section-title-toggle">Inscripciones Nuevas (Pendientes de Primer Contacto)</h2>
+            <p class="description">Estas inscripciones tienen el estado "Pendiente" y aún no tienen registro de llamada. Deben ser tu primera prioridad.</p>
 
-        <div class="tabla-wrapper">
-            <table class="wp-list-table widefat striped" id="tabla-pendientes-nuevas">
-                <thead>
-                    <tr>
-                        <?php if ($can_approve): ?>
-                        <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-nuevas"></th>
-                        <?php endif; ?>
-                        <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                        <th>Estado de Llamada</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php $this->render_inscription_rows($pending_calls_data, $can_approve, $agents); ?>
-                </tbody>
-            </table>
+            <div class="tabla-wrapper">
+                <table class="wp-list-table widefat striped" id="tabla-pendientes-nuevas">
+                    <thead>
+                        <tr>
+                            <?php if ($can_approve): ?>
+                            <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-nuevas"></th>
+                            <?php endif; ?>
+                            <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
+                            <th>Estado de Llamada</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php $this->render_inscription_rows($pending_calls_data, $can_approve, $agents); ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
-        <!-- --- SECCIÓN 2: INSCRIPCIONES EN SEGUIMIENTO --- -->
-        <h2 style="margin-top: 40px;">Inscripciones en Seguimiento <span class="ga-pill-blue"><?php echo count($in_progress_data); ?></span></h2>
-        <p class="description">Estas inscripciones ya tienen un registro de llamada (marcadas como Llamado, No Contesta, Contactado, etc.) y requieren seguimiento.</p>
-        
-        <div class="tabla-wrapper">
-            <table class="wp-list-table widefat striped" id="tabla-pendientes-seguimiento">
-                <thead>
-                    <tr>
-                        <?php if ($can_approve): ?>
-                        <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-seguimiento"></th>
-                        <?php endif; ?>
-                        <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                        <th>Estado de Llamada</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php $this->render_inscription_rows($in_progress_data, $can_approve, $agents); ?>
-                </tbody>
-            </table>
+        <div id="sga-table-section-seguimiento" class="sga-table-section">
+            <!-- --- SECCIÓN 2: INSCRIPCIONES EN SEGUIMIENTO --- -->
+            <h2 class="sga-section-title-toggle">Inscripciones en Seguimiento</h2>
+            <p class="description">Estas inscripciones ya tienen un registro de llamada (marcadas como Llamado, No Contesta, Contactado, etc.) y requieren seguimiento.</p>
+            
+            <div class="tabla-wrapper">
+                <table class="wp-list-table widefat striped" id="tabla-pendientes-seguimiento">
+                    <thead>
+                        <tr>
+                            <?php if ($can_approve): ?>
+                            <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-seguimiento"></th>
+                            <?php endif; ?>
+                            <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
+                            <th>Estado de Llamada</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php $this->render_inscription_rows($in_progress_data, $can_approve, $agents); ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
+        <!-- --- FIN NUEVO WRAPPER Y TOGGLE SWITCH --- -->
 
         <?php
     }
