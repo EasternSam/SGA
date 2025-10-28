@@ -116,7 +116,7 @@ class SGA_Panel_Views_Part1 {
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
             <?php
             $options = get_option('sga_payment_options');
-            if (isset($options['enable_online_payments']) && $options->enable_online_payments == 1) :
+            if (isset($options['enable_online_payments']) && $options['enable_online_payments'] == 1) :
             ?>
             <a href="#" data-view="registro_pagos" class="panel-card panel-nav-link">
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
@@ -345,7 +345,9 @@ class SGA_Panel_Views_Part1 {
             /* Status Pills & Comments */
             .estado-inscrito { color: var(--sga-yellow); background-color: #fffbeb; padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: 12px; }
             .sga-call-comment { font-size: 12px; color: var(--sga-text-light); margin: 5px 0 0 0; padding-left: 5px; border-left: 2px solid var(--sga-gray); }
-            .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 16px; color: var(--sga-white); }
+            .ga-pill { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 999px; color: var(--sga-white); }
+            .ga-pill-yellow { background-color: var(--sga-yellow); }
+            .ga-pill-blue { background-color: var(--sga-blue); }
             .ga-pill-time { background-color: var(--sga-text-light); } .ga-pill-presencial { background-color: var(--sga-blue); }
             .ga-pill-virtual { background-color: var(--sga-purple); } .ga-pill-hibrido { background-color: var(--sga-pink); }
             .ga-pill-publico { background-color: var(--sga-green); margin-right: 15px;} .ga-pill-privado { background-color: var(--sga-text-light); margin-right: 15px;}
@@ -501,6 +503,53 @@ class SGA_Panel_Views_Part1 {
             #sga-call-log-accordion .user-log-content .wp-list-table {
                 border-top: 1px solid var(--sga-gray);
             }
+
+            /* --- ESTILOS MEJORADOS PARA SECCIONES DE INSCRIPCIONES --- */
+            #panel-view-enviar_a_matriculacion h2 {
+                font-size: 20px;
+                font-weight: 600;
+                color: var(--sga-primary);
+                margin-top: 35px; /* Más espacio arriba */
+                margin-bottom: 10px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid var(--sga-secondary);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            #panel-view-enviar_a_matriculacion h2 .ga-pill { /* Contador */
+                font-size: 14px;
+                padding: 5px 12px;
+                line-height: 1;
+                margin-left: 5px;
+            }
+            #panel-view-enviar_a_matriculacion h2:first-of-type {
+                margin-top: 10px; /* Menos espacio para el primer título */
+            }
+            #panel-view-enviar_a_matriculacion h2::before { /* Iconos */
+                content: '';
+                display: inline-block;
+                width: 24px;
+                height: 24px;
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+            }
+            #panel-view-enviar_a_matriculacion h2:nth-of-type(1)::before { /* Icono para Nuevas */
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'%3E%3C/path%3E%3Cpath d='M14.05 2a9 9 0 0 1 8 7.94'%3E%3C/path%3E%3Cpath d='M14.05 6A5 5 0 0 1 18 10'%3E%3C/path%3E%3C/svg%3E");
+            }
+            #panel-view-enviar_a_matriculacion h2:nth-of-type(2)::before { /* Icono para Seguimiento */
+                 background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='9' cy='7' r='4'%3E%3C/circle%3E%3Cpath d='m16 11 2 2 4-4'%3E%3C/path%3E%3C/svg%3E");
+            }
+            #panel-view-enviar_a_matriculacion p.description {
+                font-size: 14px;
+                color: var(--sga-text-light);
+                margin-top: -5px;
+                margin-bottom: 25px; /* Más espacio antes de la tabla */
+                padding-left: 34px; /* Alinear con el texto del título */
+            }
+            /* --- FIN ESTILOS MEJORADOS --- */
+
         </style>
         <?php
     }
@@ -581,7 +630,8 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                $("#tabla-pendientes").on("click", ".aprobar-btn", function() {
+                // Se adjuntará a ambas tablas de inscripciones:
+                $("#gestion-academica-app-container").on("click", "#tabla-pendientes-nuevas .aprobar-btn, #tabla-pendientes-seguimiento .aprobar-btn", function() {
                     var btn = $(this);
                     approvalData = {
                         type: 'single',
@@ -601,7 +651,8 @@ class SGA_Panel_Views_Part1 {
                         return;
                     }
                     var seleccionados = [];
-                    $("#tabla-pendientes .bulk-checkbox:checked").each(function() {
+                    // BUSCAR CHECKBOXES EN AMBAS TABLAS
+                    $("#tabla-pendientes-nuevas .bulk-checkbox:checked, #tabla-pendientes-seguimiento .bulk-checkbox:checked").each(function() {
                         var checkbox = $(this);
                         seleccionados.push({
                             post_id: checkbox.data('postid'),
@@ -640,7 +691,9 @@ class SGA_Panel_Views_Part1 {
                                 viewsToRefresh['cursos'] = true;
                                 approvalData.element.closest('tr').fadeOut(500, function() {
                                     $(this).remove();
-                                    checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                    // Comprobar ambas tablas al eliminar
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-seguimiento', 9, 'No hay inscripciones en esta sección.');
                                 });
                             } else {
                                 alert('Hubo un error: ' + (response.data || 'Error desconocido'));
@@ -662,11 +715,15 @@ class SGA_Panel_Views_Part1 {
                                     viewsToRefresh['lista_matriculados'] = true;
                                     viewsToRefresh['cursos'] = true;
                                     response.data.approved.forEach(function(estudiante) {
-                                        $('#tabla-pendientes .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
+                                        $('#tabla-pendientes-nuevas .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
                                             $(this).remove();
-                                            checkEmptyTable('#tabla-pendientes', 9, 'No hay estudiantes pendientes de aprobación.');
+                                        });
+                                        $('#tabla-pendientes-seguimiento .bulk-checkbox[data-postid="' + estudiante.post_id + '"][data-rowindex="' + estudiante.row_index + '"]').closest('tr').fadeOut(500, function() {
+                                            $(this).remove();
                                         });
                                     });
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
+                                    checkEmptyTable('#tabla-pendientes-seguimiento', 9, 'No hay inscripciones en esta sección.');
                                 }
                                 if (response.data.failed && response.data.failed.length > 0) {
                                     var errorMsg = 'No se pudo aprobar a ' + response.data.failed.length + ' estudiante(s). Por favor, revisa la consola para más detalles o inténtalo de nuevo.';
@@ -677,8 +734,8 @@ class SGA_Panel_Views_Part1 {
                                 alert('Hubo un error al procesar la solicitud: ' + (response.data.message || 'Error desconocido'));
                             }
                             closeModal();
-                            $("#select-all-pendientes").prop("checked", false);
-                            $("#tabla-pendientes .bulk-checkbox").prop("checked", false);
+                            $("#select-all-pendientes-nuevas, #select-all-pendientes-seguimiento").prop("checked", false);
+                            $(".bulk-checkbox").prop("checked", false);
                         }).fail(function(jqXHR, textStatus, errorThrown) {
                             console.error("AJAX Error:", textStatus, errorThrown);
                             alert('Hubo un error de comunicación con el servidor.');
@@ -687,7 +744,8 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                $("#gestion-academica-app-container").on('change', '.sga-call-status-select', function(e) {
+                // Se adjuntará a ambas tablas:
+                $("#gestion-academica-app-container").on('change', "#tabla-pendientes-nuevas .sga-call-status-select, #tabla-pendientes-seguimiento .sga-call-status-select", function(e) {
                     var select = $(this);
                     var post_id = select.data('postid');
                     var row_index = select.data('rowindex');
@@ -718,6 +776,16 @@ class SGA_Panel_Views_Part1 {
                         spinner.removeClass('is-active');
                     });
                 });
+                
+                // MANEJO DE LOS NUEVOS SELECT ALL
+                $("#gestion-academica-app-container").on("click", "#select-all-pendientes-nuevas", function() {
+                    $("#tabla-pendientes-nuevas .bulk-checkbox").prop('checked', this.checked);
+                });
+
+                $("#gestion-academica-app-container").on("click", "#select-all-pendientes-seguimiento", function() {
+                    $("#tabla-pendientes-seguimiento .bulk-checkbox").prop('checked', this.checked);
+                });
+
 
                 $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
                     var btn = $(this);
@@ -743,8 +811,8 @@ class SGA_Panel_Views_Part1 {
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
-                // NUEVO: Click en el botón Editar/Añadir Comentario
-                $("#gestion-academica-app-container").on("click", ".sga-edit-llamado-btn", function() {
+                // NUEVO: Click en el botón Editar/Añadir Comentario (Adjuntar a ambas tablas)
+                $("#gestion-academica-app-container").on("click", "#tabla-pendientes-nuevas .sga-edit-llamado-btn, #tabla-pendientes-seguimiento .sga-edit-llamado-btn", function() {
                     var btn = $(this);
                     
                     // Configurar campos del modal para la acción EDITAR
@@ -825,12 +893,34 @@ class SGA_Panel_Views_Part1 {
                     
                     $.post(ajaxurl, postData).done(function(response) {
                         if (response.success) {
-                            // Reemplazamos la celda de acción con el nuevo HTML
-                            if (actionType === 'marcar') {
-                                // Reemplaza 'Marcar como Llamado' con el HTML de la llamada + botón aprobar (si aplica)
-                                callData.element.parent().html(response.data.html + (callData.element.parent().find('.aprobar-btn').prop('outerHTML') || ''));
-                            } else {
-                                // Buscamos la celda de la columna "Acción" para actualizar los botones de Aprobar/Marcar
+                            viewsToRefresh['registro_llamadas'] = true; // Forzar recarga del log
+                            
+                            // 1. Obtener la fila afectada (TR) en la tabla de Nuevas (solo aplica a 'marcar')
+                            var affectedRow = $('#tabla-pendientes-nuevas tr[data-postid="' + post_id + '"] td:first-child input[data-rowindex="' + row_index + '"]').closest('tr');
+                            
+                            if (actionType === 'marcar' && affectedRow.length > 0) {
+                                // 2. Si se marcó, mover la fila de 'Nuevas' a 'Seguimiento'
+                                var targetBody = $('#tabla-pendientes-seguimiento tbody');
+                                affectedRow.find('td:last-child').html(response.data.html + (affectedRow.find('.aprobar-btn').prop('outerHTML') || ''));
+                                
+                                // Eliminar el mensaje de "no results" si existe en la tabla de destino
+                                targetBody.find('.no-results').remove();
+
+                                affectedRow.fadeOut(300, function() {
+                                    $(this).appendTo(targetBody).fadeIn(300);
+                                    // Actualizar conteo de las secciones (simple DOM manipulation, no AJAX)
+                                    var countNew = $('#tabla-pendientes-nuevas tbody tr').length - $('#tabla-pendientes-nuevas tbody tr.no-results').length;
+                                    var countFollowup = $('#tabla-pendientes-seguimiento tbody tr').length;
+                                    
+                                    // Si la tabla de origen queda vacía, mostrar mensaje de no results
+                                    checkEmptyTable('#tabla-pendientes-nuevas', 9, 'No hay inscripciones en esta sección.');
+                                    
+                                    // REFRESCAR EL CONTADOR VISUAL
+                                    $('#panel-view-enviar_a_matriculacion h2:nth-of-type(1) .ga-pill-yellow').text(countNew); // Corrected Selector
+                                    $('#panel-view-enviar_a_matriculacion h2:nth-of-type(2) .ga-pill-blue').text(countFollowup); // Corrected Selector
+                                });
+                            } else if (actionType === 'editar') {
+                                // 2. Si se editó, solo actualizar el contenido en la fila actual (en cualquier tabla)
                                 var actionCell = $('.sga-edit-llamado-btn[data-postid="' + post_id + '"][data-rowindex="' + row_index + '"]').closest('td').get(0);
                                 if(actionCell) {
                                     // Preservamos el botón 'Aprobar' (si existe) y actualizamos la información de la llamada.
@@ -840,7 +930,6 @@ class SGA_Panel_Views_Part1 {
                                 }
                             }
                             
-                            viewsToRefresh['registro_llamadas'] = true; // Forzar recarga del log
                             $('#ga-modal-comentario-llamada').fadeOut(200);
                         } else {
                             // Manejo de error más detallado
@@ -877,8 +966,14 @@ class SGA_Panel_Views_Part1 {
                 }
 
                 function checkEmptyTable(tableId, colspan, message) {
-                    if ($(tableId + ' tbody tr:not(.no-results-search)').length === 0 && !$(tableId + ' .no-results').length) {
-                        $(tableId + ' tbody').append('<tr class="no-results"><td colspan="' + colspan + '">' + message + '</td></tr>');
+                    // Solo chequear si no hay filas visibles y si no hay un mensaje de "no-results" ya.
+                    if ($(tableId + ' tbody tr:visible:not(.no-results-search)').length === 0) {
+                        if (!$(tableId + ' .no-results').length) {
+                             $(tableId + ' tbody').append('<tr class="no-results"><td colspan="' + colspan + '">' + message + '</td></tr>');
+                        }
+                    } else {
+                        // Si hay resultados, asegurar que el mensaje de no-results se haya ido.
+                        $(tableId + ' .no-results').remove();
                     }
                 }
 
@@ -890,17 +985,17 @@ class SGA_Panel_Views_Part1 {
                 });
 
                 $("#select-all-pendientes").on("click", function() {
-                    $("#tabla-pendientes .bulk-checkbox").prop('checked', this.checked);
+                    // Esta función ya no es necesaria con los nuevos selectores específicos
                 });
 
-                function filterPendientesTable() {
+                function filterPendientesTable(tableId) {
                     var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
                     var courseFilter = $('#filtro-curso-pendientes').val();
                     var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
                     var agentFilter = $('#filtro-agente-asignado').val() || '';
                     var rowsFound = 0;
 
-                    $('#tabla-pendientes tbody tr').each(function() {
+                    $(tableId + ' tbody tr').each(function() {
                         var row = $(this);
                         if (row.hasClass('no-results') || row.hasClass('no-results-search')) {
                             return;
@@ -924,12 +1019,19 @@ class SGA_Panel_Views_Part1 {
                         }
                     });
 
-                    $('#tabla-pendientes .no-results-search').remove();
-                    if (rowsFound === 0 && !$('#tabla-pendientes .no-results').is(':visible')) {
-                        var colspan = $('#tabla-pendientes thead th').length;
-                        $('#tabla-pendientes tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
+                    $(tableId + ' .no-results-search').remove();
+                    // IMPORTANTE: El mensaje de no results SÓLO se debe añadir si no existe el .no-results (que es el mensaje fijo)
+                    if (rowsFound === 0 && !$(tableId + ' .no-results').length) {
+                        var colspan = $(tableId + ' thead th').length;
+                        $(tableId + ' tbody').append('<tr class="no-results-search"><td colspan="' + colspan + '">No se encontraron resultados para los filtros aplicados.</td></tr>');
                     }
                 }
+
+                // NUEVO MANEJO DE FILTRADO PARA AMBAS TABLAS PENDIENTES
+                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() {
+                    filterPendientesTable('#tabla-pendientes-nuevas');
+                    filterPendientesTable('#tabla-pendientes-seguimiento');
+                });
 
                 function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
                     var searchTerm = $(searchInputSelector).val().toLowerCase();
@@ -1029,7 +1131,6 @@ class SGA_Panel_Views_Part1 {
                     });
                 }
                 $("#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos").on("keyup change", filterCourses);
-                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() { filterPendientesTable(); });
                 $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
                 $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
                 $("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change", function() { filterLogTable(); });
@@ -1470,3 +1571,4 @@ class SGA_Panel_Views_Part1 {
         <?php
     }
 }
+
