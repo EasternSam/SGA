@@ -600,6 +600,18 @@ class SGA_Panel_Views_Part1 {
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
             jQuery(document).ready(function($) {
+                
+                /**
+                 * Helper para normalizar texto (quitar tildes/acentos) para búsquedas.
+                 * @param {string} str - El texto a normalizar.
+                 * @returns {string} - El texto normalizado.
+                 */
+                function sga_normalize_string(str) {
+                    if (typeof str !== 'string') return '';
+                    // Convierte a forma NFD (decomposed) y elimina los caracteres diacríticos (acentos, etc.)
+                    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                }
+
                 // Función para establecer la fecha y hora dinámica (¡SOLUCIÓN PARA EL PROBLEMA DE LA HORA!)
                 function setDynamicDateTime() {
                     const now = new Date();
@@ -621,6 +633,55 @@ class SGA_Panel_Views_Part1 {
                 var inscriptionsChart;
                 var viewsToRefresh = {};
                 var sgaAgents = <?php echo json_encode($agents_for_js); ?>;
+
+                /**
+                 * Función para recargar una vista del panel via AJAX.
+                 * @param {string} viewName - El nombre de la vista a recargar (ej. 'registro_llamadas').
+                 */
+                function reloadPanelView(viewName) {
+                    var targetPanel = $("#panel-view-" + viewName);
+                    var loader = $("#sga-panel-loader");
+
+                    // Mostrar loader si la vista está visible, o simplemente marcar para recargar si no
+                    if (targetPanel.hasClass('active')) { // MODIFICADO: Usar hasClass('active') en lugar de is(':visible')
+                        loader.fadeIn(150);
+                    } else {
+                        viewsToRefresh[viewName] = true;
+                        return; // No hace falta recargar ahora si no está visible
+                    }
+
+                    $.post(ajaxurl, {
+                        action: 'sga_get_panel_view_html',
+                        view: viewName,
+                        _ajax_nonce: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>'
+                    }).done(function(response) {
+                        if (response.success) {
+                            targetPanel.html(response.data.html);
+                            // Si se recargó la vista de llamadas, reaplicar filtros si existen
+                            if (viewName === 'registro_llamadas') {
+                                filterCallLog();
+                            }
+                            // Si se recargó la vista de matriculación, reaplicar filtros
+                            if (viewName === 'enviar_a_matriculacion') {
+                                filterPendientesTable();
+                                // Asegurarse de que el toggle esté correcto
+                                const isChecked = $('#sga-table-toggle').is(':checked');
+                                const targetSection = isChecked ? 'seguimiento' : 'nuevas';
+                                const otherSection = isChecked ? 'nuevas' : 'seguimiento';
+                                $('#sga-table-section-' + otherSection).hide();
+                                $('#sga-table-section-' + targetSection).show();
+                            }
+                        } else {
+                            targetPanel.html('<div class="sga-profile-error">Error al recargar la vista.</div>');
+                        }
+                    }).fail(function() {
+                        targetPanel.html('<div class="sga-profile-error">Error de comunicación al recargar la vista.</div>');
+                    }).always(function() {
+                         if (targetPanel.hasClass('active')) { // MODIFICADO: Usar hasClass('active')
+                            loader.fadeOut(150);
+                        }
+                    });
+                }
 
                 $("#gestion-academica-app-container").on("click", ".panel-nav-link", function(e) {
                     e.preventDefault();
@@ -650,23 +711,15 @@ class SGA_Panel_Views_Part1 {
                     }
 
                     if (viewsToRefresh[view]) {
-                        $.post(ajaxurl, {
-                            action: 'sga_get_panel_view_html',
-                            view: view,
-                            _ajax_nonce: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>'
-                        }).done(function(response) {
-                            if (response.success) {
-                                targetPanel.html(response.data.html);
-                                delete viewsToRefresh[view];
-                            } else {
-                                targetPanel.html('<div class="sga-profile-error">Error al recargar la vista.</div>');
-                            }
-                        }).fail(function() {
-                            targetPanel.html('<div class="sga-profile-error">Error de comunicación al recargar la vista.</div>');
-                        }).always(function() {
-                            switchView();
-                        });
+                         // Llamar a reloadPanelView para obtener el HTML actualizado
+                        reloadPanelView(view);
+                        delete viewsToRefresh[view]; // Ya se está recargando
+                        // Ocultamos el panel actual y mostramos el nuevo (vacío mientras carga)
+                        activePanel.removeClass("active").hide();
+                        targetPanel.addClass("active").show();
+                        // El loader ya está activo por reloadPanelView
                     } else {
+                        // Si no necesita recarga, simplemente cambia la vista
                         setTimeout(switchView, 200); 
                     }
                 });
@@ -831,6 +884,10 @@ class SGA_Panel_Views_Part1 {
                             // Re-filtrar para asegurar que el color y la visibilidad de la fila se actualicen
                             filterPendientesTable('#tabla-pendientes-nuevas');
                             filterPendientesTable('#tabla-pendientes-seguimiento');
+                             // MODIFICADO: Recargar vista de llamadas si está activa
+                            if ($('#panel-view-registro_llamadas').hasClass('active')) { // <- Cambio clave aquí
+                                reloadPanelView('registro_llamadas');
+                            }
                         }
                     }).fail(function() {
                         alert('Error de conexión.');
@@ -956,48 +1013,21 @@ class SGA_Panel_Views_Part1 {
                     
                     $.post(ajaxurl, postData).done(function(response) {
                         if (response.success) {
-                            viewsToRefresh['registro_llamadas'] = true; // Forzar recarga del log
-                            
-                            // 1. Obtener la fila afectada (TR) en la tabla de Nuevas (solo aplica a 'marcar')
-                            var affectedRow = $('#tabla-pendientes-nuevas tr[data-postid="' + post_id + '"] td:first-child input[data-rowindex="' + row_index + '"]').closest('tr');
-                            
-                            if (actionType === 'marcar' && affectedRow.length > 0) {
-                                // 2. Si se marcó, mover la fila de 'Nuevas' a 'Seguimiento'
-                                var targetBody = $('#tabla-pendientes-seguimiento tbody');
-                                
-                                // Reemplazar el botón "Marcar como Llamado" por el nuevo HTML con botón de "Editar"
-                                affectedRow.find('td:last-child').html(response.data.html + (affectedRow.find('.aprobar-btn').prop('outerHTML') || ''));
-                                
-                                // Eliminar el mensaje de "no results" si existe en la tabla de destino
-                                targetBody.find('.no-results').remove();
-
-                                affectedRow.fadeOut(300, function() {
-                                    $(this).appendTo(targetBody).fadeIn(300);
-                                    
-                                    // APLICAR FILTROS de nuevo para asegurar que la fila es visible en la tabla de destino
-                                    filterPendientesTable('#tabla-pendientes-seguimiento');
-
-                                    // Si la tabla de origen queda vacía, mostrar mensaje de no results
-                                    checkEmptyTable('#tabla-pendientes-nuevas', 11, 'No hay inscripciones en esta sección.');
-                                    
-                                    // REFRESCAR EL CONTADOR VISUAL
-                                    updateToggleCounters();
-
-                                    // Mover el toggle a la vista de Seguimiento si el usuario estaba en Nuevas
-                                    if(!$('#sga-table-toggle').is(':checked')) {
-                                        $('#sga-table-toggle').prop('checked', true).trigger('change');
-                                    }
-                                });
-                            } else if (actionType === 'editar') {
-                                // 2. Si se editó, solo actualizar el contenido en la fila actual (en cualquier tabla)
-                                var actionCell = $('.sga-edit-llamado-btn[data-postid="' + post_id + '"][data-rowindex="' + row_index + '"]').closest('td').get(0);
-                                if(actionCell) {
-                                    // Preservamos el botón 'Aprobar' (si existe) y actualizamos la información de la llamada.
-                                    var aprobarBtn = $(actionCell).find('.aprobar-btn').prop('outerHTML');
-                                    var newContent = response.data.html + (aprobarBtn ? aprobarBtn : '');
-                                    $(actionCell).html(newContent);
-                                }
+                            // MODIFICADO: Llamar a la función de recarga SI LA VISTA 'enviar_a_matriculacion' ESTÁ ACTIVA
+                            if ($('#panel-view-enviar_a_matriculacion').hasClass('active')) {
+                                reloadPanelView('enviar_a_matriculacion');
+                            } else {
+                                viewsToRefresh['enviar_a_matriculacion'] = true; // Si no está activa, marcarla para recargar después
                             }
+                            
+                            // MODIFICADO: Recargar también la vista 'registro_llamadas' si está activa
+                            if ($('#panel-view-registro_llamadas').hasClass('active')) {
+                                reloadPanelView('registro_llamadas');
+                            } else {
+                                viewsToRefresh['registro_llamadas'] = true; // Marcar para recargar después si no está activa
+                            }
+                            
+                            // Se elimina la lógica de mover filas aquí porque reloadPanelView se encargará de mostrar la vista actualizada
                             
                             $('#ga-modal-comentario-llamada').fadeOut(200);
                         } else {
@@ -1070,7 +1100,7 @@ class SGA_Panel_Views_Part1 {
 
                 // --- FUNCIÓN DE FILTRADO UNIFICADA ---
                 function filterPendientesTable() {
-                    var searchTerm = $('#buscador-estudiantes-pendientes').val().toLowerCase();
+                    var searchTerm = sga_normalize_string($('#buscador-estudiantes-pendientes').val().toLowerCase()); // MODIFICADO
                     var courseFilter = $('#filtro-curso-pendientes').val();
                     var callStatusFilter = $('#filtro-estado-llamada').val() || ''; 
                     var agentFilter = $('#filtro-agente-asignado').val() || '';
@@ -1083,11 +1113,12 @@ class SGA_Panel_Views_Part1 {
                         }
 
                         var rowText = row.text().toLowerCase();
+                        var normalizedRowText = sga_normalize_string(rowText); // MODIFICADO
                         var rowCourse = row.data('curso');
                         var rowCallStatus = row.data('call-status');
                         var rowAgentId = String(row.data('agent-id'));
 
-                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesSearch = (searchTerm === '' || normalizedRowText.includes(searchTerm)); // MODIFICADO
                         var matchesCourse = (courseFilter === '' || rowCourse === courseFilter);
                         var matchesCallStatus = (callStatusFilter === '' || rowCallStatus === callStatusFilter);
                         var matchesAgent = (agentFilter === '' || rowAgentId === agentFilter);
@@ -1123,7 +1154,7 @@ class SGA_Panel_Views_Part1 {
                 });
 
                 function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
-                    var searchTerm = $(searchInputSelector).val().toLowerCase();
+                    var searchTerm = sga_normalize_string($(searchInputSelector).val().toLowerCase()); // MODIFICADO
                     var courseFilter = courseFilterSelector ? $(courseFilterSelector).val() : '';
                     var rowsFound = 0;
 
@@ -1134,9 +1165,10 @@ class SGA_Panel_Views_Part1 {
                         }
 
                         var rowText = row.text().toLowerCase();
+                        var normalizedRowText = sga_normalize_string(rowText); // MODIFICADO
                         var rowCourse = row.data('curso');
 
-                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesSearch = (searchTerm === '' || normalizedRowText.includes(searchTerm)); // MODIFICADO
                         var matchesCourse = (!courseFilterSelector || courseFilter === '' || rowCourse === courseFilter);
 
                         if (matchesSearch && matchesCourse) {
@@ -1154,7 +1186,7 @@ class SGA_Panel_Views_Part1 {
                 }
                 
                 function filterLogTable() {
-                    var searchTerm = $('#buscador-log').val().toLowerCase();
+                    var searchTerm = sga_normalize_string($('#buscador-log').val().toLowerCase()); // MODIFICADO
                     var userFilter = $('#filtro-usuario-log').val();
                     var dateFrom = $('#filtro-fecha-inicio').val();
                     var dateTo = $('#filtro-fecha-fin').val();
@@ -1166,10 +1198,11 @@ class SGA_Panel_Views_Part1 {
                             return;
                         }
                         var rowText = row.text().toLowerCase();
+                        var normalizedRowText = sga_normalize_string(rowText); // MODIFICADO
                         var rowUser = row.data('usuario');
                         var rowDate = row.data('fecha');
 
-                        var matchesSearch = (searchTerm === '' || rowText.includes(searchTerm));
+                        var matchesSearch = (searchTerm === '' || normalizedRowText.includes(searchTerm)); // MODIFICADO
                         var matchesUser = (userFilter === '' || rowUser === userFilter);
                         var matchesDate = true;
                         
@@ -1196,7 +1229,7 @@ class SGA_Panel_Views_Part1 {
                 }
 
                 function filterCourses() {
-                    var searchTerm = $('#buscador-cursos').val().toLowerCase();
+                    var searchTerm = sga_normalize_string($('#buscador-cursos').val().toLowerCase()); // MODIFICADO
                     var escuelaFilter = $('#filtro-escuela-cursos').val();
                     var visibilidadFilter = $('#filtro-visibilidad-cursos').val();
 
@@ -1204,11 +1237,12 @@ class SGA_Panel_Views_Part1 {
                         var element = $(this);
                         if (element.hasClass('no-results')) return;
 
-                        var elementText = element.data('search-term');
+                        var elementText = element.data('search-term'); // Ya es minúscula
+                        var normalizedElementText = sga_normalize_string(elementText); // MODIFICADO
                         var elementEscuelas = element.data('escuela').split(' ');
                         var elementVisibilidad = element.data('visibilidad');
 
-                        var matchesSearch = (searchTerm === '' || elementText.includes(searchTerm));
+                        var matchesSearch = (searchTerm === '' || normalizedElementText.includes(searchTerm)); // MODIFICADO
                         var matchesEscuela = (escuelaFilter === '' || elementEscuelas.includes(escuelaFilter));
                         var matchesVisibilidad = (visibilidadFilter === '' || elementVisibilidad === visibilidadFilter);
 
@@ -1259,7 +1293,7 @@ class SGA_Panel_Views_Part1 {
 
                 // --- ACTUALIZACIÓN FUNCIÓN filterCallLog ---
                 function filterCallLog() {
-                    var searchTerm = $('#buscador-registro-llamadas').val().toLowerCase();
+                    var searchTerm = sga_normalize_string($('#buscador-registro-llamadas').val().toLowerCase()); // MODIFICADO
                     var agentFilter = $('#filtro-agente-llamadas').val(); // Filtro por ID
                     var courseFilter = $('#filtro-curso-llamadas').val(); // Filtro por nombre curso
                     var statusFilter = $('#filtro-estado-llamadas-registro').val();
@@ -1286,10 +1320,13 @@ class SGA_Panel_Views_Part1 {
                             var studentCedula = row.find('td:nth-child(2)').text().toLowerCase();
                             var studentContact = row.find('td:nth-child(3)').text().toLowerCase();
                             var courseName = row.data('course').toLowerCase(); // Usar data attribute
+                            var commentText = row.find('td:nth-child(6)').text().toLowerCase(); // MODIFICADO: Añadir comentario
+                            
                             var rowStatus = row.data('status');
-                            var rowTextForSearch = studentName + ' ' + studentCedula + ' ' + studentContact + ' ' + courseName;
+                            var rowTextForSearch = studentName + ' ' + studentCedula + ' ' + studentContact + ' ' + courseName + ' ' + commentText;
+                            var normalizedRowText = sga_normalize_string(rowTextForSearch); // MODIFICADO
 
-                            var matchesSearch = (searchTerm === '' || rowTextForSearch.includes(searchTerm));
+                            var matchesSearch = (searchTerm === '' || normalizedRowText.includes(searchTerm)); // MODIFICADO
                             var matchesStatus = (statusFilter === '' || rowStatus === statusFilter);
                             var matchesCourse = (courseFilter === '' || row.data('course') === courseFilter); // Comparar con data attribute
 
@@ -1470,10 +1507,11 @@ class SGA_Panel_Views_Part1 {
                 });
 
                 $('#sga-estudiantes-search').on('keyup', function() {
-                    var searchTerm = $(this).val().toLowerCase();
+                    var searchTerm = sga_normalize_string($(this).val().toLowerCase()); // MODIFICADO
                     $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
                         var itemText = $(this).data('search-term');
-                        if (itemText.includes(searchTerm)) {
+                        var normalizedItemText = sga_normalize_string(itemText); // MODIFICADO
+                        if (normalizedItemText.includes(searchTerm)) { // MODIFICADO
                             $(this).show();
                         } else {
                             $(this).hide();
@@ -1660,3 +1698,4 @@ class SGA_Panel_Views_Part1 {
         <?php
     }
 }
+
