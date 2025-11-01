@@ -322,7 +322,7 @@ class SGA_Utils {
      */
     public static function _get_filtered_students($search_term = '', $course_filter = '', $status_filter = 'Matriculado') {
         // *** INICIO OPTIMIZACIÓN ***
-        // Usamos la nueva función rápida para obtener solo los IDs relevantes
+        // 1. Usar la nueva función rápida para obtener solo los IDs relevantes
         $relevant_student_ids = self::_get_student_ids_by_enrollment_status($status_filter);
 
         if (empty($relevant_student_ids)) {
@@ -335,25 +335,25 @@ class SGA_Utils {
             'post__in' => $relevant_student_ids // Buscamos SOLO en los IDs relevantes
         );
         
-        // Si hay un término de búsqueda, WP_Query no puede buscar en el repeater,
-        // así que mantenemos el filtro PHP PERO sobre un set de datos mucho más pequeño.
-        // Si no hay término de búsqueda, la lista ya está pre-filtrada.
-        
         $estudiantes = get_posts($query_args);
         $filtered_students = [];
+
+        // 2. Pre-calentar caché de metadatos para los estudiantes encontrados
+        update_postmeta_cache($relevant_student_ids);
         // *** FIN OPTIMIZACIÓN ***
 
         if ($estudiantes && function_exists('get_field')) {
+            // 3. Este bucle ahora es mucho más rápido (lee desde caché)
             foreach ($estudiantes as $estudiante) {
-                $cursos = get_field('cursos_inscritos', $estudiante->ID);
+                $cursos = get_field('cursos_inscritos', $estudiante->ID); // Rápido (desde caché)
                 if ($cursos) {
                     foreach ($cursos as $curso) {
                         $is_status_match = empty($status_filter) || (isset($curso['estado']) && $curso['estado'] == $status_filter);
                         
                         if ($is_status_match) {
-                            $cedula = get_field('cedula', $estudiante->ID);
-                            $email = get_field('email', $estudiante->ID);
-                            $telefono = get_field('telefono', $estudiante->ID);
+                            $cedula = get_field('cedula', $estudiante->ID); // Rápido (desde caché)
+                            $email = get_field('email', $estudiante->ID); // Rápido (desde caché)
+                            $telefono = get_field('telefono', $estudiante->ID); // Rápido (desde caché)
                             $matricula = isset($curso['matricula']) ? $curso['matricula'] : '';
                             $matches_course = empty($course_filter) || $curso['nombre_curso'] === $course_filter;
                             $searchable_string = implode(' ', [$matricula, $estudiante->post_title, $cedula, $email, $telefono, $curso['nombre_curso']]);
@@ -398,52 +398,82 @@ class SGA_Utils {
         return $sent;
     }
 
+    // *** INICIO OPTIMIZACIÓN ***
     /**
-     * Calcula el número de cupos ocupados para un curso y horario específico.
-     * @return int Número de cupos ocupados.
+     * [NUEVA FUNCIÓN HELPER ESTÁTICA]
+     * Pre-calcula los cupos ocupados para TODOS los cursos y horarios.
+     * Se almacena en una variable estática para ejecutarse solo UNA VEZ por carga de página.
+     * @return array Mapa de cupos: [course_name][horario] => count
      */
-    public static function _get_cupos_ocupados($course_name, $horario) {
-        // *** INICIO OPTIMIZACIÓN ***
-        // Se cachea el resultado por 5 minutos para evitar recalcular esto en cada carga de la página de cursos
-        $transient_key = 'sga_cupos_' . sanitize_key($course_name) . '_' . sanitize_key($horario);
-        $cached_count = get_transient($transient_key);
-
-        if (false !== $cached_count) {
-            return $cached_count;
+    private static $cupos_map_cache = null;
+    private static function _get_all_cupos_map_cached() {
+        // Si el caché estático ya está lleno, devolverlo inmediatamente.
+        if (self::$cupos_map_cache !== null) {
+            return self::$cupos_map_cache;
         }
-        // *** FIN OPTIMIZACIÓN ***
 
-        $count = 0;
-        // *** INICIO OPTIMIZACIÓN ***
-        // Obtenemos solo IDs de estudiantes con estado 'Inscrito' O 'Matriculado'
+        $cupos_map = [];
+        
+        // 1. Obtener todos los IDs de estudiantes relevantes (Inscrito o Matriculado)
         $inscrito_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
         $matriculado_ids = self::_get_student_ids_by_enrollment_status('Matriculado');
         $estudiantes_ids = array_unique(array_merge($inscrito_ids, $matriculado_ids));
 
         if (empty($estudiantes_ids)) {
-            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
-            return 0;
+            self::$cupos_map_cache = $cupos_map; // Guardar caché (vacío)
+            return self::$cupos_map_cache;
         }
-        // *** FIN OPTIMIZACIÓN ***
 
-        if ($estudiantes_ids && function_exists('get_field')) {
-            // El bucle ahora es mucho más pequeño, solo recorre estudiantes relevantes
+        // 2. Pre-calentar el caché de metadatos para todos estos estudiantes
+        update_postmeta_cache($estudiantes_ids);
+
+        // 3. Iterar UNA VEZ sobre los estudiantes y construir el mapa
+        if (function_exists('get_field')) {
             foreach ($estudiantes_ids as $estudiante_id) {
-                $cursos_inscritos = get_field('cursos_inscritos', $estudiante_id);
+                $cursos_inscritos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
                 if ($cursos_inscritos) {
                     foreach ($cursos_inscritos as $curso) {
-                        if ($curso['nombre_curso'] === $course_name && $curso['horario'] === $horario && ($curso['estado'] === 'Matriculado' || $curso['estado'] === 'Inscrito')) {
-                            $count++;
+                        if (isset($curso['estado']) && ($curso['estado'] === 'Matriculado' || $curso['estado'] === 'Inscrito')) {
+                            $course_name = $curso['nombre_curso'];
+                            $horario = $curso['horario'];
+
+                            if (!isset($cupos_map[$course_name])) {
+                                $cupos_map[$course_name] = [];
+                            }
+                            if (!isset($cupos_map[$course_name][$horario])) {
+                                $cupos_map[$course_name][$horario] = 0;
+                            }
+                            
+                            $cupos_map[$course_name][$horario]++;
                         }
                     }
                 }
             }
         }
         
+        self::$cupos_map_cache = $cupos_map; // Guardar caché (lleno)
+        return self::$cupos_map_cache;
+    }
+    // *** FIN OPTIMIZACIÓN ***
+
+    /**
+     * Calcula el número de cupos ocupados para un curso y horario específico.
+     * @return int Número de cupos ocupados.
+     */
+    public static function _get_cupos_ocupados($course_name, $horario) {
         // *** INICIO OPTIMIZACIÓN ***
-        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
+        // Esta función ahora es un simple "lookup" en el mapa estático pre-calculado.
+        // La primera vez que se llame, _get_all_cupos_map_cached() se ejecutará.
+        // Todas las llamadas subsecuentes serán instantáneas.
+        $cupos_map = self::_get_all_cupos_map_cached();
+        
+        // Buscar el curso y el horario en el mapa
+        if (isset($cupos_map[$course_name]) && isset($cupos_map[$course_name][$horario])) {
+            return $cupos_map[$course_name][$horario];
+        }
+        
+        return 0; // Si no se encuentra, retornar 0
         // *** FIN OPTIMIZACIÓN ***
-        return $count;
     }
 
     /**
@@ -567,108 +597,35 @@ class SGA_Utils {
     }
     
     /**
-     * Envía un correo con un reporte en PDF adjunto.
-     */
-    public static function _send_report_email($pdf_data, $subject, $filename) {
-        $options = get_option('sga_report_options');
-        $recipient = !empty($options['recipient_email']) ? $options['recipient_email'] : get_option('admin_email');
-        if (!is_email($recipient)) {
-            self::_log_activity('Error de Reporte', 'Destinatario no válido: ' . esc_html($recipient));
-            return false;
-        }
-
-        $email_title = 'Reporte del Sistema';
-        $content_html = '<p>Saludos,</p>';
-        $content_html .= '<p class="last">Adjunto encontrarás el reporte solicitado: <strong>' . esc_html($subject) . '</strong>. Este correo ha sido generado automáticamente por el Sistema de Gestión Académica.</p>';
-        $body = self::_get_email_template($email_title, $content_html);
-
-        $upload_dir = wp_upload_dir();
-        $temp_file_path = trailingslashit($upload_dir['basedir']) . $filename;
-        file_put_contents($temp_file_path, $pdf_data);
-
-        $headers = array('Content-Type: text/html; charset=UTF-8');
-        $attachments = array($temp_file_path);
-
-        $sent = wp_mail($recipient, $subject, $body, $headers, $attachments);
-        unlink($temp_file_path);
-
-        $log_title = $sent ? 'Reporte Enviado' : 'Error de Reporte';
-        self::_log_activity($log_title, "El reporte '{$subject}' fue procesado para {$recipient}.");
-        return $sent;
-    }
-
-    /**
-     * Reemplaza etiquetas dinámicas en una cadena de texto con datos del estudiante.
-     * @param string $content El contenido con las etiquetas.
-     * @param int $student_id El ID del estudiante.
-     * @param string $context_group El grupo de destinatarios (ej. 'por_curso').
-     * @param string $context_course_name El nombre del curso si el contexto lo requiere.
-     * @return string El contenido con las etiquetas reemplazadas.
-     */
-    public static function _replace_dynamic_tags($content, $student_id, $context_group = '', $context_course_name = '') {
-        $student_post = get_post($student_id);
-        if (!$student_post) return $content;
-
-        $cedula = get_field('cedula', $student_id);
-
-        $replacements = [
-            '[nombre_estudiante]' => $student_post->post_title,
-            '[cedula]' => $cedula ? $cedula : '',
-        ];
-
-        // Etiquetas que dependen del contexto del curso
-        $matricula = 'N/A';
-        $nombre_curso = 'N/A';
-
-        if ($context_group === 'por_curso' && !empty($context_course_name)) {
-            $cursos_inscritos = get_field('cursos_inscritos', $student_id);
-            if ($cursos_inscritos) {
-                foreach ($cursos_inscritos as $curso) {
-                    if ($curso['nombre_curso'] === $context_course_name) {
-                        $matricula = !empty($curso['matricula']) ? $curso['matricula'] : 'Pendiente';
-                        $nombre_curso = $curso['nombre_curso'];
-                        break; 
-                    }
-                }
-            }
-        }
-        
-        $replacements['[nombre_curso]'] = $nombre_curso;
-        $replacements['[matricula]'] = $matricula;
-
-        foreach ($replacements as $tag => $value) {
-            $content = str_replace($tag, $value, $content);
-        }
-
-        return $content;
-    }
-
-    /**
      * Obtiene el número de inscripciones pendientes.
      * @return int Cantidad de inscripciones pendientes.
      */
     public static function _get_pending_inscriptions_count() {
         // *** INICIO OPTIMIZACIÓN ***
         // Usamos un "transient" (caché de WP) para guardar el conteo por 5 minutos
-        // Esto evita que esta consulta pesada se ejecute en CADA carga de página del admin.
         $transient_key = 'sga_pending_insc_count';
         $cached_count = get_transient($transient_key);
 
         if (false !== $cached_count) {
             return $cached_count; // Devuelve el valor cacheado si existe
         }
-        // *** FIN OPTIMIZACIÓN ***
-
+        
         $count = 0;
-        // *** INICIO OPTIMIZACIÓN ***
         // Usamos la nueva función rápida para obtener solo los IDs de estudiantes con inscripciones pendientes
         $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
-        // *** FIN OPTIMIZACIÓN ***
+        
+        if (empty($estudiantes_ids)) {
+            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
+            return 0;
+        }
 
-        if ($estudiantes_ids && function_exists('get_field')) {
-            // Este bucle ahora es mucho más pequeño
+        // Pre-calentar caché de metadatos
+        update_postmeta_cache($estudiantes_ids);
+
+        if (function_exists('get_field')) {
+            // Este bucle ahora es mucho más rápido y rápido (lee de caché)
             foreach ($estudiantes_ids as $estudiante_id) {
-                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                $cursos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
                 if ($cursos) {
                     foreach ($cursos as $curso) {
                         if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
@@ -678,11 +635,9 @@ class SGA_Utils {
                 }
             }
         }
-        
-        // *** INICIO OPTIMIZACIÓN ***
-        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
         // *** FIN OPTIMIZACIÓN ***
         
+        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
         return $count;
     }
 
@@ -699,19 +654,25 @@ class SGA_Utils {
         if (false !== $cached_count) {
             return $cached_count;
         }
-        // *** FIN OPTIMIZACIÓN ***
 
         $count = 0;
-        // *** INICIO OPTIMIZACIÓN ***
         // Obtenemos solo IDs de estudiantes con estado 'Inscrito'
         $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
+
+        if (empty($estudiantes_ids)) {
+            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
+            return 0;
+        }
+        
+        // Pre-calentar caché de metadatos
+        update_postmeta_cache($estudiantes_ids);
         // *** FIN OPTIMIZACIÓN ***
 
         if ($estudiantes_ids && function_exists('get_field')) {
-            // Este bucle ahora es mucho más pequeño
+            // Este bucle ahora es mucho más rápido y rápido (lee de caché)
             foreach ($estudiantes_ids as $estudiante_id) {
-                $cursos = get_field('cursos_inscritos', $estudiante_id);
-                $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true);
+                $cursos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
+                $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true); // Rápido (desde caché)
                 if (!is_array($call_statuses)) {
                     $call_statuses = [];
                 }
@@ -729,14 +690,10 @@ class SGA_Utils {
             }
         }
         
-        // *** INICIO OPTIMIZACIÓN ***
         set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
-        // *** FIN OPTIMIZACIÓN ***
-        
         return $count;
     }
     
-    // *** INICIO OPTIMIZACIÓN ***
     /**
      * [NUEVA FUNCIÓN] Obtiene IDs de estudiantes basado en el estado de una inscripción en el repeater.
      * Utiliza una consulta SQL directa (LIKE) en lugar de get_posts(-1) para un rendimiento óptimo.
@@ -751,12 +708,7 @@ class SGA_Utils {
 
         global $wpdb;
         
-        // *** INICIO CORRECCIÓN DE BUG ***
-        // La consulta anterior (meta_key = 'cursos_inscritos' AND meta_value LIKE '...estado...')
-        // era incorrecta. Los campos repetidores de ACF guardan cada sub-campo como una
-        // meta-key separada (ej. 'cursos_inscritos_0_estado', 'cursos_inscritos_1_estado').
-        // La consulta correcta debe buscar en estas meta-keys dinámicas.
-        
+        // La consulta correcta debe buscar en meta-keys dinámicas (ej. 'cursos_inscritos_0_estado')
         $like_key = 'cursos_inscritos_%_estado'; // Patrón de la meta-key
 
         // Preparamos la consulta SQL
@@ -767,7 +719,6 @@ class SGA_Utils {
             $like_key, // El patrón para el LIKE
             $status    // El valor exacto (ej. 'Inscrito')
         );
-        // *** FIN CORRECCIÓN DE BUG ***
 
         // Obtenemos los IDs de la base de datos
         $student_ids = $wpdb->get_col($sql);
@@ -777,7 +728,6 @@ class SGA_Utils {
 
         return $student_ids;
     }
-    // *** FIN OPTIMIZACIÓN ***
     
     /**
      * Busca y retorna el ID del último CPT 'sga_llamada' para una inscripción específica.
@@ -1157,5 +1107,228 @@ class SGA_Utils {
         return ob_get_clean();
     }
     // FIN - FUNCIÓN AÑADIDA
+
+    // *** INICIO - NUEVAS FUNCIONES DE PAGINACIÓN ***
+
+    /**
+     * Helper para normalizar strings para búsqueda (quitar acentos).
+     * @param string $str
+     * @return string
+     */
+    private static function sga_normalize_string($str) {
+        if (empty($str)) return '';
+        $str = preg_replace('/[áàâãä]/u', 'a', $str);
+        $str = preg_replace('/[éèêë]/u', 'e', $str);
+        $str = preg_replace('/[íìîï]/u', 'i', $str);
+        $str = preg_replace('/[óòôõö]/u', 'o', $str);
+        $str = preg_replace('/[úùûü]/u', 'u', $str);
+        $str = preg_replace('/[ÁÀÂÃÄ]/u', 'A', $str);
+        $str = preg_replace('/[ÉÈÊË]/u', 'E', $str);
+        $str = preg_replace('/[ÍÌÎÏ]/u', 'I', $str);
+        $str = preg_replace('/[ÓÒÔÕÖ]/u', 'O', $str);
+        $str = preg_replace('/[ÚÙÛÜ]/u', 'U', $str);
+        $str = preg_replace('/[ñ]/u', 'n', $str);
+        $str = preg_replace('/[Ñ]/u', 'N', $str);
+        return $str;
+    }
+
+    /**
+     * [NUEVA FUNCIÓN DE FILTRADO Y PAGINACIÓN]
+     * Obtiene los datos de inscripciones pendientes, filtrados y paginados.
+     * @param array $args Argumentos de filtrado y paginación:
+     * 'paged_nuevas' => (int) página para la tabla "Nuevas"
+     * 'paged_seguimiento' => (int) página para la tabla "Seguimiento"
+     * 'posts_per_page' => (int) resultados por página
+     * 'search' => (string) término de búsqueda
+     * 'course' => (string) nombre del curso
+     * 'status' => (string) estado de la llamada
+     * 'agent' => (string|int) ID del agente o 'unassigned'
+     * 'current_user_role' => (string|null) Rol del usuario actual ('agente' or 'agente_infotep')
+     * 'agent_visibility_ids' => (array) IDs de agentes que el usuario actual puede ver
+     * 'can_approve' => (bool) Si el usuario puede ver todo
+     * @return array Dos arrays: 'pending_calls' y 'in_progress'
+     */
+    public static function _get_filtered_and_paginated_inscriptions_data($args = []) {
+        // 1. Valores por defecto
+        $defaults = [
+            'paged_nuevas' => 1,
+            'paged_seguimiento' => 1,
+            'posts_per_page' => 50,
+            'search' => '',
+            'course' => '',
+            'status' => '',
+            'agent' => '',
+            'current_user_role' => null,
+            'agent_visibility_ids' => [],
+            'can_approve' => false,
+            'infotep_category_slug' => 'cursos-infotep' // Hardcoding this for now
+        ];
+        $args = wp_parse_args($args, $defaults);
+
+        // Normalizar búsqueda
+        $search_term = strtolower(self::sga_normalize_string($args['search']));
+
+        // 2. Obtener TODOS los IDs de estudiantes 'Inscrito'
+        $pending_student_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
+        
+        if (empty($pending_student_ids)) {
+            $empty_result = ['data_slice' => [], 'total_count' => 0];
+            return ['pending_calls' => $empty_result, 'in_progress' => $empty_result];
+        }
+
+        // 3. Pre-calentar caché de metadatos (ACF)
+        update_postmeta_cache($pending_student_ids);
+
+        // 4. Obtener todos los posts de una vez
+        $estudiantes_inscritos = get_posts(array(
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'post__in' => $pending_student_ids,
+            'orderby' => 'post_title',
+            'order' => 'ASC'
+        ));
+
+        // 5. Pre-cargar el mapa de categorías de cursos
+        $all_cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'post_status' => array('publish', 'private'))); // Incluir privados
+        $course_category_map = [];
+        $course_ids_to_check = wp_list_pluck($all_cursos, 'ID');
+        if (!empty($course_ids_to_check)) {
+            $all_terms = wp_get_object_terms($course_ids_to_check, 'category', ['fields' => 'all_with_object_id']);
+            $terms_by_course_id = [];
+            
+            foreach ($all_terms as $term) {
+                if (!isset($terms_by_course_id[$term->object_id])) $terms_by_course_id[$term->object_id] = [];
+                $terms_by_course_id[$term->object_id][] = $term->slug;
+            }
+
+            foreach ($all_cursos as $course_post) {
+                $course_category_map[$course_post->post_title] = $terms_by_course_id[$course_post->ID] ?? [];
+            }
+        }
+        
+        // 6. Definir arrays de datos filtrados (aún sin paginar)
+        $pending_calls_data_filtered = [];
+        $in_progress_data_filtered = [];
+
+        // 7. Bucle de filtrado (en memoria, muy rápido)
+        foreach ($estudiantes_inscritos as $estudiante) {
+            $cursos = get_field('cursos_inscritos', $estudiante->ID);
+            $assignments = get_post_meta($estudiante->ID, '_sga_agent_assignments', true);
+            $call_logs = get_post_meta($estudiante->ID, '_sga_call_log', true);
+            $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
+            
+            if (!is_array($assignments)) $assignments = [];
+            if (!is_array($call_logs)) $call_logs = [];
+            if (!is_array($call_statuses)) $call_statuses = [];
+
+            if (!$cursos) continue;
+
+            $student_cedula = get_field('cedula', $estudiante->ID);
+            $student_email = get_field('email', $estudiante->ID);
+            $student_telefono = get_field('telefono', $estudiante->ID);
+
+            foreach ($cursos as $index => $curso) {
+                if (!isset($curso['estado']) || $curso['estado'] != 'Inscrito') {
+                    continue;
+                }
+
+                // --- A. FILTRADO POR ROL (VISIBILIDAD) ---
+                $course_name = $curso['nombre_curso'];
+                $course_categories = $course_category_map[$course_name] ?? [];
+                $is_infotep_course = in_array($args['infotep_category_slug'], $course_categories);
+                $agent_id = $assignments[$index] ?? 'unassigned';
+                $current_call_status = $call_statuses[$index] ?? 'pendiente';
+                $has_call_log = isset($call_logs[$index]); // *** ESTA ES LA LÍNEA QUE FALTABA ***
+
+                $should_display = $args['can_approve'];
+
+                if (!$args['can_approve']) {
+                    $is_assigned_to_group = is_numeric($agent_id) && in_array(intval($agent_id), $args['agent_visibility_ids']);
+                    $is_unassigned = ($agent_id === 'unassigned');
+                    
+                    if ($args['current_user_role'] === 'agente_infotep') {
+                        $should_display = ($is_infotep_course && ($is_assigned_to_group || $is_unassigned));
+                    } elseif ($args['current_user_role'] === 'agente') {
+                        $should_display = (!$is_infotep_course && ($is_assigned_to_group || $is_unassigned));
+                    }
+                }
+                
+                if (!$should_display) continue;
+
+                // --- B. FILTRADO POR FORMULARIO ---
+                // Filtro de Agente
+                if (!empty($args['agent']) && $args['agent'] != $agent_id) {
+                    continue;
+                }
+                // Filtro de Curso
+                if (!empty($args['course']) && $args['course'] != $course_name) {
+                    continue;
+                }
+                // Filtro de Estado de Llamada
+                if (!empty($args['status']) && $args['status'] != $current_call_status) {
+                    continue;
+                }
+                // Filtro de Búsqueda
+                if (!empty($search_term)) {
+                    $searchable_string = strtolower(self::sga_normalize_string(
+                        $estudiante->post_title . ' ' . $student_cedula . ' ' . $student_email . ' ' . $student_telefono . ' ' . $course_name
+                    ));
+                    if (strpos($searchable_string, $search_term) === false) {
+                        continue;
+                    }
+                }
+
+                // --- C. SI PASA TODOS LOS FILTROS, CLASIFICAR ---
+                $data = [
+                    'estudiante' => $estudiante,
+                    'curso' => $curso,
+                    'index' => $index,
+                    'agent_id' => $agent_id,
+                    'current_call_status' => $current_call_status,
+                    'call_info' => $call_logs[$index] ?? null,
+                ];
+                
+                // *** ESTA ES LA LÍNEA CORREGIDA ***
+                // Ahora $has_call_log está definida y la clasificación funciona
+                if ($current_call_status === 'pendiente' && !$has_call_log) {
+                    $pending_calls_data_filtered[] = $data;
+                } else {
+                    $in_progress_data_filtered[] = $data;
+                }
+            } // end foreach curso
+        } // end foreach estudiante
+
+        // 8. PAGINACIÓN
+        $posts_per_page = (int)$args['posts_per_page'];
+        
+        // Paginar "Nuevas"
+        $total_pending = count($pending_calls_data_filtered);
+        $pending_slice = array_slice(
+            $pending_calls_data_filtered,
+            ((int)$args['paged_nuevas'] - 1) * $posts_per_page,
+            $posts_per_page
+        );
+
+        // Paginar "Seguimiento"
+        $total_inprogress = count($in_progress_data_filtered);
+        $inprogress_slice = array_slice(
+            $in_progress_data_filtered,
+            ((int)$args['paged_seguimiento'] - 1) * $posts_per_page,
+            $posts_per_page
+        );
+
+        // 9. Retornar los datos
+        return [
+            'pending_calls' => [
+                'data_slice' => $pending_slice,
+                'total_count' => $total_pending,
+            ],
+            'in_progress' => [
+                'data_slice' => $inprogress_slice,
+                'total_count' => $total_inprogress,
+            ]
+        ];
+    }
+    // *** FIN - NUEVAS FUNCIONES DE PAGINACIÓN ***
 }
 

@@ -14,138 +14,13 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
 
     public function render_view_enviar_a_matriculacion() {
         // *** INICIO OPTIMIZACIÓN ***
-        // Ya no cargamos todos los estudiantes. Usamos la nueva función optimizada.
-        $pending_student_ids = SGA_Utils::_get_student_ids_by_enrollment_status('Inscrito');
-        
-        if (empty($pending_student_ids)) {
-            $estudiantes_inscritos = [];
-        } else {
-            // Cargamos SOLAMENTE los posts de estudiantes que sabemos que tienen inscripciones pendientes
-            $estudiantes_inscritos = get_posts(array(
-                'post_type' => 'estudiante',
-                'posts_per_page' => -1, // -1 está bien aquí porque la lista de IDs es (relativamente) pequeña
-                'post__in' => $pending_student_ids,
-                'orderby' => 'post_title',
-                'order' => 'ASC'
-            ));
-        }
+        // Ya no cargamos todos los estudiantes. Solo cargamos lo necesario para los filtros.
         // *** FIN OPTIMIZACIÓN ***
         
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
-
         $can_approve = $this->sga_user_has_role(['administrator', 'gestor_academico']);
-        $current_user = wp_get_current_user();
-
-        // Usamos la función global SGA_Utils::_get_sga_agents()
         $agents = SGA_Utils::_get_sga_agents();
-
-        // --- 1. Lógica de Roles y Visibilidad Grupal ---
-        $is_infotep_agent = $this->sga_user_has_role(['agente_infotep']);
-        $is_standard_agent = $this->sga_user_has_role(['agente']);
-        $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
-        $infotep_category_slug = 'cursos-infotep';
-
-        $agent_visibility_ids = [];
-
-        if ($current_user_role) {
-            // Obtener todos los IDs de usuario con el mismo rol (Visibilidad Grupal)
-            $same_role_agents = get_users(['role' => $current_user_role, 'fields' => 'ID']);
-            $agent_visibility_ids = array_map('intval', $same_role_agents);
-            // Esto permite que el agente vea las inscripciones asignadas a cualquiera de sus compañeros de equipo.
-        }
-
-
-        // --- 2. Pre-cargar el mapa de cursos y sus categorías (MÉTODO ESTABLE) ---
-        $course_category_map = [];
-        $course_ids_to_check = array_map(function($p) { return $p->ID; }, $cursos_disponibles);
-
-        foreach ($course_ids_to_check as $course_id) {
-            $course_post = get_post($course_id);
-            if ($course_post) {
-                // Obtener solo los slugs para chequeo rápido
-                $terms = wp_get_post_terms($course_id, 'category', ['fields' => 'slugs']);
-                $course_category_map[$course_post->post_title] = !is_wp_error($terms) ? $terms : [];
-            }
-        }
-        // --- FIN LÓGICA DE FILTRADO DE VISTA POR ROL ---
-
-        // --- ARRAYS PARA SEPARAR LAS INSCRIPCIONES ---
-        $pending_calls_data = []; // Inscripciones con estado 'pendiente' y sin registro de llamada.
-        $in_progress_data = [];   // Inscripciones con registro de llamada (llamadas, no contesta, etc.).
-
-        // --- LÓGICA DE RECORRIDO Y CLASIFICACIÓN ---
-        // Este bucle ahora es mucho más rápido porque solo itera sobre estudiantes relevantes
-        if ($estudiantes_inscritos && function_exists('get_field')) {
-            foreach ($estudiantes_inscritos as $estudiante) {
-                $cursos = get_field('cursos_inscritos', $estudiante->ID);
-                $assignments = get_post_meta($estudiante->ID, '_sga_agent_assignments', true);
-                if (!is_array($assignments)) $assignments = [];
-
-                $call_logs = get_post_meta($estudiante->ID, '_sga_call_log', true);
-                if (!is_array($call_logs)) $call_logs = [];
-
-                $call_statuses = get_post_meta($estudiante->ID, '_sga_call_statuses', true);
-                if (!is_array($call_statuses)) $call_statuses = [];
-
-                if ($cursos) {
-                    foreach ($cursos as $index => $curso) {
-                        if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
-
-                            $course_name = $curso['nombre_curso'];
-                            $course_categories = $course_category_map[$course_name] ?? [];
-                            $is_infotep_course = in_array($infotep_category_slug, $course_categories);
-                            $agent_id = $assignments[$index] ?? 'unassigned';
-                            $current_call_status = $call_statuses[$index] ?? 'pendiente';
-                            $has_call_log = isset($call_logs[$index]);
-
-                            $should_display = $can_approve; // Administrador/Gestor siempre ve todo
-
-                            if (!$can_approve) {
-                                // Lógica de visibilidad para Agentes Estándar y Agentes de Infotep
-                                $is_assigned_to_group = is_numeric($agent_id) && in_array(intval($agent_id), $agent_visibility_ids);
-                                $is_unassigned = ($agent_id === 'unassigned');
-
-                                if ($is_infotep_agent) {
-                                    if ($is_infotep_course && ($is_assigned_to_group || $is_unassigned)) {
-                                        $should_display = true;
-                                    } else {
-                                        $should_display = false;
-                                    }
-                                } elseif ($is_standard_agent) {
-                                    if (!$is_infotep_course && ($is_assigned_to_group || $is_unassigned)) {
-                                        $should_display = true;
-                                    } else {
-                                        $should_display = false;
-                                    }
-                                }
-                            }
-                            
-                            if ($should_display) {
-                                $data = [
-                                    'estudiante' => $estudiante,
-                                    'curso' => $curso,
-                                    'index' => $index,
-                                    'agent_id' => $agent_id,
-                                    'current_call_status' => $current_call_status,
-                                    'call_info' => $call_logs[$index] ?? null,
-                                ];
-
-                                // CLASIFICACIÓN CRUCIAL:
-                                // Solo se considera "Pendiente de Llamar" si el estado de llamada es 'pendiente' Y no tiene un registro de llamada asociado.
-                                if ($current_call_status === 'pendiente' && !$has_call_log) {
-                                    $pending_calls_data[] = $data;
-                                } else {
-                                    $in_progress_data[] = $data;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // --- FIN DE LÓGICA DE RECORRIDO Y CLASIFICACIÓN ---
-
-
+        
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">
@@ -195,19 +70,20 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         <!-- --- NUEVO WRAPPER Y TOGGLE SWITCH --- -->
         <div class="sga-table-switcher-wrapper">
             <div class="sga-toggle-switch-container">
+                <!-- [MODIFICADO] Los contadores se cargarán vía AJAX -->
                 <label for="sga-table-toggle" class="sga-toggle-label sga-toggle-label-left active" data-target="nuevas">
-                    Nuevas (<?php echo count($pending_calls_data); ?>)
+                    Nuevas (0)
                 </label>
                 <input type="checkbox" id="sga-table-toggle" class="sga-toggle-input">
                 <label for="sga-table-toggle" class="sga-toggle-label sga-toggle-label-right" data-target="seguimiento">
-                    Seguimiento (<?php echo count($in_progress_data); ?>)
+                    Seguimiento (0)
                 </label>
                 <div class="sga-toggle-slider"></div>
             </div>
         </div>
         
+        <!-- [MODIFICADO] La tabla y la paginación ahora tienen contenedores de carga -->
         <div id="sga-table-section-nuevas" class="sga-table-section active">
-            <!-- --- SECCIÓN 1: INSCRIPCIONES NUEVAS Y PENDIENTES DE PRIMERA LLAMADA --- -->
             <h2 class="sga-section-title-toggle">Inscripciones Nuevas (Pendientes de Primer Contacto)</h2>
             <p class="description">Estas inscripciones tienen el estado "Pendiente" y aún no tienen registro de llamada. Deben ser tu primera prioridad.</p>
 
@@ -223,21 +99,25 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             <th>Acción</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php $this->render_inscription_rows($pending_calls_data, $can_approve, $agents); ?>
+                    <tbody id="tabla-pendientes-nuevas-tbody">
+                         <!-- El contenido se cargará vía AJAX -->
+                         <tr class="no-results"><td colspan="<?php echo $can_approve ? 11 : 10; ?>">Cargando...</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <!-- [NUEVO] Controles de paginación para la tabla "Nuevas" -->
+            <div class="sga-pagination-controls" id="sga-pagination-nuevas">
+                 <!-- El contenido se cargará vía AJAX -->
             </div>
         </div>
         
         <div id="sga-table-section-seguimiento" class="sga-table-section">
-            <!-- --- SECCIÓN 2: INSCRIPCIONES EN SEGUIMIENTO --- -->
             <h2 class="sga-section-title-toggle">Inscripciones en Seguimiento</h2>
             <p class="description">Estas inscripciones ya tienen un registro de llamada (marcadas como Llamado, No Contesta, Contactado, etc.) y requieren seguimiento.</p>
             
             <div class="tabla-wrapper">
                 <table class="wp-list-table widefat striped" id="tabla-pendientes-seguimiento">
-                    <thead>
+                     <thead>
                         <tr>
                             <?php if ($can_approve): ?>
                             <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-seguimiento"></th>
@@ -247,37 +127,102 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             <th>Acción</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php $this->render_inscription_rows($in_progress_data, $can_approve, $agents); ?>
+                    <tbody id="tabla-pendientes-seguimiento-tbody">
+                        <!-- El contenido se cargará vía AJAX -->
+                        <tr class="no-results"><td colspan="<?php echo $can_approve ? 11 : 10; ?>">Cargando...</td></tr>
                     </tbody>
                 </table>
             </div>
+            <!-- [NUEVO] Controles de paginación para la tabla "Seguimiento" -->
+            <div class="sga-pagination-controls" id="sga-pagination-seguimiento">
+                 <!-- El contenido se cargará vía AJAX -->
+            </div>
         </div>
-        <!-- --- FIN NUEVO WRAPPER Y TOGGLE SWITCH --- -->
+        <!-- --- FIN MODIFICACIONES DE PAGINACIÓN --- -->
 
         <?php
     }
 
+
+    // *** INICIO - NUEVAS FUNCIONES DE RENDERIZADO PARA PAGINACIÓN ***
+
     /**
-     * Helper para renderizar las filas de la tabla.
-     * @param array $data_rows Array de datos de inscripciones.
-     * @param bool $can_approve Si el usuario puede ver los botones de aprobación.
-     * @param array $agents Lista de objetos WP_User de agentes.
+     * [NUEVA FUNCIÓN ESTÁTICA]
+     * Llamada por AJAX para obtener el HTML de las tablas paginadas.
+     * @param array $args Argumentos de filtrado y paginación.
+     * @return array HTML para las tablas y controles de paginación.
      */
-    private function render_inscription_rows($data_rows, $can_approve, $agents) {
-        $hay_resultados = false;
-        $agent_colors = [];
-        $color_palette = ['#e0f2fe', '#e0e7ff', '#dcfce7', '#fef9c3', '#fee2e2', '#f3e8ff', '#dbeafe'];
-        $color_index = 0;
+    public static function get_paginated_table_html($args) {
+        // 1. Obtener los datos filtrados y paginados desde la utilidad
+        $data = SGA_Utils::_get_filtered_and_paginated_inscriptions_data($args);
         
+        $pending_data = $data['pending_calls'];
+        $inprogress_data = $data['in_progress'];
+        
+        $can_approve = $args['can_approve'];
+        
+        // 2. Obtener mapa de agentes (para nombres)
+        $agents = array_merge(SGA_Utils::_get_sga_agents('agente'), SGA_Utils::_get_sga_agents('agente_infotep'));
         $agent_map = [];
         foreach ($agents as $agent) {
             $agent_map[$agent->ID] = $agent->display_name;
         }
 
+        // 3. Renderizar el HTML para la tabla "Nuevas"
+        $html_nuevas = self::_render_inscription_rows_paginated(
+            $pending_data['data_slice'], 
+            $can_approve, 
+            $agent_map
+        );
+        
+        // 4. Renderizar el HTML de paginación para "Nuevas"
+        $pagination_nuevas = self::_render_pagination_controls_html(
+            $pending_data['total_count'], 
+            $args['paged_nuevas'], 
+            $args['posts_per_page']
+        );
+
+        // 5. Renderizar el HTML para la tabla "Seguimiento"
+        $html_seguimiento = self::_render_inscription_rows_paginated(
+            $inprogress_data['data_slice'], 
+            $can_approve, 
+            $agent_map
+        );
+        
+        // 6. Renderizar el HTML de paginación para "Seguimiento"
+        $pagination_seguimiento = self::_render_pagination_controls_html(
+            $inprogress_data['total_count'], 
+            $args['paged_seguimiento'], 
+            $args['posts_per_page']
+        );
+
+        // 7. Devolver todo
+        return [
+            'html_nuevas' => $html_nuevas,
+            'pagination_nuevas' => $pagination_nuevas,
+            'total_nuevas' => $pending_data['total_count'],
+            'html_seguimiento' => $html_seguimiento,
+            'pagination_seguimiento' => $pagination_seguimiento,
+            'total_seguimiento' => $inprogress_data['total_count'],
+        ];
+    }
+
+    /**
+     * [NUEVA FUNCIÓN ESTÁTICA HELPER]
+     * Renderiza solo las filas (TRs) para una tabla de inscripción.
+     * @param array $data_rows El array de datos (ya paginado).
+     * @param bool $can_approve Si el usuario puede aprobar.
+     * @param array $agent_map Mapa de IDs de agentes a nombres.
+     * @return string HTML de las filas de la tabla.
+     */
+    private static function _render_inscription_rows_paginated($data_rows, $can_approve, $agent_map) {
+        $agent_colors = [];
+        $color_palette = ['#e0f2fe', '#e0e7ff', '#dcfce7', '#fef9c3', '#fee2e2', '#f3e8ff', '#dbeafe'];
+        $color_index = 0;
+
+        ob_start();
 
         if (!empty($data_rows)) {
-            $hay_resultados = true;
             foreach ($data_rows as $data) {
                 $estudiante = $data['estudiante'];
                 $curso = $data['curso'];
@@ -300,7 +245,11 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     }
                 }
 
-                $call_log_post_id = SGA_Utils::_get_last_call_log_post_id($estudiante->ID, $index);
+                $call_log_post_id = $call_info['cpt_log_id'] ?? null;
+                // Si no está en el meta (llamada antigua), buscarlo
+                if (!$call_log_post_id) {
+                     $call_log_post_id = SGA_Utils::_get_last_call_log_post_id($estudiante->ID, $index);
+                }
                 
                 ?>
                 <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>" data-agent-id="<?php echo esc_attr($agent_id); ?>" <?php echo $row_style; ?>>
@@ -349,12 +298,53 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 </tr>
                 <?php
             }
-        }
-        if (!$hay_resultados) {
+        } else {
+            // No hay resultados
             $colspan = $can_approve ? 11 : 10;
             echo '<tr class="no-results"><td colspan="' . $colspan . '">No hay inscripciones en esta sección.</td></tr>';
         }
+        
+        return ob_get_clean();
     }
+    
+    /**
+     * [NUEVA FUNCIÓN ESTÁTICA HELPER]
+     * Renderiza el HTML para los controles de paginación.
+     * @param int $total_items Total de ítems en esta categoría (post-filtro).
+     * @param int $current_page Página actual.
+     * @param int $posts_per_page Ítems por página.
+     * @return string HTML de los controles.
+     */
+    private static function _render_pagination_controls_html($total_items, $current_page, $posts_per_page) {
+        $total_pages = ceil($total_items / $posts_per_page);
+        if ($total_pages <= 0) $total_pages = 1;
+        
+        $start_item = (($current_page - 1) * $posts_per_page) + 1;
+        $end_item = min($current_page * $posts_per_page, $total_items);
+        
+        $info_text = 'Mostrando <strong>' . $start_item . '</strong>-<strong>' . $end_item . '</strong> de <strong>' . $total_items . '</strong> resultados';
+        if ($total_items === 0) {
+            $info_text = 'Mostrando <strong>0</strong> de <strong>0</strong> resultados';
+        }
+
+        ob_start();
+        ?>
+        <div class="sga-pagination-info">
+            <?php echo $info_text; ?>
+        </div>
+        <div class="sga-pagination-actions">
+            <button class="button sga-page-prev" <?php disabled($current_page, 1); ?>>
+                &laquo; Anterior
+            </button>
+            <button class="button sga-page-next" <?php disabled($current_page, $total_pages); ?>>
+                Siguiente &raquo;
+            </button>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    // *** FIN - NUEVAS FUNCIONES DE RENDERIZADO PARA PAGINACIÓN ***
 
 
     // --- VISTA DE LISTA DE MATRICULADOS ---
@@ -374,6 +364,8 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 'orderby' => 'post_title',
                 'order' => 'ASC'
             ));
+            // Pre-calentar caché de metadatos
+            update_postmeta_cache(wp_list_pluck($estudiantes_matriculados, 'ID'));
         }
         // *** FIN OPTIMIZACIÓN ***
         
@@ -455,6 +447,11 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         // WP_Query es la forma correcta de manejar paginación
         $todos_estudiantes_query = new WP_Query($query_args);
         $todos_estudiantes = $todos_estudiantes_query->posts;
+        
+        // Pre-calentar caché de metadatos para la página actual
+        if ($todos_estudiantes_query->have_posts()) {
+            update_postmeta_cache(wp_list_pluck($todos_estudiantes, 'ID'));
+        }
         // *** FIN OPTIMIZACIÓN: PAGINACIÓN ***
         
         ?>
@@ -503,13 +500,16 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 <span class="displaying-num"><?php echo $todos_estudiantes_query->found_posts; ?> estudiantes</span>
                 <?php
                 // Generar los enlaces de paginación
+                // [CORRECCIÓN] Asegurarse de que los enlaces de paginación funcionen con el JS de navegación
+                $base_url = '#'; // Cambiar a '#' para que no recargue la página
                 echo paginate_links( array(
-                    'base' => add_query_arg( 'paged', '%#%' ), // URL base para los enlaces
+                    'base' => $base_url . '%_%', // Usar # para el JS
                     'format' => '?paged=%#%', // Formato del enlace
                     'current' => $paged, // Página actual
                     'total' => $todos_estudiantes_query->max_num_pages, // Total de páginas
                     'prev_text' => '&laquo;', // Texto para "Anterior"
                     'next_text' => '&raquo;', // Texto para "Siguiente"
+                    'add_args' => ['view' => 'lista_estudiantes'], // Añadir la vista actual
                 ) );
                 ?>
             </div>
@@ -519,3 +519,4 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         // *** FIN OPTIMIZACIÓN: ENLACES DE PAGINACIÓN ***
     }
 }
+

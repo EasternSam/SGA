@@ -33,6 +33,10 @@ class SGA_Ajax {
 
         // NUEVO HOOK para renderizar HTML del expediente para impresión directa
         add_action('wp_ajax_sga_render_student_profile_for_print', array($this, 'ajax_render_student_profile_for_print'));
+        
+        // *** INICIO - NUEVO HOOK DE PAGINACIÓN ***
+        add_action('wp_ajax_sga_get_paginated_inscriptions', array($this, 'ajax_get_paginated_inscriptions'));
+        // *** FIN - NUEVO HOOK DE PAGINACIÓN ***
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
@@ -543,11 +547,20 @@ class SGA_Ajax {
         if (!isset($_POST['view']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce')) {
             wp_send_json_error(['message' => 'Parámetros inválidos o error de seguridad.']);
         }
+        // *** INICIO - MODIFICACIÓN DE PAGINACIÓN ***
+        // No permitir que esta función cargue la vista 'enviar_a_matriculacion'
+        // ya que ahora tiene su propio cargador AJAX.
+        $view = sanitize_key($_POST['view']);
+        if ($view === 'enviar_a_matriculacion') {
+             wp_send_json_error(['message' => 'Esta vista no se puede cargar de esta forma.']);
+             return;
+        }
+        // *** FIN - MODIFICACIÓN DE PAGINACIÓN ***
+
         if (!current_user_can('edit_estudiantes')) {
             wp_send_json_error(['message' => 'No tienes permisos.']);
         }
 
-        $view = sanitize_key($_POST['view']);
         $method_name = 'render_view_' . $view;
 
         $shortcode_handler = new SGA_Shortcodes();
@@ -561,6 +574,68 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'La vista solicitada no existe.']);
         }
     }
+    
+    // *** INICIO - NUEVA FUNCIÓN AJAX DE PAGINACIÓN ***
+    /**
+     * AJAX: Obtiene el HTML de las tablas de inscripciones paginadas y filtradas.
+     * Esta función reemplaza a `ajax_get_panel_view_html` para la vista 'enviar_a_matriculacion'.
+     */
+    public function ajax_get_paginated_inscriptions() {
+        // 1. Seguridad y Permisos
+        if (!isset($_POST['_ajax_nonce']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce')) {
+            wp_send_json_error(['message' => 'Error de seguridad (Nonce).']);
+        }
+        if (!current_user_can('edit_estudiantes')) {
+            wp_send_json_error(['message' => 'No tienes permisos.']);
+        }
+
+        // 2. Sanitizar todos los datos de entrada
+        $paged_nuevas = isset($_POST['paged_nuevas']) ? absint($_POST['paged_nuevas']) : 1;
+        $paged_seguimiento = isset($_POST['paged_seguimiento']) ? absint($_POST['paged_seguimiento']) : 1;
+        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+        $course = isset($_POST['course']) ? sanitize_text_field($_POST['course']) : '';
+        $status = isset($_POST['status']) ? sanitize_key($_POST['status']) : '';
+        $agent = isset($_POST['agent']) ? sanitize_text_field($_POST['agent']) : ''; // Puede ser 'unassigned' o un ID
+
+        // 3. Obtener datos de visibilidad del usuario (igual que en la carga inicial de la vista)
+        $role_helper = new SGA_Panel_Views_Part1(); // Solo para el helper de roles
+        $can_approve = $role_helper->sga_user_has_role(['administrator', 'gestor_academico']);
+        
+        $is_infotep_agent = $role_helper->sga_user_has_role(['agente_infotep']);
+        $is_standard_agent = $role_helper->sga_user_has_role(['agente']);
+        $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
+        
+        $agent_visibility_ids = [];
+        if ($current_user_role) {
+            $same_role_agents = get_users(['role' => $current_user_role, 'fields' => 'ID']);
+            $agent_visibility_ids = array_map('intval', $same_role_agents);
+        }
+
+        // 4. Construir argumentos para la función de Utils
+        $args = [
+            'paged_nuevas' => $paged_nuevas,
+            'paged_seguimiento' => $paged_seguimiento,
+            'posts_per_page' => 50, // 50 por página
+            'search' => $search,
+            'course' => $course,
+            'status' => $status,
+            'agent' => $agent,
+            'current_user_role' => $current_user_role,
+            'agent_visibility_ids' => $agent_visibility_ids,
+            'can_approve' => $can_approve
+        ];
+
+        // 5. Llamar a la función de renderizado estática (que crearemos en el siguiente paso)
+        // Esta función hará el trabajo de llamar a SGA_Utils y generar el HTML.
+        // Necesita ser estática para que podamos llamarla sin instanciar la clase aquí.
+        // Asumimos que `SGA_Panel_Views_Part2` ya está cargada (lo está, desde class-sga-main.php)
+        $html_data = SGA_Panel_Views_Part2::get_paginated_table_html($args);
+
+        // 6. Enviar respuesta JSON
+        wp_send_json_success($html_data);
+    }
+    // *** FIN - NUEVA FUNCIÓN AJAX DE PAGINACIÓN ***
+
 
     /**
      * AJAX: Obtiene los datos para el gráfico de inscripciones en el panel de reportes.

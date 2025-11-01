@@ -10,6 +10,53 @@ if (!defined('ABSPATH')) exit;
  */
 class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
 
+    /**
+     * [NUEVA FUNCIÓN DE OPTIMIZACIÓN]
+     * Pre-calcula los cupos ocupados para TODOS los cursos y horarios en una sola pasada.
+     * @return array Mapa de cupos: [course_name][horario] => count
+     */
+    private function _get_all_cupos_counts() {
+        $cupos_map = [];
+        
+        // 1. Obtener todos los IDs de estudiantes relevantes (Inscrito o Matriculado)
+        $inscrito_ids = SGA_Utils::_get_student_ids_by_enrollment_status('Inscrito');
+        $matriculado_ids = SGA_Utils::_get_student_ids_by_enrollment_status('Matriculado');
+        $estudiantes_ids = array_unique(array_merge($inscrito_ids, $matriculado_ids));
+
+        if (empty($estudiantes_ids)) {
+            return $cupos_map;
+        }
+
+        // 2. Pre-calentar el caché de metadatos para todos estos estudiantes
+        update_postmeta_cache($estudiantes_ids);
+
+        // 3. Iterar UNA VEZ sobre los estudiantes y construir el mapa
+        if (function_exists('get_field')) {
+            foreach ($estudiantes_ids as $estudiante_id) {
+                $cursos_inscritos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
+                if ($cursos_inscritos) {
+                    foreach ($cursos_inscritos as $curso) {
+                        if (isset($curso['estado']) && ($curso['estado'] === 'Matriculado' || $curso['estado'] === 'Inscrito')) {
+                            $course_name = $curso['nombre_curso'];
+                            $horario = $curso['horario'];
+
+                            if (!isset($cupos_map[$course_name])) {
+                                $cupos_map[$course_name] = [];
+                            }
+                            if (!isset($cupos_map[$course_name][$horario])) {
+                                $cupos_map[$course_name][$horario] = 0;
+                            }
+                            
+                            $cupos_map[$course_name][$horario]++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $cupos_map;
+    }
+
     // --- VISTA DE LISTA DE CURSOS ---
 
     public function render_view_lista_cursos() {
@@ -21,6 +68,31 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
             'post_status' => array('publish', 'private')
         ));
         $escuelas = get_terms(array('taxonomy' => 'category', 'hide_empty' => false));
+        
+        // *** INICIO OPTIMIZACIÓN ***
+        // 1. Pre-calcular TODOS los cupos ocupados de una sola vez
+        $cupos_map = $this->_get_all_cupos_counts();
+        
+        // 2. Pre-cargar metadatos y terms de todos los cursos
+        $course_ids = wp_list_pluck($cursos_activos, 'ID');
+        if (!empty($course_ids)) {
+            // Pre-calentar caché de metadatos (para get_field)
+            update_postmeta_cache($course_ids);
+            
+            // Pre-calentar caché de terms (para get_the_terms)
+            $all_terms = wp_get_object_terms($course_ids, 'category', ['fields' => 'all_with_object_id']);
+            
+            // Mapear los terms a un array [course_id => [array de terms]]
+            $terms_by_course_id = [];
+            foreach ($all_terms as $term) {
+                if (!isset($terms_by_course_id[$term->object_id])) {
+                    $terms_by_course_id[$term->object_id] = [];
+                }
+                $terms_by_course_id[$term->object_id][] = $term;
+            }
+        }
+        // *** FIN OPTIMIZACIÓN ***
+        
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Lista de Cursos Activos</h1>
@@ -57,10 +129,14 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
         <div class="cursos-grid" style="margin-top: 25px;">
             <?php if ($cursos_activos && function_exists('get_field')) : ?>
                 <?php foreach ($cursos_activos as $curso) : 
-                    $escuelas_terms = get_the_terms($curso->ID, 'category');
+                    // *** INICIO OPTIMIZACIÓN ***
+                    // Usar los datos pre-cargados
+                    $escuelas_terms = $terms_by_course_id[$curso->ID] ?? [];
+                    // *** FIN OPTIMIZACIÓN ***
+                    
                     $escuela_display = 'N/A';
                     $escuela_slugs = '';
-                    if ($escuelas_terms && !is_wp_error($escuelas_terms)) {
+                    if (!empty($escuelas_terms)) {
                         $escuela_names = array_map(function($term) { return $term->name; }, $escuelas_terms);
                         $escuela_slugs_array = array_map(function($term) { return $term->slug; }, $escuelas_terms);
                         $escuela_display = implode(', ', $escuela_names);
@@ -86,23 +162,27 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                     </div>
                     <div class="curso-card-body">
                         <div class="curso-details-grid">
-                            <div><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); ?></div>
-                            <div><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></div>
-                            <div><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></div>
+                            <div><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); // RÁPIDO (desde caché) ?></div>
+                            <div><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); // RÁPIDO (desde caché) ?></div>
+                            <div><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); // RÁPIDO (desde caché) ?></div>
                             <div><span>Escuela:</span> <?php echo esc_html($escuela_display); ?></div>
                         </div>
                         <div class="horarios-section">
                             <h4>Horarios Disponibles</h4>
                             <?php 
-                            $horarios_repeater = get_field('horarios_del_curso', $curso->ID);
+                            $horarios_repeater = get_field('horarios_del_curso', $curso->ID); // RÁPIDO (desde caché)
                             if ($horarios_repeater) : ?>
                                 <ul class="horarios-list">
                                 <?php foreach ($horarios_repeater as $horario) : 
                                     $total_cupos = !empty($horario['numero_de_cupos']) ? intval($horario['numero_de_cupos']) : 0;
                                     $cupos_ocupados = 0;
-                                    if ($total_cupos > 0) {
-                                        $cupos_ocupados = SGA_Utils::_get_cupos_ocupados($curso->post_title, $horario['dias_de_la_semana'] . ' ' . $horario['hora']);
-                                    }
+                                    
+                                    // *** INICIO OPTIMIZACIÓN ***
+                                    // Usar el mapa pre-calculado en lugar de la función _get_cupos_ocupados
+                                    $horario_key = $horario['dias_de_la_semana'] . ' ' . $horario['hora'];
+                                    $cupos_ocupados = $cupos_map[$curso->post_title][$horario_key] ?? 0;
+                                    // *** FIN OPTIMIZACIÓN ***
+                                    
                                     $modalidad = !empty($horario['modalidad']) ? $horario['modalidad'] : 'N/A';
                                     $modalidad_class = 'ga-pill-default';
                                     switch (strtolower($modalidad)) {
@@ -149,10 +229,14 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                     <tbody>
                     <?php if ($cursos_activos && function_exists('get_field')) : ?>
                         <?php foreach ($cursos_activos as $curso) : 
-                            $escuelas_terms = get_the_terms($curso->ID, 'category');
+                            // *** INICIO OPTIMIZACIÓN ***
+                            // Usar los datos pre-cargados
+                            $escuelas_terms = $terms_by_course_id[$curso->ID] ?? [];
+                            // *** FIN OPTIMIZACIÓN ***
+                            
                             $escuela_display = 'N/A';
                             $escuela_slugs = '';
-                            if ($escuelas_terms && !is_wp_error($escuelas_terms)) {
+                            if (!empty($escuelas_terms)) {
                                 $escuela_names = array_map(function($term) { return $term->name; }, $escuelas_terms);
                                 $escuela_slugs_array = array_map(function($term) { return $term->slug; }, $escuelas_terms);
                                 $escuela_display = implode(', ', $escuela_names);
@@ -169,23 +253,27 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                             </td>
                             <td>
                                 <ul class="curso-details-list">
-                                    <li><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); ?></li>
-                                    <li><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); ?></li>
-                                    <li><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); ?></li>
+                                    <li><span>Precio:</span> <?php echo esc_html(get_field('precio_del_curso', $curso->ID)); // RÁPIDO (desde caché) ?></li>
+                                    <li><span>Mensualidad:</span> <?php echo esc_html(get_field('mensualidad', $curso->ID)); // RÁPIDO (desde caché) ?></li>
+                                    <li><span>Duración:</span> <?php echo esc_html(get_field('duracion_del_curso', $curso->ID)); // RÁPIDO (desde caché) ?></li>
                                     <li><span>Escuela:</span> <?php echo esc_html($escuela_display); ?></li>
                                 </ul>
                             </td>
                             <td>
                                 <?php 
-                                $horarios_repeater = get_field('horarios_del_curso', $curso->ID);
+                                $horarios_repeater = get_field('horarios_del_curso', $curso->ID); // RÁPIDO (desde caché)
                                 if ($horarios_repeater) : ?>
                                     <ul class="horarios-list-inline">
                                     <?php foreach ($horarios_repeater as $horario) : 
                                         $total_cupos = !empty($horario['numero_de_cupos']) ? intval($horario['numero_de_cupos']) : 0;
                                         $cupos_ocupados = 0;
-                                        if ($total_cupos > 0) {
-                                            $cupos_ocupados = SGA_Utils::_get_cupos_ocupados($curso->post_title, $horario['dias_de_la_semana'] . ' ' . $horario['hora']);
-                                        }
+                                        
+                                        // *** INICIO OPTIMIZACIÓN ***
+                                        // Usar el mapa pre-calculado
+                                        $horario_key = $horario['dias_de_la_semana'] . ' ' . $horario['hora'];
+                                        $cupos_ocupados = $cupos_map[$curso->post_title][$horario_key] ?? 0;
+                                        // *** FIN OPTIMIZACIÓN ***
+                                        
                                          $modalidad = !empty($horario['modalidad']) ? $horario['modalidad'] : 'N/A';
                                         $modalidad_class = 'ga-pill-default';
                                         switch (strtolower($modalidad)) {
@@ -269,7 +357,8 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
 
         <div id="sga-call-log-accordion" style="margin-top: 25px;">
             <?php
-            // La consulta principal busca en ambos CPTs (día actual y archivados)
+            // *** INICIO OPTIMIZACIÓN ***
+            // 1. Obtener todos los CPTs de llamadas
             $args = array(
                 'post_type' => ['sga_llamada', 'sga_llamada_hist'],
                 'posts_per_page' => -1,
@@ -277,24 +366,53 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                 'order' => 'ASC',
             );
             $call_logs_query = new WP_Query($args);
-            $calls_by_user = [];
+            $call_log_posts = $call_logs_query->posts;
 
+            // 2. Pre-calentar caché para los CPTs de llamadas y sus autores
+            $call_log_ids = wp_list_pluck($call_log_posts, 'ID');
+            $author_ids = array_unique(wp_list_pluck($call_log_posts, 'post_author'));
+            if (!empty($call_log_ids)) {
+                update_postmeta_cache($call_log_ids); // Pre-calienta meta de las llamadas
+            }
+            if (!empty($author_ids)) {
+                update_user_caches(get_users(['include' => $author_ids])); // Pre-calienta datos de usuarios/agentes
+            }
+
+            // 3. Obtener todos los IDs de estudiantes únicos de los metadatos de las llamadas
+            $student_ids_from_logs = [];
+            if (!empty($call_log_ids)) {
+                global $wpdb;
+                $meta_key = '_student_id';
+                $sql = $wpdb->prepare(
+                    "SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN (" . implode(',', $call_log_ids) . ")",
+                    $meta_key
+                );
+                $student_ids_from_logs = $wpdb->get_col($sql);
+                $student_ids_from_logs = array_map('intval', $student_ids_from_logs);
+                $student_ids_from_logs = array_unique(array_filter($student_ids_from_logs));
+            }
+
+            // 4. Pre-calentar caché de metadatos para TODOS los estudiantes encontrados
+            if (!empty($student_ids_from_logs)) {
+                update_postmeta_cache($student_ids_from_logs);
+            }
+            // *** FIN OPTIMIZACIÓN ***
+
+            $calls_by_user = [];
+            
             if ($call_logs_query->have_posts()) {
-                while ($call_logs_query->have_posts()) {
-                    $call_logs_query->the_post();
-                    $author_id = get_the_author_meta('ID');
+                // Iterar sobre los posts (que ya están en memoria)
+                foreach ($call_log_posts as $call_post) {
+                    $author_id = $call_post->post_author;
                     if (!isset($calls_by_user[$author_id])) {
-                        $user_data = get_userdata($author_id);
+                        $user_data = get_userdata($author_id); // RÁPIDO (desde caché)
                         $calls_by_user[$author_id] = [
-                            // Guardamos el objeto WP_User completo
                             'user_info' => $user_data,
                             'calls' => []
                         ];
                     }
-                    // Guardamos el objeto WP_Post completo
-                    $calls_by_user[$author_id]['calls'][] = get_post();
+                    $calls_by_user[$author_id]['calls'][] = $call_post;
                 }
-                wp_reset_postdata();
             }
 
             if (!empty($calls_by_user)):
@@ -341,29 +459,36 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
                                         });
 
                                         foreach ($data['calls'] as $call):
+                                            // *** INICIO OPTIMIZACIÓN ***
+                                            // Todas las llamadas a get_post_meta y get_field ahora son rápidas (desde caché)
                                             $student_id = get_post_meta($call->ID, '_student_id', true);
                                             $row_index = get_post_meta($call->ID, '_row_index', true);
-                                            $course_name = get_post_meta($call->ID, '_course_name', true); // Obtener nombre del curso
+                                            $course_name = get_post_meta($call->ID, '_course_name', true);
 
                                             // Obtener estado directamente del meta del estudiante
                                             $call_statuses = get_post_meta($student_id, '_sga_call_statuses', true);
+                                            // *** FIN OPTIMIZACIÓN ***
+                                            
                                             if (!is_array($call_statuses)) { $call_statuses = []; }
                                             $current_status_key = $call_statuses[$row_index] ?? 'pendiente';
                                             $status_details = $status_map[$current_status_key] ?? ['text' => ucfirst($current_status_key), 'class' => ''];
                                             
-                                            // Obtener el comentario más reciente y quién lo editó desde el meta _sga_call_log
+                                            // *** INICIO OPTIMIZACIÓN ***
+                                            // Obtener el comentario más reciente y quién lo editó desde el meta _sga_call_log (rápido, desde caché)
                                             $call_log_meta = get_post_meta($student_id, '_sga_call_log', true);
+                                            // *** FIN OPTIMIZACIÓN ***
+
                                             $call_info_meta = $call_log_meta[$row_index] ?? null;
                                             $comment_text = $call_info_meta['comment'] ?? $call->post_content; // Fallback al contenido del CPT si no hay meta
                                             $last_edited_by = $call_info_meta['last_edited_by'] ?? $data['user_info']->display_name; // Fallback al autor del CPT
                                             $last_edited_timestamp = $call_info_meta['last_edited_timestamp'] ?? strtotime($call->post_date);
                                         ?>
                                             <tr data-status="<?php echo esc_attr($current_status_key); ?>" data-course="<?php echo esc_attr($course_name); ?>">
-                                                <td><?php echo esc_html(get_post_meta($call->ID, '_student_name', true)); ?></td>
-                                                <td><?php echo esc_html(get_field('cedula', $student_id)); ?></td>
+                                                <td><?php echo esc_html(get_post_meta($call->ID, '_student_name', true)); // RÁPIDO (desde caché) ?></td>
+                                                <td><?php echo esc_html(get_field('cedula', $student_id)); // RÁPIDO (desde caché) ?></td>
                                                 <td>
-                                                    <small><strong>Email:</strong> <?php echo esc_html(get_field('email', $student_id)); ?></small><br>
-                                                    <small><strong>Tel:</strong> <?php echo esc_html(get_field('telefono', $student_id)); ?></small>
+                                                    <small><strong>Email:</strong> <?php echo esc_html(get_field('email', $student_id)); // RÁPIDO (desde caché) ?></small><br>
+                                                    <small><strong>Tel:</strong> <?php echo esc_html(get_field('telefono', $student_id)); // RÁPIDO (desde caché) ?></small>
                                                 </td>
                                                 <td><?php echo esc_html($course_name); ?></td>
                                                 <td><span class="ga-pill <?php echo esc_attr($status_details['class']); ?>"><?php echo esc_html($status_details['text']); ?></span></td>
