@@ -919,4 +919,119 @@ class SGA_Utils {
         <?php
         return ob_get_clean();
     }
+    
+    /**
+     * INICIO - FUNCIÓN AÑADIDA
+     * Genera una plantilla de correo HTML estandarizada.
+     * @param string $title El título principal que se muestra en la cabecera del correo.
+     * @param string $content_html El contenido principal del correo (párrafos).
+     * @param string|null $summary_table_title Título para la tabla de resumen (opcional).
+     * @param array|null $summary_data Datos para la tabla de resumen (opcional).
+     * @param array|null $button_data Datos para el botón de acción (opcional) [ 'url' => '', 'text' => '' ].
+     * @return string El HTML completo del correo.
+     */
+    public static function _get_email_template($title, $content_html, $summary_table_title = null, $summary_data = null, $button_data = null) {
+        // Intenta obtener la URL del logo. ID 5024 basado en otros archivos.
+        $logo_url = wp_get_attachment_url(5024); 
+        $logo_html = $logo_url ? '<img src="' . esc_url($logo_url) . '" alt="' . get_bloginfo('name') . '" style="max-width: 180px; margin-bottom: 20px;">' : '';
+
+        $summary_html = '';
+        if ($summary_table_title && !empty($summary_data) && is_array($summary_data)) {
+            $summary_html .= '<h3 style="color: #141f53; margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">' . esc_html($summary_table_title) . '</h3>';
+            $summary_html .= '<table class="summary-table" style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">';
+            foreach ($summary_data as $key => $value) {
+                $summary_html .= '<tr>';
+                $summary_html .= '<td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9; font-weight: 600; width: 35%;">' . esc_html($key) . '</td>';
+                $summary_html .= '<td style="padding: 10px; border: 1px solid #ddd;">' . esc_html($value) . '</td>';
+                $summary_html .= '</tr>';
+            }
+            $summary_html .= '</table>';
+        }
+
+        $button_html = '';
+        if (!empty($button_data) && is_array($button_data) && isset($button_data['url'], $button_data['text'])) {
+            $button_html = '<p style="text-align: center; margin-top: 25px;"><a href="' . esc_url($button_data['url']) . '" class="button" style="display: inline-block; padding: 12px 25px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">' . esc_html($button_data['text']) . '</a></p>';
+        }
+
+        ob_start();
+        ?>
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title><?php echo esc_html($title); ?></title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    background-color: #f4f7f6;
+                }
+                .container {
+                    width: 90%;
+                    max-width: 600px;
+                    margin: 20px auto;
+                    background-color: #ffffff;
+                    border: 1px solid #ddd;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                }
+                .header {
+                    padding: 30px;
+                    background-color: #141f53;
+                    text-align: center;
+                    border-bottom: 5px solid #4f46e5;
+                }
+                .header h1 {
+                    color: #ffffff;
+                    margin: 0;
+                    font-size: 24px;
+                }
+                .content {
+                    padding: 35px;
+                    color: #333;
+                    font-size: 16px;
+                    line-height: 1.6;
+                }
+                .content p {
+                    margin: 0 0 15px;
+                }
+                .content p.last {
+                    margin-bottom: 0;
+                }
+                .footer {
+                    padding: 20px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #888;
+                    background-color: #f9f9f9;
+                    border-top: 1px solid #ddd;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <?php if ($logo_html): ?>
+                        <?php echo $logo_html; ?>
+                    <?php endif; ?>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px;"><?php echo esc_html($title); ?></h1>
+                </div>
+                <div class="content">
+                    <?php echo $content_html; // Contenido principal del correo ?>
+                    <?php echo $summary_html; // Tabla de resumen (si existe) ?>
+                    <?php echo $button_html; // Botón (si existe) ?>
+                </div>
+                <div class="footer">
+                    <p>&copy; <?php echo date('Y'); ?> <?php echo get_bloginfo('name'); ?>. Todos los derechos reservados.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        <?php
+        return ob_get_clean();
+    }
+    // FIN - FUNCIÓN AÑADIDA
 }
