@@ -1117,6 +1117,50 @@ class SGA_Utils {
     }
     // FIN - FUNCIÓN AÑADIDA
 
+    /**
+     * [NUEVA FUNCIÓN] Reemplaza las etiquetas dinámicas en una plantilla de correo.
+     * @param string $template El cuerpo del correo con etiquetas.
+     * @param int $student_id ID del estudiante.
+     * @param string $group El grupo de destinatarios (ej. 'por_curso').
+     * @param string $curso_nombre El nombre del curso (si el grupo es 'por_curso').
+     * @return string El cuerpo del correo con las etiquetas reemplazadas.
+     */
+    public static function _replace_dynamic_tags($template, $student_id, $group, $curso_nombre) {
+        $student_post = get_post($student_id);
+        if (!$student_post) {
+            return $template; // Devuelve la plantilla sin cambios si el estudiante no existe
+        }
+
+        $nombre_estudiante = $student_post->post_title;
+        $cedula = get_field('cedula', $student_id);
+
+        $nombre_curso_especifico = 'N/A';
+        $matricula_especifica = 'N/A';
+
+        // Solo buscar datos del curso si el envío es por curso
+        if ($group === 'por_curso' && !empty($curso_nombre)) {
+            $cursos = get_field('cursos_inscritos', $student_id);
+            if ($cursos) {
+                foreach ($cursos as $curso) {
+                    if ($curso['nombre_curso'] === $curso_nombre) {
+                        $nombre_curso_especifico = $curso['nombre_curso'];
+                        $matricula_especifica = $curso['matricula'] ?? 'N/A';
+                        break; // Encontramos el curso
+                    }
+                }
+            }
+        }
+
+        // Reemplazar etiquetas
+        $template = str_replace('[nombre_estudiante]', esc_html($nombre_estudiante), $template);
+        $template = str_replace('[cedula]', esc_html($cedula), $template);
+        $template = str_replace('[nombre_curso]', esc_html($nombre_curso_especifico), $template);
+        $template = str_replace('[matricula]', esc_html($matricula_especifica), $template);
+
+        return $template;
+    }
+
+
     // *** INICIO - NUEVAS FUNCIONES DE PAGINACIÓN ***
 
     /**
@@ -1444,4 +1488,3 @@ class SGA_Utils {
     }
     // *** FIN - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
 }
-

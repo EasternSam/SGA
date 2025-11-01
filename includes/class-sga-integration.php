@@ -76,6 +76,14 @@ class SGA_Integration {
                 'estado' => 'Inscrito'
             ), $post_id);
 
+            // *** INICIO CORRECCIÓN CONTADORES (TIEMPO REAL) ***
+            // Borramos los transients (caché) de los contadores.
+            // Esto fuerza a que la próxima vez que se cargue el panel principal (o el AJAX de admin),
+            // se recalculen los números de "Pendientes" y "Llamadas".
+            delete_transient('sga_pending_insc_count');
+            delete_transient('sga_pending_calls_count');
+            // *** FIN CORRECCIÓN CONTADORES ***
+
             // --- Lógica de Asignación a Agente Específico (Infotep o General) ---
             $cursos = get_field('cursos_inscritos', $post_id);
             $new_row_index = count($cursos) - 1; // El índice del repeater recién añadido

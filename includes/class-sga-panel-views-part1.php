@@ -436,6 +436,59 @@ class SGA_Panel_Views_Part1 {
             .sga-student-item label { display: block; padding: 5px; border-radius: 4px; transition: background-color 0.2s; cursor: pointer; }
             .sga-student-item label:hover { background-color: #f1f5f9; }
 
+            /* --- INICIO: ESTILOS DE COMUNICACIÓN MEJORADOS --- */
+            /* Oculta la información de etiquetas anterior */
+            .sga-dynamic-tags-info { display: none; }
+            
+            /* Estilos para la nueva lista de etiquetas en la barra lateral */
+            .sga-dynamic-tags-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+            .sga-dynamic-tags-list li {
+                margin-bottom: 15px;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+            .sga-dynamic-tags-list code {
+                background-color: var(--sga-gray);
+                padding: 3px 6px;
+                border-radius: 4px;
+                font-family: monospace;
+                color: var(--sga-primary);
+                font-size: 13px;
+                font-weight: 600;
+            }
+            .sga-dynamic-tags-list span {
+                display: block;
+                font-size: 12px;
+                color: var(--sga-text-light);
+                margin-top: 2px;
+                padding-left: 2px;
+            }
+
+            /* Estilos para el mensaje de estado de envío de correo */
+            #sga-email-status {
+                margin-top: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                font-weight: 500;
+                display: none;
+                grid-column: 1 / -1; /* Ocupa todo el ancho del grid */
+            }
+            #sga-email-status.success {
+                background-color: #dcfce7;
+                color: #166534;
+                border: 1px solid #86efac;
+            }
+            #sga-email-status.error {
+                background-color: #fee2e2;
+                color: #991b1b;
+                border: 1px solid #fca5a5;
+            }
+            /* --- FIN: ESTILOS DE COMUNICACIÓN MEJORADOS --- */
+
             /* Reports View */
             .report-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; align-items: flex-start; }
             .report-main-content { display: flex; flex-direction: column; gap: 30px; }

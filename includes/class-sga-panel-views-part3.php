@@ -516,76 +516,117 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
 
     public function render_view_comunicacion() {
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
-        $all_students = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        
+        // --- INICIO MEJORA: Cargar solo posts de estudiantes y pre-calentar caché ---
+        $all_students_query = new WP_Query(array(
+            'post_type' => 'estudiante', 
+            'posts_per_page' => -1, 
+            'orderby' => 'title', 
+            'order' => 'ASC'
+        ));
+        $all_students = $all_students_query->posts;
+        if (!empty($all_students)) {
+            $student_ids = wp_list_pluck($all_students, 'ID');
+            update_postmeta_cache($student_ids);
+        }
+        // --- FIN MEJORA ---
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Comunicación y Correo Masivo</h1>
-        <div id="sga-comunicacion-wrapper">
-            <div class="sga-comunicacion-form">
-                <div class="sga-form-group">
-                    <label for="sga-email-recipient-group"><strong>Enviar a:</strong></label>
-                    <select id="sga-email-recipient-group">
-                        <option value="todos">Todos los Estudiantes</option>
-                        <option value="matriculados">Estudiantes Matriculados</option>
-                        <option value="pendientes">Estudiantes Pendientes de Aprobación</option>
-                        <option value="por_curso">Estudiantes por Curso Específico</option>
-                        <option value="especificos">Estudiantes Específicos (Selección Manual)</option>
-                        <option value="manual" style="display: none;">Selección Manual</option>
-                    </select>
-                    <input type="hidden" id="sga-manual-recipient-ids" name="manual_ids">
-                </div>
-                <div class="sga-form-group" id="sga-curso-selector-group" style="display: none;">
-                    <label for="sga-email-curso-select"><strong>Seleccionar Curso:</strong></label>
-                    <select id="sga-email-curso-select">
-                        <?php foreach ($cursos as $curso): ?>
-                            <option value="<?php echo esc_attr($curso->post_title); ?>"><?php echo esc_html($curso->post_title); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="sga-form-group" id="sga-estudiantes-especificos-group" style="display: none;">
-                    <label for="sga-estudiantes-search"><strong>Seleccionar Estudiantes:</strong></label>
-                    <input type="text" id="sga-estudiantes-search" placeholder="Buscar estudiante por nombre o cédula...">
-                    <div id="sga-estudiantes-checkbox-list">
-                        <?php foreach ($all_students as $student):
-                            $cedula = get_field('cedula', $student->ID);
-                        ?>
-                            <div class="sga-student-item" data-search-term="<?php echo esc_attr(strtolower($student->post_title . ' ' . $cedula)); ?>">
-                                <label>
-                                    <input type="checkbox" class="sga-specific-student-checkbox" value="<?php echo esc_attr($student->ID); ?>">
-                                    <?php echo esc_html($student->post_title); ?> (Cédula: <?php echo esc_html($cedula); ?>)
-                                </label>
+        
+        <!-- INICIO CAMBIO DE DISEÑO: Usar report-grid -->
+        <div classid="sga-comunicacion-wrapper" class="report-grid">
+            
+            <!-- Columna principal del formulario -->
+            <div class="report-main-content">
+                <div class="sga-card">
+                    <h3>Redactar Correo</h3>
+                    <div class="sga-comunicacion-form">
+                        <div class="report-form-grid">
+                            <div class="sga-form-group">
+                                <label for="sga-email-recipient-group"><strong>Enviar a:</strong></label>
+                                <select id="sga-email-recipient-group">
+                                    <option value="todos">Todos los Estudiantes</option>
+                                    <option value="matriculados">Estudiantes Matriculados</option>
+                                    <option value="pendientes">Estudiantes Pendientes de Aprobación</option>
+                                    <option value="por_curso">Estudiantes por Curso Específico</option>
+                                    <option value="especificos">Estudiantes Específicos (Selección Manual)</option>
+                                    <option value="manual" style="display: none;">Selección Manual</option>
+                                </select>
+                                <input type="hidden" id="sga-manual-recipient-ids" name="manual_ids">
                             </div>
-                        <?php endforeach; ?>
+                            <div class="sga-form-group" id="sga-curso-selector-group" style="display: none;">
+                                <label for="sga-email-curso-select"><strong>Seleccionar Curso:</strong></label>
+                                <select id="sga-email-curso-select">
+                                    <?php foreach ($cursos as $curso): ?>
+                                        <option value="<?php echo esc_attr($curso->post_title); ?>"><?php echo esc_html($curso->post_title); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="sga-form-group" id="sga-estudiantes-especificos-group" style="display: none;">
+                            <label for="sga-estudiantes-search"><strong>Seleccionar Estudiantes:</strong></label>
+                            <input type="text" id="sga-estudiantes-search" placeholder="Buscar estudiante por nombre o cédula...">
+                            <div id="sga-estudiantes-checkbox-list">
+                                <?php if (!empty($all_students)): ?>
+                                    <?php foreach ($all_students as $student):
+                                        $cedula = get_field('cedula', $student->ID); // Rápido (desde caché)
+                                    ?>
+                                        <div class="sga-student-item" data-search-term="<?php echo esc_attr(strtolower($student->post_title . ' ' . $cedula)); ?>">
+                                            <label>
+                                                <input type="checkbox" class="sga-specific-student-checkbox" value="<?php echo esc_attr($student->ID); ?>">
+                                                <?php echo esc_html($student->post_title); ?> (Cédula: <?php echo esc_html($cedula); ?>)
+                                            </label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <p>No se encontraron estudiantes.</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="sga-form-group">
+                            <label for="sga-email-subject"><strong>Asunto:</strong></label>
+                            <input type="text" id="sga-email-subject" placeholder="Asunto del correo">
+                        </div>
+                        <div class="sga-form-group">
+                            <label><strong>Mensaje:</strong></label>
+                            <?php 
+                            $default_editor_content = '<p>Hola [nombre_estudiante],</p><p>Escribe aquí tu mensaje...</p>';
+                            wp_editor($default_editor_content, 'sga-email-body', array('textarea_name' => 'sga-email-body', 'media_buttons' => false, 'textarea_rows' => 10)); 
+                            ?>
+                        </div>
+                        <div class="sga-form-group report-actions" style="margin-top: 20px;">
+                            <span class="spinner" style="float: none; margin-right: 10px;"></span>
+                            <button id="sga-send-bulk-email-btn" class="button button-primary button-large">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                Enviar Correo
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="sga-form-group">
-                    <label for="sga-email-subject"><strong>Asunto:</strong></label>
-                    <input type="text" id="sga-email-subject" placeholder="Asunto del correo">
-                </div>
-                <div class="sga-form-group">
-                    <label><strong>Mensaje:</strong></label>
-                    <div class="sga-dynamic-tags-info">
-                        <p><strong>Etiquetas dinámicas disponibles:</strong></p>
-                        <ul>
-                            <li><code>[nombre_estudiante]</code> - Nombre completo del estudiante.</li>
-                            <li><code>[cedula]</code> - Cédula del estudiante.</li>
-                            <li><code>[nombre_curso]</code> - Nombre del curso (solo para envíos "por curso").</li>
-                            <li><code>[matricula]</code> - Matrícula del estudiante en el curso (solo para envíos "por curso").</li>
-                        </ul>
-                    </div>
-                    <?php 
-                    $default_editor_content = '<p>Hola [nombre_estudiante],</p><p>Escribe aquí tu mensaje...</p>';
-                    wp_editor($default_editor_content, 'sga-email-body', array('textarea_name' => 'sga-email-body', 'media_buttons' => false, 'textarea_rows' => 10)); 
-                    ?>
-                </div>
-                <div class="sga-form-group">
-                    <button id="sga-send-bulk-email-btn" class="button button-primary button-large">Enviar Correo</button>
-                    <span class="spinner"></span>
+                <div id="sga-email-status"></div>
+            </div>
+            
+            <!-- Columna lateral de ayuda -->
+            <div class="report-sidebar">
+                <div class="sga-card">
+                    <h3>Etiquetas Dinámicas</h3>
+                    <p class="description" style="font-size: 13px; margin-top: -10px;">Usa estas etiquetas en tu mensaje. Se reemplazarán automáticamente para cada estudiante.</p>
+                    <ul class="sga-dynamic-tags-list">
+                        <li><code>[nombre_estudiante]</code><br><span>Nombre completo del estudiante.</span></li>
+                        <li><code>[cedula]</code><br><span>Cédula del estudiante.</span></li>
+                        <li><code>[nombre_curso]</code><br><span>Nombre del curso (solo para envíos "por curso").</span></li>
+                        <li><code>[matricula]</code><br><span>Matrícula del estudiante (solo para envíos "por curso").</span></li>
+                    </ul>
                 </div>
             </div>
-            <div id="sga-email-status"></div>
+            
         </div>
+        <!-- FIN CAMBIO DE DISEÑO -->
         <?php
+        // Resetear la consulta de estudiantes
+        wp_reset_postdata();
     }
 
 
@@ -594,7 +635,17 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
     public function render_view_reportes() {
         $options = get_option('sga_report_options', []);
         $cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
-        $agentes = SGA_Utils::_get_sga_agents();
+        
+        // --- INICIO CORRECCIÓN: Obtener ambos tipos de agentes ---
+        $agents_general = SGA_Utils::_get_sga_agents('agente');
+        $agents_infotep = SGA_Utils::_get_sga_agents('agente_infotep');
+        $agentes = array_merge($agents_general, $agents_infotep);
+        // Ordenar la lista combinada por nombre
+        usort($agentes, function($a, $b) {
+            return strcmp($a->display_name, $b->display_name);
+        });
+        // --- FIN CORRECCIÓN ---
+        
         $is_agent = $this->sga_user_has_role(['agente', 'agente_infotep']);
         ?>
         <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
@@ -757,3 +808,4 @@ class SGA_Panel_Views_Part3 extends SGA_Panel_Views_Part2 {
         <?php
     }
 }
+

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Gestión Académica CENTU
  * Description: Panel a medida para gestionar inscripciones, cursos, matriculación, pagos (Azul, Cardnet) y reportes avanzados en PDF.
- * Version:22.0
+ * Version:80.4
  * Author: Samuel Diaz Pilier
  * Author URI: https://90s.agency/sam
  * @requires PHP 7.1+
