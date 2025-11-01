@@ -15,7 +15,7 @@ class SGA_Panel_Views_Part1 {
      * @param array $roles_to_check Array de slugs de roles a verificar.
      * @return bool
      */
-    protected function sga_user_has_role($roles_to_check) {
+    public function sga_user_has_role($roles_to_check) { // <-- CAMBIO DE protected A public
         $user = wp_get_current_user();
         if (!$user->ID) return false;
         $user_roles = (array) $user->roles;
@@ -103,14 +103,22 @@ class SGA_Panel_Views_Part1 {
             </a>
             <?php endif; ?>
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])) : ?>
-            <a href="#" data-view="estudiantes" class="panel-card panel-nav-link">
+            
+            <!-- **** INICIO DE LA CORRECCIÓN **** -->
+            <a href="#" data-view="lista_estudiantes" class="panel-card panel-nav-link">
+            <!-- **** FIN DE LA CORRECCIÓN **** -->
+            
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <h2>Estudiantes</h2>
                 <p>Ver y editar perfiles</p>
             </a>
             <?php endif; ?>
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico', 'gestor_de_cursos', 'agente', 'agente_infotep'])) : ?>
-            <a href="#" data-view="cursos" class="panel-card panel-nav-link">
+            
+            <!-- **** INICIO DE LA CORRECCIÓN **** -->
+            <a href="#" data-view="lista_cursos" class="panel-card panel-nav-link">
+            <!-- **** FIN DE LA CORRECCIÓN **** -->
+            
                 <div class="panel-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
                 <h2>Cursos</h2>
                 <p>Administrar cursos y horarios</p>
@@ -619,6 +627,37 @@ class SGA_Panel_Views_Part1 {
                 opacity: 0.7;
             }
 
+            /* --- [NUEVO] ESTILOS MODAL COMENTARIO --- */
+            #ga-modal-comentario-llamada .sga-form-group {
+                text-align: left;
+                margin-bottom: 15px;
+            }
+            #ga-modal-comentario-llamada .sga-form-group label {
+                display: block;
+                font-weight: 600;
+                color: var(--sga-text-light);
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+             #ga-modal-comentario-llamada .sga-form-group select,
+             #ga-modal-comentario-llamada .sga-form-group textarea {
+                width: 100%;
+                padding: 10px 15px;
+                border-radius: 8px;
+                border: 1px solid var(--sga-gray);
+                background-color: var(--sga-white);
+                transition: all 0.2s;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-size: 14px;
+                box-sizing: border-box; /* Importante para textarea */
+             }
+            #ga-modal-comentario-llamada .sga-form-group select:focus,
+            #ga-modal-comentario-llamada .sga-form-group textarea:focus {
+                 border-color: var(--sga-secondary);
+                 box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+                 outline: none;
+            }
+
 
         </style>
         <?php
@@ -751,11 +790,11 @@ class SGA_Panel_Views_Part1 {
                         return; 
                     }
 
-                    // [MODIFICADO] Si es la vista de inscripciones, usar la nueva función AJAX
+                    // [MODIFICADO] Si es la vista de inscripciones, NO USAR ESTA FUNCIÓN
                     if (viewName === 'enviar_a_matriculacion') {
-                        sga_load_paginated_inscriptions(); // Esta función maneja su propio loader
-                        viewsToRefresh[viewName] = false; // Marcar como refrescado
-                        return; // No continuar con la lógica de abajo
+                        // Esta vista ahora se maneja de forma diferente, no debe recargarse por completo
+                        loader.fadeOut(150); // Simplemente ocultar el loader
+                        return;
                     }
                     
                     // Lógica original para todas las demás vistas
@@ -802,15 +841,18 @@ class SGA_Panel_Views_Part1 {
                     
                     var isPanelEmpty = $.trim(targetPanel.html()) === '';
 
-                    // [MODIFICADO] Lógica de carga para paginación
-                    if (view === 'enviar_a_matriculacion' && isPanelEmpty) {
-                        // Es la primera vez que se carga la vista de inscripciones
+                    // **** INICIO DE LA CORRECCIÓN ****
+                    if (view === 'enviar_a_matriculacion') {
+                        // Esta vista está PRE-CARGADA (gracias al cambio en class-sga-shortcodes.php).
+                        // No necesitamos recargarla, solo necesitamos cargar sus datos de tabla.
                         sgaCurrentPageNuevas = 1;
                         sgaCurrentPageSeguimiento = 1;
-                        sga_load_paginated_inscriptions(); // Carga los datos por primera vez
+                        sga_load_paginated_inscriptions(); // Carga los datos de la tabla
                         delete viewsToRefresh[view];
-                        // El loader lo maneja la función AJAX
-                    } else if (isPanelEmpty || viewsToRefresh[view]) {
+                        // La función sga_load_paginated_inscriptions() maneja su propio loader
+                    } 
+                    // **** FIN DE LA CORRECCIÓN ****
+                    else if (isPanelEmpty || viewsToRefresh[view]) { // Lógica original para OTRAS vistas
                         // Carga normal para otras vistas (o recarga forzada)
                         reloadPanelView(view); 
                         delete viewsToRefresh[view];
@@ -819,10 +861,7 @@ class SGA_Panel_Views_Part1 {
                         if (view === 'reportes' && !inscriptionsChart) {
                             renderInscriptionsChart();
                         }
-                        if (view === 'enviar_a_matriculacion') {
-                             // Si volvemos a la vista, reseteamos el toggle
-                             $('#sga-table-toggle').prop('checked', false).trigger('change'); 
-                        }
+                        // (Eliminada la lógica del toggle de 'enviar_a_matriculacion' de aquí)
                         loader.fadeOut(150);
                     }
                 });
@@ -915,7 +954,7 @@ class SGA_Panel_Views_Part1 {
                         $.post(ajaxurl, {
                             action: 'aprobar_seleccionados',
                             _ajax_nonce: approvalData.nonce,
-                            seleccionados: approvalData.seleccionados
+                            seleccionados: seleccionados
                         }).done(function(response) {
                             if (response.success) {
                                 viewsToRefresh['lista_matriculados'] = true;
@@ -940,43 +979,9 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                // --- Lógica de cambio de estado de llamada ---
-                $("#gestion-academica-app-container").on('change', "#tabla-pendientes-nuevas .sga-call-status-select, #tabla-pendientes-seguimiento .sga-call-status-select", function(e) {
-                    var select = $(this);
-                    var post_id = select.data('postid');
-                    var row_index = select.data('rowindex');
-                    var nonce = select.data('nonce');
-                    var status = select.val();
-                    var spinner = select.next('.spinner');
-
-                    select.prop('disabled', true);
-                    spinner.addClass('is-active');
-
-                    $.post(ajaxurl, {
-                        action: 'sga_update_call_status',
-                        _ajax_nonce: nonce,
-                        post_id: post_id,
-                        row_index: row_index,
-                        status: status
-                    }).done(function(response) {
-                        if (!response.success) {
-                            alert('Error: ' + (response.data.message || 'Error desconocido'));
-                        } else {
-                            viewsToRefresh['registro_llamadas'] = true;
-                            // [MODIFICADO] Recargar la vista actual con AJAX
-                            sga_load_paginated_inscriptions();
-                            
-                            if ($('#panel-view-registro_llamadas').hasClass('active')) {
-                                reloadPanelView('registro_llamadas');
-                            }
-                        }
-                    }).fail(function() {
-                        alert('Error de conexión.');
-                    }).always(function() {
-                        select.prop('disabled', false);
-                        spinner.removeClass('is-active');
-                    });
-                });
+                // --- [NUEVO] Lógica de cambio de estado de llamada ---
+                // Se elimina el manejador de 'change' para '.sga-call-status-select'
+                // ya que el dropdown se moverá al modal.
                 
                 // MANEJO DE LOS SELECT ALL
                 $("#gestion-academica-app-container").on("click", "#select-all-pendientes-nuevas", function() {
@@ -987,11 +992,13 @@ class SGA_Panel_Views_Part1 {
                     $("#tabla-pendientes-seguimiento .bulk-checkbox").prop('checked', this.checked);
                 });
 
-                // --- Lógica de Marcar/Editar Llamada ---
+                // --- [MODIFICADO] Lógica de Marcar/Editar Llamada ---
                 $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
                     var btn = $(this);
+                    var tr = btn.closest('tr');
+                    
                     $('#sga-comentario-action-type').val('marcar');
-                    $('#ga-modal-comentario-title').text('Añadir Comentario a la Llamada');
+                    $('#ga-modal-comentario-title').text('Marcar Llamada');
                     $('#ga-modal-comentario-guardar').text('Marcar y Guardar');
                     
                     callData = {
@@ -1005,13 +1012,18 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-row-index').val(callData.row_index);
                     $('#sga-comentario-nonce').val(callData.nonce);
                     $('#sga-comentario-log-id').val(''); 
-
                     $('#sga-comentario-llamada-texto').val('');
+                    
+                    // [NUEVO] Settear el estado. Para 'marcar', siempre será 'pendiente' al abrir.
+                    // El usuario entonces seleccionará "Contactado", "No contesta", etc.
+                    $('#sga-comentario-status-select').val(tr.data('call-status')); 
+
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
                 $("#gestion-academica-app-container").on("click", "#tabla-pendientes-nuevas .sga-edit-llamado-btn, #tabla-pendientes-seguimiento .sga-edit-llamado-btn", function() {
                     var btn = $(this);
+                    var tr = btn.closest('tr');
                     
                     $('#sga-comentario-action-type').val('editar');
                     var currentComment = btn.data('comment');
@@ -1038,6 +1050,9 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-log-id').val(callData.log_id);
                     $('#sga-comentario-nonce').val(callData.nonce);
 
+                    // [NUEVO] Settear el estado actual en el dropdown del modal
+                    $('#sga-comentario-status-select').val(tr.data('call-status'));
+
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
@@ -1045,6 +1060,9 @@ class SGA_Panel_Views_Part1 {
                     var btn = $(this);
                     var comment = $('#sga-comentario-llamada-texto').val();
                     var actionType = $('#sga-comentario-action-type').val();
+                    
+                    // [NUEVO] Leer el estado desde el dropdown del modal
+                    var status = $('#sga-comentario-status-select').val();
                     
                     var post_id = $('#sga-comentario-post-id').val();
                     var row_index = $('#sga-comentario-row-index').val();
@@ -1060,7 +1078,8 @@ class SGA_Panel_Views_Part1 {
                             _ajax_nonce: nonce,
                             post_id: post_id,
                             row_index: row_index,
-                            comment: comment
+                            comment: comment,
+                            status: status // [NUEVO] Enviar el estado
                         };
                     } else if (actionType === 'editar') {
                         ajaxAction = 'sga_edit_llamado_comment';
@@ -1070,7 +1089,8 @@ class SGA_Panel_Views_Part1 {
                             student_id: post_id,
                             row_index: row_index,
                             log_id: log_id,
-                            comment: comment
+                            comment: comment,
+                            status: status // [NUEVO] Enviar el estado
                         };
                     } else {
                         alert('Acción de comentario desconocida.');
@@ -1092,7 +1112,8 @@ class SGA_Panel_Views_Part1 {
 
                             // Recargar la vista activa
                             if ($('#panel-view-enviar_a_matriculacion').hasClass('active')) {
-                                reloadPanelView('enviar_a_matriculacion'); // Esto llamará a sga_load_paginated_inscriptions()
+                                // [MODIFICADO] Llamar a la función de carga de tablas en lugar de recargar toda la vista
+                                sga_load_paginated_inscriptions();
                             }
                             if ($('#panel-view-registro_llamadas').hasClass('active')) {
                                 reloadPanelView('registro_llamadas');
@@ -1767,7 +1788,7 @@ class SGA_Panel_Views_Part1 {
                         // Ya lo hice en part2.php, los enlaces usan `?paged=X`
                         // ¡PERO! El panel es AJAX.
                         
-                        // OK, el problema es que `paginate_links` en `part2.php`
+                        // OK, el problema es que `paginate_links` en `class-sga-panel-views-part2.php`
                         // no puede funcionar porque estamos en una sola página.
                         // La paginación de esa tabla también debe ser AJAX.
                         

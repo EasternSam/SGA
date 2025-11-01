@@ -90,7 +90,12 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
                 
                 <!-- Todas las demás vistas son contenedores vacíos. Se cargarán vía AJAX al hacer clic. -->
                 <div id="panel-view-matriculacion" class="panel-view"></div>
-                <div id="panel-view-enviar_a_matriculacion" class="panel-view"></div>
+                
+                <!-- **** INICIO DE LA CORRECCIÓN **** -->
+                <!-- Esta vista ahora se pre-carga para que los filtros y el título sean visibles -->
+                <div id="panel-view-enviar_a_matriculacion" class="panel-view"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
+                <!-- **** FIN DE LA CORRECCIÓN **** -->
+                
                 <div id="panel-view-lista_matriculados" class="panel-view"></div>
                 <div id="panel-view-registro_llamadas" class="panel-view"></div>
                 <div id="panel-view-estudiantes" class="panel-view"></div>

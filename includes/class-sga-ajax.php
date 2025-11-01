@@ -581,58 +581,81 @@ class SGA_Ajax {
      * Esta función reemplaza a `ajax_get_panel_view_html` para la vista 'enviar_a_matriculacion'.
      */
     public function ajax_get_paginated_inscriptions() {
-        // 1. Seguridad y Permisos
-        if (!isset($_POST['_ajax_nonce']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce')) {
-            wp_send_json_error(['message' => 'Error de seguridad (Nonce).']);
-        }
-        if (!current_user_can('edit_estudiantes')) {
-            wp_send_json_error(['message' => 'No tienes permisos.']);
-        }
-
-        // 2. Sanitizar todos los datos de entrada
-        $paged_nuevas = isset($_POST['paged_nuevas']) ? absint($_POST['paged_nuevas']) : 1;
-        $paged_seguimiento = isset($_POST['paged_seguimiento']) ? absint($_POST['paged_seguimiento']) : 1;
-        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
-        $course = isset($_POST['course']) ? sanitize_text_field($_POST['course']) : '';
-        $status = isset($_POST['status']) ? sanitize_key($_POST['status']) : '';
-        $agent = isset($_POST['agent']) ? sanitize_text_field($_POST['agent']) : ''; // Puede ser 'unassigned' o un ID
-
-        // 3. Obtener datos de visibilidad del usuario (igual que en la carga inicial de la vista)
-        $role_helper = new SGA_Panel_Views_Part1(); // Solo para el helper de roles
-        $can_approve = $role_helper->sga_user_has_role(['administrator', 'gestor_academico']);
+        // --- INICIO DEBUG AVANZADO ---
+        // Envolver toda la función en un try...catch para capturar errores fatales
+        // (Throwable es para PHP 7+)
+        try {
+        // --- FIN DEBUG AVANZADO ---
         
-        $is_infotep_agent = $role_helper->sga_user_has_role(['agente_infotep']);
-        $is_standard_agent = $role_helper->sga_user_has_role(['agente']);
-        $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
-        
-        $agent_visibility_ids = [];
-        if ($current_user_role) {
-            $same_role_agents = get_users(['role' => $current_user_role, 'fields' => 'ID']);
-            $agent_visibility_ids = array_map('intval', $same_role_agents);
+            // 1. Seguridad y Permisos
+            if (!isset($_POST['_ajax_nonce']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce', false)) {
+                wp_send_json_error(['message' => 'Error de seguridad (Nonce).']);
+            }
+            if (!current_user_can('edit_estudiantes')) {
+                wp_send_json_error(['message' => 'No tienes permisos.']);
+            }
+
+            // 2. Sanitizar todos los datos de entrada
+            $paged_nuevas = isset($_POST['paged_nuevas']) ? absint($_POST['paged_nuevas']) : 1;
+            $paged_seguimiento = isset($_POST['paged_seguimiento']) ? absint($_POST['paged_seguimiento']) : 1;
+            $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+            $course = isset($_POST['course']) ? sanitize_text_field($_POST['course']) : '';
+            $status = isset($_POST['status']) ? sanitize_key($_POST['status']) : '';
+            $agent = isset($_POST['agent']) ? sanitize_text_field($_POST['agent']) : ''; // Puede ser 'unassigned' o un ID
+
+            // 3. Obtener datos de visibilidad del usuario (igual que en la carga inicial de la vista)
+            $role_helper = new SGA_Panel_Views_Part1(); // Solo para el helper de roles
+            $can_approve = $role_helper->sga_user_has_role(['administrator', 'gestor_academico']);
+            
+            $is_infotep_agent = $role_helper->sga_user_has_role(['agente_infotep']);
+            $is_standard_agent = $role_helper->sga_user_has_role(['agente']);
+            $current_user_role = $is_infotep_agent ? 'agente_infotep' : ($is_standard_agent ? 'agente' : null);
+            
+            $agent_visibility_ids = [];
+            if ($current_user_role) {
+                $same_role_agents = get_users(['role' => $current_user_role, 'fields' => 'ID']);
+                $agent_visibility_ids = array_map('intval', $same_role_agents);
+            }
+
+            // 4. Construir argumentos para la función de Utils
+            $args = [
+                'paged_nuevas' => $paged_nuevas,
+                'paged_seguimiento' => $paged_seguimiento,
+                'posts_per_page' => 50, // 50 por página
+                'search' => $search,
+                'course' => $course,
+                'status' => $status,
+                'agent' => $agent,
+                'current_user_role' => $current_user_role,
+                'agent_visibility_ids' => $agent_visibility_ids,
+                'can_approve' => $can_approve
+            ];
+
+            // 5. Llamar a la función de renderizado estática (que crearemos en el siguiente paso)
+            // Esta función hará el trabajo de llamar a SGA_Utils y generar el HTML.
+            // Necesita ser estática para que podamos llamarla sin instanciar la clase aquí.
+            // Asumimos que `SGA_Panel_Views_Part2` ya está cargada (lo está, desde class-sga-main.php)
+            $html_data = SGA_Panel_Views_Part2::get_paginated_table_html($args);
+
+            // 6. Enviar respuesta JSON
+            wp_send_json_success($html_data);
+
+        // --- INICIO DEBUG AVANZADO ---
+        } catch (Throwable $e) {
+            // Si cualquier cosa falla (Error Fatal de PHP), lo capturamos
+            $error_details = [
+                'message' => 'Error Fatal de PHP capturado.',
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ];
+            // Escribir también en el log de sga-debug por si acaso
+            if (class_exists('SGA_Utils')) {
+                SGA_Utils::_debug_log("¡ERROR FATAL CAPTURADO! :: " . $e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine());
+            }
+            wp_send_json_error($error_details, 500); // Enviar el error 500 pero con un JSON
         }
-
-        // 4. Construir argumentos para la función de Utils
-        $args = [
-            'paged_nuevas' => $paged_nuevas,
-            'paged_seguimiento' => $paged_seguimiento,
-            'posts_per_page' => 50, // 50 por página
-            'search' => $search,
-            'course' => $course,
-            'status' => $status,
-            'agent' => $agent,
-            'current_user_role' => $current_user_role,
-            'agent_visibility_ids' => $agent_visibility_ids,
-            'can_approve' => $can_approve
-        ];
-
-        // 5. Llamar a la función de renderizado estática (que crearemos en el siguiente paso)
-        // Esta función hará el trabajo de llamar a SGA_Utils y generar el HTML.
-        // Necesita ser estática para que podamos llamarla sin instanciar la clase aquí.
-        // Asumimos que `SGA_Panel_Views_Part2` ya está cargada (lo está, desde class-sga-main.php)
-        $html_data = SGA_Panel_Views_Part2::get_paginated_table_html($args);
-
-        // 6. Enviar respuesta JSON
-        wp_send_json_success($html_data);
+        // --- FIN DEBUG AVANZADO ---
     }
     // *** FIN - NUEVA FUNCIÓN AJAX DE PAGINACIÓN ***
 

@@ -696,37 +696,45 @@ class SGA_Utils {
     
     /**
      * [NUEVA FUNCIÓN] Obtiene IDs de estudiantes basado en el estado de una inscripción en el repeater.
-     * Utiliza una consulta SQL directa (LIKE) en lugar de get_posts(-1) para un rendimiento óptimo.
+     * Esta versión es más robusta: obtiene todos los estudiantes y los filtra en PHP
+     * usando get_field() para asegurar compatibilidad.
      *
      * @param string $status El estado a buscar (ej. 'Inscrito', 'Matriculado').
      * @return array Lista de IDs de post de estudiantes.
      */
     public static function _get_student_ids_by_enrollment_status($status = 'Inscrito') {
-        if (empty($status)) {
+        if (empty($status) || !function_exists('get_field')) {
             return [];
         }
 
         global $wpdb;
         
-        // La consulta correcta debe buscar en meta-keys dinámicas (ej. 'cursos_inscritos_0_estado')
-        $like_key = 'cursos_inscritos_%_estado'; // Patrón de la meta-key
-
-        // Preparamos la consulta SQL
-        $sql = $wpdb->prepare(
-            "SELECT DISTINCT post_id FROM {$wpdb->postmeta} 
-             WHERE meta_key LIKE %s 
-             AND meta_value = %s",
-            $like_key, // El patrón para el LIKE
-            $status    // El valor exacto (ej. 'Inscrito')
-        );
-
-        // Obtenemos los IDs de la base de datos
-        $student_ids = $wpdb->get_col($sql);
-
-        // Convertimos los resultados a enteros
-        $student_ids = array_map('intval', $student_ids);
-
-        return $student_ids;
+        // 1. Obtener todos los posts que SON estudiantes
+        $student_ids = $wpdb->get_col("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'estudiante' AND post_status = 'publish'");
+        
+        if (empty($student_ids)) {
+            return [];
+        }
+        
+        $relevant_student_ids = [];
+        
+        // 2. Pre-calentar caché de metadatos para todos los estudiantes
+        update_postmeta_cache($student_ids);
+        
+        // 3. Filtrar en PHP
+        foreach ($student_ids as $id) {
+            $cursos = get_field('cursos_inscritos', $id); // Rápido (desde caché)
+            if ($cursos) {
+                foreach ($cursos as $curso) {
+                    if (isset($curso['estado']) && $curso['estado'] === $status) {
+                        $relevant_student_ids[] = $id;
+                        break; // Encontramos uno, pasamos al siguiente estudiante
+                    }
+                }
+            }
+        }
+        
+        return array_unique($relevant_student_ids);
     }
     
     /**
@@ -1231,14 +1239,21 @@ class SGA_Utils {
                 if (!isset($curso['estado']) || $curso['estado'] != 'Inscrito') {
                     continue;
                 }
+                
+                // --- INICIO CORRECCIÓN DE BUG (CURSO VACÍO) ---
+                $course_name = $curso['nombre_curso'];
+                if (empty($course_name)) {
+                    continue; // Saltar esta inscripción si el nombre del curso está vacío
+                }
+                // --- FIN CORRECCIÓN DE BUG (CURSO VACÍO) ---
+
 
                 // --- A. FILTRADO POR ROL (VISIBILIDAD) ---
-                $course_name = $curso['nombre_curso'];
                 $course_categories = $course_category_map[$course_name] ?? [];
                 $is_infotep_course = in_array($args['infotep_category_slug'], $course_categories);
                 $agent_id = $assignments[$index] ?? 'unassigned';
                 $current_call_status = $call_statuses[$index] ?? 'pendiente';
-                $has_call_log = isset($call_logs[$index]); // *** ESTA ES LA LÍNEA QUE FALTABA ***
+                $has_call_log = isset($call_logs[$index]);
 
                 $should_display = $args['can_approve'];
 
@@ -1288,8 +1303,6 @@ class SGA_Utils {
                     'call_info' => $call_logs[$index] ?? null,
                 ];
                 
-                // *** ESTA ES LA LÍNEA CORREGIDA ***
-                // Ahora $has_call_log está definida y la clasificación funciona
                 if ($current_call_status === 'pendiente' && !$has_call_log) {
                     $pending_calls_data_filtered[] = $data;
                 } else {
