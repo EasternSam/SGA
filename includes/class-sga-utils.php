@@ -250,6 +250,13 @@ class SGA_Utils {
         update_sub_field(array('cursos_inscritos', $row_index + 1, 'estado'), 'Matriculado', $post_id);
         update_sub_field(array('cursos_inscritos', $row_index + 1, 'matricula'), $matricula, $post_id);
 
+        // *** INICIO OPTIMIZACIÓN ***
+        // Al aprobar, el conteo de pendientes cambia. Borramos el transient.
+        delete_transient('sga_pending_insc_count');
+        delete_transient('sga_pending_calls_count');
+        // *** FIN OPTIMIZACIÓN ***
+
+
         $email = get_field('email', $post_id);
         $cursos = get_field('cursos_inscritos', $post_id);
         $curso_aprobado = isset($cursos[$row_index]) ? $cursos[$row_index] : null;
@@ -314,8 +321,28 @@ class SGA_Utils {
      * @return array Lista de estudiantes que coinciden.
      */
     public static function _get_filtered_students($search_term = '', $course_filter = '', $status_filter = 'Matriculado') {
+        // *** INICIO OPTIMIZACIÓN ***
+        // Usamos la nueva función rápida para obtener solo los IDs relevantes
+        $relevant_student_ids = self::_get_student_ids_by_enrollment_status($status_filter);
+
+        if (empty($relevant_student_ids)) {
+            return []; // No hay estudiantes con ese estado, nos ahorramos la consulta
+        }
+        
+        $query_args = array(
+            'post_type' => 'estudiante',
+            'posts_per_page' => -1,
+            'post__in' => $relevant_student_ids // Buscamos SOLO en los IDs relevantes
+        );
+        
+        // Si hay un término de búsqueda, WP_Query no puede buscar en el repeater,
+        // así que mantenemos el filtro PHP PERO sobre un set de datos mucho más pequeño.
+        // Si no hay término de búsqueda, la lista ya está pre-filtrada.
+        
+        $estudiantes = get_posts($query_args);
         $filtered_students = [];
-        $estudiantes = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
+        // *** FIN OPTIMIZACIÓN ***
+
         if ($estudiantes && function_exists('get_field')) {
             foreach ($estudiantes as $estudiante) {
                 $cursos = get_field('cursos_inscritos', $estudiante->ID);
@@ -376,14 +403,32 @@ class SGA_Utils {
      * @return int Número de cupos ocupados.
      */
     public static function _get_cupos_ocupados($course_name, $horario) {
+        // *** INICIO OPTIMIZACIÓN ***
+        // Se cachea el resultado por 5 minutos para evitar recalcular esto en cada carga de la página de cursos
+        $transient_key = 'sga_cupos_' . sanitize_key($course_name) . '_' . sanitize_key($horario);
+        $cached_count = get_transient($transient_key);
+
+        if (false !== $cached_count) {
+            return $cached_count;
+        }
+        // *** FIN OPTIMIZACIÓN ***
+
         $count = 0;
-        $estudiantes = get_posts(array(
-            'post_type' => 'estudiante',
-            'posts_per_page' => -1,
-            'fields' => 'ids'
-        ));
-        if ($estudiantes && function_exists('get_field')) {
-            foreach ($estudiantes as $estudiante_id) {
+        // *** INICIO OPTIMIZACIÓN ***
+        // Obtenemos solo IDs de estudiantes con estado 'Inscrito' O 'Matriculado'
+        $inscrito_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
+        $matriculado_ids = self::_get_student_ids_by_enrollment_status('Matriculado');
+        $estudiantes_ids = array_unique(array_merge($inscrito_ids, $matriculado_ids));
+
+        if (empty($estudiantes_ids)) {
+            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
+            return 0;
+        }
+        // *** FIN OPTIMIZACIÓN ***
+
+        if ($estudiantes_ids && function_exists('get_field')) {
+            // El bucle ahora es mucho más pequeño, solo recorre estudiantes relevantes
+            foreach ($estudiantes_ids as $estudiante_id) {
                 $cursos_inscritos = get_field('cursos_inscritos', $estudiante_id);
                 if ($cursos_inscritos) {
                     foreach ($cursos_inscritos as $curso) {
@@ -394,6 +439,10 @@ class SGA_Utils {
                 }
             }
         }
+        
+        // *** INICIO OPTIMIZACIÓN ***
+        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
+        // *** FIN OPTIMIZACIÓN ***
         return $count;
     }
 
@@ -599,14 +648,25 @@ class SGA_Utils {
      * @return int Cantidad de inscripciones pendientes.
      */
     public static function _get_pending_inscriptions_count() {
+        // *** INICIO OPTIMIZACIÓN ***
+        // Usamos un "transient" (caché de WP) para guardar el conteo por 5 minutos
+        // Esto evita que esta consulta pesada se ejecute en CADA carga de página del admin.
+        $transient_key = 'sga_pending_insc_count';
+        $cached_count = get_transient($transient_key);
+
+        if (false !== $cached_count) {
+            return $cached_count; // Devuelve el valor cacheado si existe
+        }
+        // *** FIN OPTIMIZACIÓN ***
+
         $count = 0;
-        $estudiantes_ids = get_posts([
-            'post_type' => 'estudiante',
-            'posts_per_page' => -1,
-            'fields' => 'ids',
-        ]);
+        // *** INICIO OPTIMIZACIÓN ***
+        // Usamos la nueva función rápida para obtener solo los IDs de estudiantes con inscripciones pendientes
+        $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
+        // *** FIN OPTIMIZACIÓN ***
 
         if ($estudiantes_ids && function_exists('get_field')) {
+            // Este bucle ahora es mucho más pequeño
             foreach ($estudiantes_ids as $estudiante_id) {
                 $cursos = get_field('cursos_inscritos', $estudiante_id);
                 if ($cursos) {
@@ -618,6 +678,11 @@ class SGA_Utils {
                 }
             }
         }
+        
+        // *** INICIO OPTIMIZACIÓN ***
+        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
+        // *** FIN OPTIMIZACIÓN ***
+        
         return $count;
     }
 
@@ -626,14 +691,24 @@ class SGA_Utils {
      * @return int Cantidad de inscripciones pendientes de llamar.
      */
     public static function _get_pending_calls_count() {
+        // *** INICIO OPTIMIZACIÓN ***
+        // Usamos un "transient" (caché de WP) para guardar el conteo por 5 minutos
+        $transient_key = 'sga_pending_calls_count';
+        $cached_count = get_transient($transient_key);
+
+        if (false !== $cached_count) {
+            return $cached_count;
+        }
+        // *** FIN OPTIMIZACIÓN ***
+
         $count = 0;
-        $estudiantes_ids = get_posts([
-            'post_type' => 'estudiante',
-            'posts_per_page' => -1,
-            'fields' => 'ids',
-        ]);
+        // *** INICIO OPTIMIZACIÓN ***
+        // Obtenemos solo IDs de estudiantes con estado 'Inscrito'
+        $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
+        // *** FIN OPTIMIZACIÓN ***
 
         if ($estudiantes_ids && function_exists('get_field')) {
+            // Este bucle ahora es mucho más pequeño
             foreach ($estudiantes_ids as $estudiante_id) {
                 $cursos = get_field('cursos_inscritos', $estudiante_id);
                 $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true);
@@ -653,8 +728,56 @@ class SGA_Utils {
                 }
             }
         }
+        
+        // *** INICIO OPTIMIZACIÓN ***
+        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
+        // *** FIN OPTIMIZACIÓN ***
+        
         return $count;
     }
+    
+    // *** INICIO OPTIMIZACIÓN ***
+    /**
+     * [NUEVA FUNCIÓN] Obtiene IDs de estudiantes basado en el estado de una inscripción en el repeater.
+     * Utiliza una consulta SQL directa (LIKE) en lugar de get_posts(-1) para un rendimiento óptimo.
+     *
+     * @param string $status El estado a buscar (ej. 'Inscrito', 'Matriculado').
+     * @return array Lista de IDs de post de estudiantes.
+     */
+    public static function _get_student_ids_by_enrollment_status($status = 'Inscrito') {
+        if (empty($status)) {
+            return [];
+        }
+
+        global $wpdb;
+        
+        // *** INICIO CORRECCIÓN DE BUG ***
+        // La consulta anterior (meta_key = 'cursos_inscritos' AND meta_value LIKE '...estado...')
+        // era incorrecta. Los campos repetidores de ACF guardan cada sub-campo como una
+        // meta-key separada (ej. 'cursos_inscritos_0_estado', 'cursos_inscritos_1_estado').
+        // La consulta correcta debe buscar en estas meta-keys dinámicas.
+        
+        $like_key = 'cursos_inscritos_%_estado'; // Patrón de la meta-key
+
+        // Preparamos la consulta SQL
+        $sql = $wpdb->prepare(
+            "SELECT DISTINCT post_id FROM {$wpdb->postmeta} 
+             WHERE meta_key LIKE %s 
+             AND meta_value = %s",
+            $like_key, // El patrón para el LIKE
+            $status    // El valor exacto (ej. 'Inscrito')
+        );
+        // *** FIN CORRECCIÓN DE BUG ***
+
+        // Obtenemos los IDs de la base de datos
+        $student_ids = $wpdb->get_col($sql);
+
+        // Convertimos los resultados a enteros
+        $student_ids = array_map('intval', $student_ids);
+
+        return $student_ids;
+    }
+    // *** FIN OPTIMIZACIÓN ***
     
     /**
      * Busca y retorna el ID del último CPT 'sga_llamada' para una inscripción específica.
@@ -1035,3 +1158,4 @@ class SGA_Utils {
     }
     // FIN - FUNCIÓN AÑADIDA
 }
+

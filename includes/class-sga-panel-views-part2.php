@@ -13,7 +13,24 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     // --- VISTA DE ENVÍO A MATRICULACIÓN / SEGUIMIENTO ---
 
     public function render_view_enviar_a_matriculacion() {
-        $estudiantes_inscritos = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
+        // *** INICIO OPTIMIZACIÓN ***
+        // Ya no cargamos todos los estudiantes. Usamos la nueva función optimizada.
+        $pending_student_ids = SGA_Utils::_get_student_ids_by_enrollment_status('Inscrito');
+        
+        if (empty($pending_student_ids)) {
+            $estudiantes_inscritos = [];
+        } else {
+            // Cargamos SOLAMENTE los posts de estudiantes que sabemos que tienen inscripciones pendientes
+            $estudiantes_inscritos = get_posts(array(
+                'post_type' => 'estudiante',
+                'posts_per_page' => -1, // -1 está bien aquí porque la lista de IDs es (relativamente) pequeña
+                'post__in' => $pending_student_ids,
+                'orderby' => 'post_title',
+                'order' => 'ASC'
+            ));
+        }
+        // *** FIN OPTIMIZACIÓN ***
+        
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
 
         $can_approve = $this->sga_user_has_role(['administrator', 'gestor_academico']);
@@ -57,6 +74,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $in_progress_data = [];   // Inscripciones con registro de llamada (llamadas, no contesta, etc.).
 
         // --- LÓGICA DE RECORRIDO Y CLASIFICACIÓN ---
+        // Este bucle ahora es mucho más rápido porque solo itera sobre estudiantes relevantes
         if ($estudiantes_inscritos && function_exists('get_field')) {
             foreach ($estudiantes_inscritos as $estudiante) {
                 $cursos = get_field('cursos_inscritos', $estudiante->ID);
@@ -340,9 +358,25 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
 
 
     // --- VISTA DE LISTA DE MATRICULADOS ---
-// ... (resto de la clase sin cambios)
     public function render_view_lista_matriculados() {
-        $estudiantes_matriculados = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
+        // *** INICIO OPTIMIZACIÓN ***
+        // Usamos la nueva función rápida para obtener solo los IDs relevantes
+        $matriculado_student_ids = SGA_Utils::_get_student_ids_by_enrollment_status('Matriculado');
+        
+        if (empty($matriculado_student_ids)) {
+            $estudiantes_matriculados = [];
+        } else {
+             // Cargamos SOLAMENTE los posts de estudiantes que sabemos que tienen inscripciones matriculadas
+             $estudiantes_matriculados = get_posts(array(
+                'post_type' => 'estudiante',
+                'posts_per_page' => -1, // -1 está bien aquí porque la lista de IDs es (relativamente) pequeña
+                'post__in' => $matriculado_student_ids,
+                'orderby' => 'post_title',
+                'order' => 'ASC'
+            ));
+        }
+        // *** FIN OPTIMIZACIÓN ***
+        
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
@@ -371,8 +405,9 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 <tbody>
                     <?php
                     $hay_matriculados = false;
+                    // Este bucle ahora es mucho más rápido porque solo itera sobre estudiantes relevantes
                     if ($estudiantes_matriculados && function_exists('get_field')) {
-                        foreach ($estudiantes_matriculados as $estudiante) { // Corregido: Usar $estudiantes_matriculados
+                        foreach ($estudiantes_matriculados as $estudiante) { 
                             $cursos = get_field('cursos_inscritos', $estudiante->ID);
                             if ($cursos) {
                                 foreach ($cursos as $curso) {
@@ -404,7 +439,24 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     // --- VISTA DE LISTA GENERAL DE ESTUDIANTES ---
 
     public function render_view_lista_estudiantes() {
-        $todos_estudiantes = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+        // *** INICIO OPTIMIZACIÓN: PAGINACIÓN ***
+        // Determinar la página actual
+        $paged = ( isset($_GET['paged']) ) ? absint( $_GET['paged'] ) : 1;
+        $posts_per_page = 50; // Mostrar 50 estudiantes por página
+
+        $query_args = array(
+            'post_type' => 'estudiante',
+            'posts_per_page' => $posts_per_page,
+            'paged' => $paged,
+            'orderby' => 'title',
+            'order' => 'ASC',
+        );
+        
+        // WP_Query es la forma correcta de manejar paginación
+        $todos_estudiantes_query = new WP_Query($query_args);
+        $todos_estudiantes = $todos_estudiantes_query->posts;
+        // *** FIN OPTIMIZACIÓN: PAGINACIÓN ***
+        
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
         <h1 class="panel-title">Lista General de Estudiantes</h1>
@@ -427,7 +479,7 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     <th>Acción</th>
                 </tr></thead>
                 <tbody>
-                    <?php if ($todos_estudiantes) : ?>
+                    <?php if ($todos_estudiantes_query->have_posts()) : ?>
                         <?php foreach ($todos_estudiantes as $estudiante) : ?>
                             <tr>
                                 <td class="ga-check-column"><input type="checkbox" class="student-checkbox" value="<?php echo $estudiante->ID; ?>"></td>
@@ -444,6 +496,26 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 </tbody>
             </table>
         </div>
+        
+        <!-- *** INICIO OPTIMIZACIÓN: ENLACES DE PAGINACIÓN *** -->
+        <div class="tablenav bottom">
+            <div class="tablenav-pages">
+                <span class="displaying-num"><?php echo $todos_estudiantes_query->found_posts; ?> estudiantes</span>
+                <?php
+                // Generar los enlaces de paginación
+                echo paginate_links( array(
+                    'base' => add_query_arg( 'paged', '%#%' ), // URL base para los enlaces
+                    'format' => '?paged=%#%', // Formato del enlace
+                    'current' => $paged, // Página actual
+                    'total' => $todos_estudiantes_query->max_num_pages, // Total de páginas
+                    'prev_text' => '&laquo;', // Texto para "Anterior"
+                    'next_text' => '&raquo;', // Texto para "Siguiente"
+                ) );
+                ?>
+            </div>
+        </div>
         <?php
+        wp_reset_postdata(); // Restaurar datos de post originales
+        // *** FIN OPTIMIZACIÓN: ENLACES DE PAGINACIÓN ***
     }
 }

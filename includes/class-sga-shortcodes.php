@@ -83,18 +83,24 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
                         <p>Cargando...</p>
                     </div>
                 </div>
+                
+                <!-- *** INICIO OPTIMIZACIÓN DE CARGA *** -->
+                <!-- Solo la vista principal se carga por defecto -->
                 <div id="panel-view-principal" class="panel-view active"><?php $this->render_view_principal(); ?></div>
-                <div id="panel-view-matriculacion" class="panel-view"><?php $this->render_view_matriculacion(); ?></div>
-                <div id="panel-view-enviar_a_matriculacion" class="panel-view"><?php $this->render_view_enviar_a_matriculacion(); ?></div>
-                <div id="panel-view-lista_matriculados" class="panel-view"><?php $this->render_view_lista_matriculados(); ?></div>
-                <div id="panel-view-registro_llamadas" class="panel-view"><?php $this->render_view_registro_llamadas(); ?></div>
-                <div id="panel-view-estudiantes" class="panel-view"><?php $this->render_view_lista_estudiantes(); ?></div>
-                <div id="panel-view-cursos" class="panel-view"><?php $this->render_view_lista_cursos(); ?></div>
-                <div id="panel-view-registro_pagos" class="panel-view"><?php $this->render_view_registro_pagos(); ?></div>
-                <div id="panel-view-reportes" class="panel-view"><?php $this->render_view_reportes(); ?></div>
-                <div id="panel-view-log" class="panel-view"><?php $this->render_view_log(); ?></div>
-                <div id="panel-view-perfil_estudiante" class="panel-view"><?php $this->render_view_perfil_estudiante(); ?></div>
-                <div id="panel-view-comunicacion" class="panel-view"><?php $this->render_view_comunicacion(); ?></div>
+                
+                <!-- Todas las demás vistas son contenedores vacíos. Se cargarán vía AJAX al hacer clic. -->
+                <div id="panel-view-matriculacion" class="panel-view"></div>
+                <div id="panel-view-enviar_a_matriculacion" class="panel-view"></div>
+                <div id="panel-view-lista_matriculados" class="panel-view"></div>
+                <div id="panel-view-registro_llamadas" class="panel-view"></div>
+                <div id="panel-view-estudiantes" class="panel-view"></div>
+                <div id="panel-view-cursos" class="panel-view"></div>
+                <div id="panel-view-registro_pagos" class="panel-view"></div>
+                <div id="panel-view-reportes" class="panel-view"></div>
+                <div id="panel-view-log" class="panel-view"></div>
+                <div id="panel-view-perfil_estudiante" class="panel-view"></div>
+                <div id="panel-view-comunicacion" class="panel-view"></div>
+                 <!-- *** FIN OPTIMIZACIÓN DE CARGA *** -->
             </div>
         </div>
         <?php
