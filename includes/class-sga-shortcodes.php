@@ -98,8 +98,13 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
                 
                 <div id="panel-view-lista_matriculados" class="panel-view"></div>
                 <div id="panel-view-registro_llamadas" class="panel-view"></div>
-                <div id="panel-view-estudiantes" class="panel-view"></div>
-                <div id="panel-view-cursos" class="panel-view"></div>
+                
+                <!-- **** INICIO DE LA CORRECCIÓN **** -->
+                <!-- Los IDs deben coincidir con los data-view de los enlaces en class-sga-panel-views-part1.php -->
+                <div id="panel-view-lista_estudiantes" class="panel-view"></div>
+                <div id="panel-view-lista_cursos" class="panel-view"></div>
+                 <!-- **** FIN DE LA CORRECCIÓN **** -->
+                 
                 <div id="panel-view-registro_pagos" class="panel-view"></div>
                 <div id="panel-view-reportes" class="panel-view"></div>
                 <div id="panel-view-log" class="panel-view"></div>

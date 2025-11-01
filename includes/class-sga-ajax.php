@@ -34,9 +34,13 @@ class SGA_Ajax {
         // NUEVO HOOK para renderizar HTML del expediente para impresión directa
         add_action('wp_ajax_sga_render_student_profile_for_print', array($this, 'ajax_render_student_profile_for_print'));
         
-        // *** INICIO - NUEVO HOOK DE PAGINACIÓN ***
+        // *** INICIO - HOOK DE PAGINACIÓN INSCRIPCIONES ***
         add_action('wp_ajax_sga_get_paginated_inscriptions', array($this, 'ajax_get_paginated_inscriptions'));
-        // *** FIN - NUEVO HOOK DE PAGINACIÓN ***
+        // *** FIN - HOOK DE PAGINACIÓN INSCRIPCIONES ***
+
+        // *** INICIO - NUEVO HOOK DE PAGINACIÓN DE ESTUDIANTES ***
+        add_action('wp_ajax_sga_get_paginated_students', array($this, 'ajax_get_paginated_students'));
+        // *** FIN - NUEVO HOOK DE PAGINACIÓN DE ESTUDIANTES ***
 
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
@@ -548,10 +552,9 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'Parámetros inválidos o error de seguridad.']);
         }
         // *** INICIO - MODIFICACIÓN DE PAGINACIÓN ***
-        // No permitir que esta función cargue la vista 'enviar_a_matriculacion'
-        // ya que ahora tiene su propio cargador AJAX.
+        // No permitir que esta función cargue vistas que tienen su propio cargador AJAX.
         $view = sanitize_key($_POST['view']);
-        if ($view === 'enviar_a_matriculacion') {
+        if ($view === 'enviar_a_matriculacion' || $view === 'lista_estudiantes') {
              wp_send_json_error(['message' => 'Esta vista no se puede cargar de esta forma.']);
              return;
         }
@@ -658,6 +661,54 @@ class SGA_Ajax {
         // --- FIN DEBUG AVANZADO ---
     }
     // *** FIN - NUEVA FUNCIÓN AJAX DE PAGINACIÓN ***
+    
+    // *** INICIO - NUEVA FUNCIÓN AJAX DE PAGINACIÓN DE ESTUDIANTES ***
+    /**
+     * AJAX: Obtiene el HTML de la tabla de estudiantes generales paginada y filtrada.
+     */
+    public function ajax_get_paginated_students() {
+        try {
+            // 1. Seguridad y Permisos
+            if (!isset($_POST['_ajax_nonce']) || !check_ajax_referer('sga_get_view_nonce', '_ajax_nonce', false)) {
+                wp_send_json_error(['message' => 'Error de seguridad (Nonce).']);
+            }
+            if (!current_user_can('edit_estudiantes')) {
+                wp_send_json_error(['message' => 'No tienes permisos.']);
+            }
+
+            // 2. Sanitizar todos los datos de entrada
+            $paged = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
+            $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+            
+            // 3. Construir argumentos para la función de Utils
+            $args = [
+                'paged' => $paged,
+                'posts_per_page' => 50, // 50 por página (coincidir con Part2)
+                'search' => $search,
+            ];
+            
+            // 4. Llamar a la función de renderizado estática
+            // Asumimos que `SGA_Panel_Views_Part2` ya está cargada
+            $html_data = SGA_Panel_Views_Part2::get_paginated_students_table_html($args);
+
+            // 5. Enviar respuesta JSON
+            wp_send_json_success($html_data);
+
+        } catch (Throwable $e) {
+            // Si cualquier cosa falla (Error Fatal de PHP), lo capturamos
+            $error_details = [
+                'message' => 'Error Fatal de PHP capturado.',
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ];
+            if (class_exists('SGA_Utils')) {
+                SGA_Utils::_debug_log("¡ERROR FATAL CAPTURADO! :: " . $e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine());
+            }
+            wp_send_json_error($error_details, 500); // Enviar el error 500 pero con un JSON
+        }
+    }
+    // *** FIN - NUEVA FUNCIÓN AJAX DE PAGINACIÓN DE ESTUDIANTES ***
 
 
     /**

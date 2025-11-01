@@ -1343,5 +1343,92 @@ class SGA_Utils {
         ];
     }
     // *** FIN - NUEVAS FUNCIONES DE PAGINACIÓN ***
+    
+    // *** INICIO - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
+    /**
+     * [NUEVA FUNCIÓN DE FILTRADO Y PAGINACIÓN PARA ESTUDIANTES GENERALES]
+     * Obtiene los datos de estudiantes, filtrados por búsqueda y paginados.
+     * @param array $args Argumentos de filtrado y paginación:
+     * 'paged' => (int) página actual
+     * 'posts_per_page' => (int) resultados por página
+     * 'search' => (string) término de búsqueda (nombre, cédula, email, teléfono)
+     * @return array Un array con 'students' (los posts) y 'total_found', 'total_pages'.
+     */
+    public static function _get_filtered_and_paginated_students_data($args = []) {
+        // 1. Valores por defecto
+        $defaults = [
+            'paged' => 1,
+            'posts_per_page' => 50,
+            'search' => '',
+        ];
+        $args = wp_parse_args($args, $defaults);
+
+        // 2. Construir los argumentos de WP_Query base (paginación y orden)
+        $query_args = [
+            'post_type' => 'estudiante',
+            'posts_per_page' => (int)$args['posts_per_page'],
+            'paged' => (int)$args['paged'],
+            'orderby' => 'post_title',
+            'order' => 'ASC',
+            'post_status' => 'publish',
+        ];
+
+        // 3. Lógica de Búsqueda (si hay término de búsqueda)
+        if (!empty($args['search'])) {
+            global $wpdb;
+            
+            // IDs por Título (usando 's')
+            $search_by_title_args = [
+                'post_type' => 'estudiante',
+                'posts_per_page' => -1,
+                's' => $args['search'],
+                'fields' => 'ids',
+                'post_status' => 'publish',
+            ];
+            $ids_by_title = get_posts($search_by_title_args);
+            
+            // IDs por Meta (cédula, email, teléfono)
+            $search_by_meta_args = [
+                'post_type' => 'estudiante',
+                'posts_per_page' => -1,
+                'meta_query' => [
+                    'relation' => 'OR',
+                    ['key' => 'cedula', 'value' => $args['search'], 'compare' => 'LIKE'],
+                    ['key' => 'email', 'value' => $args['search'], 'compare' => 'LIKE'],
+                    ['key' => 'telefono', 'value' => $args['search'], 'compare' => 'LIKE']
+                ],
+                'fields' => 'ids',
+                'post_status' => 'publish',
+            ];
+            $ids_by_meta = get_posts($search_by_meta_args);
+            
+            // Combinar IDs únicos
+            $all_matching_ids = array_unique(array_merge($ids_by_title, $ids_by_meta));
+
+            if (empty($all_matching_ids)) {
+                // No hay resultados, forzamos que la query principal no devuelva nada
+                $query_args['post__in'] = [0];
+            } else {
+                // La query principal ahora usará estos IDs y los paginará
+                $query_args['post__in'] = $all_matching_ids;
+            }
+        }
+
+        // 4. Ejecutar la query principal (paginada)
+        $students_query = new WP_Query($query_args);
+        
+        // 5. Pre-calentar caché de metadatos
+        if ($students_query->have_posts()) {
+            update_postmeta_cache(wp_list_pluck($students_query->posts, 'ID'));
+        }
+
+        // 6. Retornar los resultados y la info de paginación
+        return [
+            'students' => $students_query->posts,
+            'total_found' => $students_query->found_posts,
+            'total_pages' => $students_query->max_num_pages
+        ];
+    }
+    // *** FIN - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
 }
 

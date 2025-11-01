@@ -179,7 +179,8 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $pagination_nuevas = self::_render_pagination_controls_html(
             $pending_data['total_count'], 
             $args['paged_nuevas'], 
-            $args['posts_per_page']
+            $args['posts_per_page'],
+            'nuevas' // ID de Paginación
         );
 
         // 5. Renderizar el HTML para la tabla "Seguimiento"
@@ -193,7 +194,8 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $pagination_seguimiento = self::_render_pagination_controls_html(
             $inprogress_data['total_count'], 
             $args['paged_seguimiento'], 
-            $args['posts_per_page']
+            $args['posts_per_page'],
+            'seguimiento' // ID de Paginación
         );
 
         // 7. Devolver todo
@@ -313,9 +315,10 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
      * @param int $total_items Total de ítems en esta categoría (post-filtro).
      * @param int $current_page Página actual.
      * @param int $posts_per_page Ítems por página.
+     * @param string $pagination_id 'nuevas' o 'seguimiento'.
      * @return string HTML de los controles.
      */
-    private static function _render_pagination_controls_html($total_items, $current_page, $posts_per_page) {
+    private static function _render_pagination_controls_html($total_items, $current_page, $posts_per_page, $pagination_id) {
         $total_pages = ceil($total_items / $posts_per_page);
         if ($total_pages <= 0) $total_pages = 1;
         
@@ -333,10 +336,10 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
             <?php echo $info_text; ?>
         </div>
         <div class="sga-pagination-actions">
-            <button class="button sga-page-prev" <?php disabled($current_page, 1); ?>>
+            <button class="button sga-page-prev" data-pagination-id="<?php echo $pagination_id; ?>" <?php disabled($current_page, 1); ?>>
                 &laquo; Anterior
             </button>
-            <button class="button sga-page-next" <?php disabled($current_page, $total_pages); ?>>
+            <button class="button sga-page-next" data-pagination-id="<?php echo $pagination_id; ?>" <?php disabled($current_page, $total_pages); ?>>
                 Siguiente &raquo;
             </button>
         </div>
@@ -431,31 +434,9 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
     // --- VISTA DE LISTA GENERAL DE ESTUDIANTES ---
 
     public function render_view_lista_estudiantes() {
-        // *** INICIO OPTIMIZACIÓN: PAGINACIÓN ***
-        // Determinar la página actual
-        $paged = ( isset($_GET['paged']) ) ? absint( $_GET['paged'] ) : 1;
-        $posts_per_page = 50; // Mostrar 50 estudiantes por página
-
-        $query_args = array(
-            'post_type' => 'estudiante',
-            'posts_per_page' => $posts_per_page,
-            'paged' => $paged,
-            'orderby' => 'title',
-            'order' => 'ASC',
-        );
-        
-        // WP_Query es la forma correcta de manejar paginación
-        $todos_estudiantes_query = new WP_Query($query_args);
-        $todos_estudiantes = $todos_estudiantes_query->posts;
-        
-        // Pre-calentar caché de metadatos para la página actual
-        if ($todos_estudiantes_query->have_posts()) {
-            update_postmeta_cache(wp_list_pluck($todos_estudiantes, 'ID'));
-        }
-        // *** FIN OPTIMIZACIÓN: PAGINACIÓN ***
-        
+        // [MODIFICADO] Ya no cargamos la query aquí. Solo el 'shell'.
         ?>
-        <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
+        <a href="#" data-view="principal" class="back-link panel-nav-link">&larr; Volver al Panel Principal</a>
         <h1 class="panel-title">Lista General de Estudiantes</h1>
         <div class="filtros-tabla">
             <select name="bulk-action-estudiantes" id="bulk-action-estudiantes-select">
@@ -475,48 +456,135 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     <th>Teléfono</th>
                     <th>Acción</th>
                 </tr></thead>
-                <tbody>
-                    <?php if ($todos_estudiantes_query->have_posts()) : ?>
-                        <?php foreach ($todos_estudiantes as $estudiante) : ?>
-                            <tr>
-                                <td class="ga-check-column"><input type="checkbox" class="student-checkbox" value="<?php echo $estudiante->ID; ?>"></td>
-                                <td><?php echo esc_html($estudiante->post_title); ?></td>
-                                <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
-                                <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
-                                <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
-                                <td><button class="button button-secondary ver-perfil-btn" data-estudiante-id="<?php echo $estudiante->ID; ?>">Ver Perfil</button></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else : ?>
-                        <tr class="no-results"><td colspan="6">No se encontraron estudiantes.</td></tr>
-                    <?php endif; ?>
+                <tbody id="tabla-general-estudiantes-tbody">
+                    <!-- [MODIFICADO] El contenido se cargará vía AJAX -->
+                    <tr class="no-results"><td colspan="6">Cargando...</td></tr>
                 </tbody>
             </table>
         </div>
         
-        <!-- *** INICIO OPTIMIZACIÓN: ENLACES DE PAGINACIÓN *** -->
-        <div class="tablenav bottom">
-            <div class="tablenav-pages">
-                <span class="displaying-num"><?php echo $todos_estudiantes_query->found_posts; ?> estudiantes</span>
-                <?php
-                // Generar los enlaces de paginación
-                // [CORRECCIÓN] Asegurarse de que los enlaces de paginación funcionen con el JS de navegación
-                $base_url = '#'; // Cambiar a '#' para que no recargue la página
-                echo paginate_links( array(
-                    'base' => $base_url . '%_%', // Usar # para el JS
-                    'format' => '?paged=%#%', // Formato del enlace
-                    'current' => $paged, // Página actual
-                    'total' => $todos_estudiantes_query->max_num_pages, // Total de páginas
-                    'prev_text' => '&laquo;', // Texto para "Anterior"
-                    'next_text' => '&raquo;', // Texto para "Siguiente"
-                    'add_args' => ['view' => 'lista_estudiantes'], // Añadir la vista actual
-                ) );
-                ?>
-            </div>
+        <!-- [MODIFICADO] Contenedor de paginación AJAX -->
+        <div class="sga-pagination-controls" id="sga-pagination-estudiantes">
+             <!-- El contenido se cargará vía AJAX -->
         </div>
         <?php
-        wp_reset_postdata(); // Restaurar datos de post originales
-        // *** FIN OPTIMIZACIÓN: ENLACES DE PAGINACIÓN ***
     }
+    
+    // *** INICIO - NUEVAS FUNCIONES DE RENDERIZADO PARA PAGINACIÓN DE ESTUDIANTES ***
+
+    /**
+     * [NUEVA FUNCIÓN ESTÁTICA]
+     * Llamada por AJAX para obtener el HTML de la tabla de estudiantes paginada.
+     * @param array $args Argumentos de filtrado y paginación.
+     * @return array HTML para la tabla y controles de paginación.
+     */
+    public static function get_paginated_students_table_html($args) {
+        // 1. Obtener los datos filtrados y paginados desde la utilidad
+        $data = SGA_Utils::_get_filtered_and_paginated_students_data($args);
+        
+        $students = $data['students'];
+        $total_found = $data['total_found'];
+        $total_pages = $data['total_pages'];
+
+        // 2. Renderizar el HTML para la tabla
+        $html_table = self::_render_student_rows_paginated($students);
+        
+        // 3. Renderizar el HTML de paginación
+        $html_pagination = self::_render_student_pagination_controls_html(
+            $total_found,
+            (int)$args['paged'],
+            $total_pages
+        );
+
+        // 4. Devolver todo
+        return [
+            'html_table' => $html_table,
+            'html_pagination' => $html_pagination,
+        ];
+    }
+
+    /**
+     * [NUEVA FUNCIÓN ESTÁTICA HELPER]
+     * Renderiza solo las filas (TRs) para la tabla de estudiantes generales.
+     * @param array $students El array de WP_Post de estudiantes (ya paginado).
+     * @return string HTML de las filas de la tabla.
+     */
+    private static function _render_student_rows_paginated($students) {
+        ob_start();
+
+        if (!empty($students)) {
+            foreach ($students as $estudiante) {
+                ?>
+                <tr>
+                    <td class="ga-check-column"><input type="checkbox" class="student-checkbox" value="<?php echo $estudiante->ID; ?>"></td>
+                    <td><?php echo esc_html($estudiante->post_title); ?></td>
+                    <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
+                    <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
+                    <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
+                    <td><button class="button button-secondary ver-perfil-btn" data-estudiante-id="<?php echo $estudiante->ID; ?>">Ver Perfil</button></td>
+                </tr>
+                <?php
+            }
+        } else {
+            // No hay resultados
+            echo '<tr class="no-results"><td colspan="6">No se encontraron estudiantes con los filtros aplicados.</td></tr>';
+        }
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * [NUEVA FUNCIÓN ESTÁTICA HELPER]
+     * Renderiza el HTML para los controles de paginación de WP (estilo admin).
+     * @param int $total_items Total de ítems encontrados.
+     * @param int $current_page Página actual.
+     * @param int $total_pages Total de páginas.
+     * @return string HTML de los controles.
+     */
+    private static function _render_student_pagination_controls_html($total_items, $current_page, $total_pages) {
+        if ($total_pages <= 1) {
+             // Incluso si solo hay una página, mostrar el conteo
+             ob_start();
+             ?>
+             <div class="sga-pagination-info">
+                 Mostrando <strong><?php echo $total_items; ?></strong> de <strong><?php echo $total_items; ?></strong> resultados
+             </div>
+             <div class="sga-pagination-actions">
+                 <button class="button sga-page-prev" data-pagination-id="estudiantes" disabled>&laquo; Anterior</button>
+                 <button class="button sga-page-next" data-pagination-id="estudiantes" disabled>Siguiente &raquo;</button>
+             </div>
+             <?php
+             return ob_get_clean();
+        }
+
+        $base_url = '#'; // Usar '#' para que el JS lo intercepte
+        
+        // Usar paginate_links para generar los enlaces
+        $pagination_links = paginate_links( array(
+            'base' => $base_url . '%_%', // Usar # para el JS
+            'format' => '?paged=%#%', // Formato del enlace
+            'current' => $current_page, // Página actual
+            'total' => $total_pages, // Total de páginas
+            'prev_text' => '&laquo;', // Texto para "Anterior"
+            'next_text' => '&raquo;', // Texto para "Siguiente"
+            'type' => 'plain', // Devolver como string
+            'add_args' => false, // No añadir otros args
+        ) );
+
+        ob_start();
+        ?>
+        <div class="sga-pagination-info">
+            Mostrando <strong><?php echo (($current_page - 1) * 50) + 1; ?></strong>-<strong><?php echo min($current_page * 50, $total_items); ?></strong> de <strong><?php echo $total_items; ?></strong> resultados
+        </div>
+        <div class="sga-pagination-actions tablenav-pages">
+             <span class="pagination-links">
+                <?php echo $pagination_links; ?>
+            </span>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    // *** FIN - NUEVAS FUNCIONES DE RENDERIZADO PARA PAGINACIÓN DE ESTUDIANTES ***
 }
 

@@ -626,6 +626,42 @@ class SGA_Panel_Views_Part1 {
                 cursor: not-allowed;
                 opacity: 0.7;
             }
+            
+            /* [NUEVO] Estilos para paginación de WP (Lista General de Estudiantes) */
+            .sga-pagination-actions.tablenav-pages {
+                gap: 0;
+            }
+            .sga-pagination-actions .pagination-links {
+                display: flex;
+                gap: 5px;
+            }
+            .sga-pagination-actions .pagination-links .page-numbers {
+                padding: 8px 12px;
+                font-size: 14px;
+                font-weight: 600;
+                border-radius: 8px;
+                text-decoration: none;
+                color: var(--sga-text-light);
+                background-color: var(--sga-white);
+                border: 1px solid var(--sga-gray);
+                transition: all 0.2s;
+            }
+            .sga-pagination-actions .pagination-links .page-numbers:hover {
+                background-color: var(--sga-white);
+                border-color: var(--sga-secondary);
+                color: var(--sga-secondary);
+            }
+            .sga-pagination-actions .pagination-links .page-numbers.current {
+                background-color: var(--sga-secondary);
+                border-color: var(--sga-secondary);
+                color: var(--sga-white);
+                cursor: default;
+            }
+            .sga-pagination-actions .pagination-links .page-numbers.dots {
+                background: none;
+                border: none;
+                padding: 8px 0;
+            }
 
             /* --- [NUEVO] ESTILOS MODAL COMENTARIO --- */
             #ga-modal-comentario-llamada .sga-form-group {
@@ -703,6 +739,7 @@ class SGA_Panel_Views_Part1 {
                 var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
                 var sgaCurrentPageNuevas = 1;
                 var sgaCurrentPageSeguimiento = 1;
+                var sgaCurrentPageEstudiantes = 1; // <-- [NUEVO] Paginación para estudiantes
                 var sgaAjaxNonce = '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>';
                 var sgaDebounceTimer; // Para el debounce de la búsqueda
                 
@@ -773,6 +810,47 @@ class SGA_Panel_Views_Part1 {
                         loader.fadeOut(150);
                     });
                 }
+                
+                // *** INICIO - NUEVA FUNCIÓN PARA CARGAR ESTUDIANTES ***
+                /**
+                 * [NUEVA] Función para cargar la lista general de estudiantes paginada vía AJAX.
+                 */
+                function sga_load_paginated_students() {
+                    var loader = $("#sga-panel-loader");
+                    loader.fadeIn(150);
+
+                    // 1. Obtener filtro de búsqueda
+                    var search = $('#buscador-general-estudiantes').val();
+
+                    // 2. Realizar la llamada AJAX
+                    $.post(ajaxurl, {
+                        action: 'sga_get_paginated_students',
+                        _ajax_nonce: sgaAjaxNonce,
+                        paged: sgaCurrentPageEstudiantes,
+                        search: search
+                    }).done(function(response) {
+                        if (response.success) {
+                            // 3. Poblar la tabla y la paginación
+                            $('#tabla-general-estudiantes-tbody').html(response.data.html_table);
+                            $('#sga-pagination-estudiantes').html(response.data.html_pagination);
+                            
+                            // 4. Resetear checkbox "seleccionar todo"
+                            $("#select-all-estudiantes").prop("checked", false);
+                        } else {
+                            var errorMsg = 'Error al cargar estudiantes: ' + (response.data.message || 'Error desconocido.');
+                            $('#tabla-general-estudiantes-tbody').html('<tr class="no-results"><td colspan="6">' + errorMsg + '</td></tr>');
+                            $('#sga-pagination-estudiantes').html('');
+                        }
+                    }).fail(function() {
+                        var errorMsg = 'Error de comunicación al cargar estudiantes.';
+                        $('#tabla-general-estudiantes-tbody').html('<tr class="no-results"><td colspan="6">' + errorMsg + '</td></tr>');
+                        $('#sga-pagination-estudiantes').html('');
+                    }).always(function() {
+                        loader.fadeOut(150);
+                    });
+                }
+                // *** FIN - NUEVA FUNCIÓN PARA CARGAR ESTUDIANTES ***
+                
                 // --- [FIN] MODIFICACIONES PARA PAGINACIÓN ---
 
 
@@ -790,9 +868,9 @@ class SGA_Panel_Views_Part1 {
                         return; 
                     }
 
-                    // [MODIFICADO] Si es la vista de inscripciones, NO USAR ESTA FUNCIÓN
-                    if (viewName === 'enviar_a_matriculacion') {
-                        // Esta vista ahora se maneja de forma diferente, no debe recargarse por completo
+                    // [MODIFICADO] Si es la vista de inscripciones o estudiantes, NO USAR ESTA FUNCIÓN
+                    if (viewName === 'enviar_a_matriculacion' || viewName === 'lista_estudiantes') {
+                        // Estas vistas ahora se manejan con sus propias funciones de carga
                         loader.fadeOut(150); // Simplemente ocultar el loader
                         return;
                     }
@@ -851,7 +929,15 @@ class SGA_Panel_Views_Part1 {
                         delete viewsToRefresh[view];
                         // La función sga_load_paginated_inscriptions() maneja su propio loader
                     } 
-                    // **** FIN DE LA CORRECCIÓN ****
+                    // *** INICIO - NUEVA LÓGICA PARA LISTA DE ESTUDIANTES ***
+                    else if (view === 'lista_estudiantes') {
+                        // Esta vista también es un 'shell' y necesita cargar sus datos AJAX.
+                        sgaCurrentPageEstudiantes = 1;
+                        sga_load_paginated_students(); // Carga los datos de la tabla de estudiantes
+                        delete viewsToRefresh[view];
+                        // La función sga_load_paginated_students() maneja su propio loader
+                    }
+                    // *** FIN - NUEVA LÓGICA PARA LISTA DE ESTUDIANTES ***
                     else if (isPanelEmpty || viewsToRefresh[view]) { // Lógica original para OTRAS vistas
                         // Carga normal para otras vistas (o recarga forzada)
                         reloadPanelView(view); 
@@ -895,7 +981,7 @@ class SGA_Panel_Views_Part1 {
                 });
 
                 // --- Lógica de aprobación (Bulk) ---
-                $("#apply-bulk-action").on("click", function() {
+                $("#gestion-academica-app-container").on("click", "#apply-bulk-action", function() {
                     if ($("#bulk-action-select").val() !== 'aprobar') {
                         alert('Por favor, selecciona una acción válida.');
                         return;
@@ -954,7 +1040,7 @@ class SGA_Panel_Views_Part1 {
                         $.post(ajaxurl, {
                             action: 'aprobar_seleccionados',
                             _ajax_nonce: approvalData.nonce,
-                            seleccionados: seleccionados
+                            seleccionados: approvalData.seleccionados // Corregido: usar approvalData
                         }).done(function(response) {
                             if (response.success) {
                                 viewsToRefresh['lista_matriculados'] = true;
@@ -979,9 +1065,43 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                // --- [NUEVO] Lógica de cambio de estado de llamada ---
-                // Se elimina el manejador de 'change' para '.sga-call-status-select'
-                // ya que el dropdown se moverá al modal.
+                // --- [NUEVO] Lógica de cambio de estado de llamada (delegado) ---
+                $("#gestion-academica-app-container").on("change", ".sga-call-status-select", function() {
+                    var select = $(this);
+                    var spinner = select.siblings('.spinner');
+                    var post_id = select.data('postid');
+                    var row_index = select.data('rowindex');
+                    var status = select.val();
+                    var nonce = select.data('nonce');
+
+                    spinner.addClass('is-active');
+                    select.prop('disabled', true);
+
+                    $.post(ajaxurl, {
+                        action: 'sga_update_call_status',
+                        _ajax_nonce: nonce,
+                        post_id: post_id,
+                        row_index: row_index,
+                        status: status
+                    }).done(function(response) {
+                        if (response.success) {
+                            // Marcar ambas vistas para recargar si se navega a ellas
+                            viewsToRefresh['enviar_a_matriculacion'] = true;
+                            viewsToRefresh['registro_llamadas'] = true;
+                            // [MODIFICADO] Recargar la vista actual para mover la fila
+                            sga_load_paginated_inscriptions(); 
+                        } else {
+                            alert('Error al actualizar el estado: ' + (response.data.message || 'Error desconocido'));
+                            select.prop('disabled', false); // Revertir en caso de error
+                        }
+                    }).fail(function() {
+                        alert('Error de comunicación. No se pudo actualizar el estado.');
+                        select.prop('disabled', false); // Revertir en caso de error
+                    }).always(function() {
+                        // El spinner se ocultará cuando se recargue la tabla
+                        // spinner.removeClass('is-active'); 
+                    });
+                });
                 
                 // MANEJO DE LOS SELECT ALL
                 $("#gestion-academica-app-container").on("click", "#select-all-pendientes-nuevas", function() {
@@ -991,6 +1111,13 @@ class SGA_Panel_Views_Part1 {
                 $("#gestion-academica-app-container").on("click", "#select-all-pendientes-seguimiento", function() {
                     $("#tabla-pendientes-seguimiento .bulk-checkbox").prop('checked', this.checked);
                 });
+
+                // *** INICIO - [NUEVO] MANEJO SELECT ALL PARA ESTUDIANTES ***
+                $("#gestion-academica-app-container").on("click", "#select-all-estudiantes", function() {
+                    $("#tabla-general-estudiantes .student-checkbox").prop('checked', this.checked);
+                });
+                // *** FIN - [NUEVO] MANEJO SELECT ALL PARA ESTUDIANTES ***
+
 
                 // --- [MODIFICADO] Lógica de Marcar/Editar Llamada ---
                 $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
@@ -1014,10 +1141,6 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-log-id').val(''); 
                     $('#sga-comentario-llamada-texto').val('');
                     
-                    // [NUEVO] Settear el estado. Para 'marcar', siempre será 'pendiente' al abrir.
-                    // El usuario entonces seleccionará "Contactado", "No contesta", etc.
-                    $('#sga-comentario-status-select').val(tr.data('call-status')); 
-
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
@@ -1050,9 +1173,6 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-log-id').val(callData.log_id);
                     $('#sga-comentario-nonce').val(callData.nonce);
 
-                    // [NUEVO] Settear el estado actual en el dropdown del modal
-                    $('#sga-comentario-status-select').val(tr.data('call-status'));
-
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
@@ -1060,9 +1180,6 @@ class SGA_Panel_Views_Part1 {
                     var btn = $(this);
                     var comment = $('#sga-comentario-llamada-texto').val();
                     var actionType = $('#sga-comentario-action-type').val();
-                    
-                    // [NUEVO] Leer el estado desde el dropdown del modal
-                    var status = $('#sga-comentario-status-select').val();
                     
                     var post_id = $('#sga-comentario-post-id').val();
                     var row_index = $('#sga-comentario-row-index').val();
@@ -1078,8 +1195,7 @@ class SGA_Panel_Views_Part1 {
                             _ajax_nonce: nonce,
                             post_id: post_id,
                             row_index: row_index,
-                            comment: comment,
-                            status: status // [NUEVO] Enviar el estado
+                            comment: comment
                         };
                     } else if (actionType === 'editar') {
                         ajaxAction = 'sga_edit_llamado_comment';
@@ -1089,8 +1205,7 @@ class SGA_Panel_Views_Part1 {
                             student_id: post_id,
                             row_index: row_index,
                             log_id: log_id,
-                            comment: comment,
-                            status: status // [NUEVO] Enviar el estado
+                            comment: comment
                         };
                     } else {
                         alert('Acción de comentario desconocida.');
@@ -1176,7 +1291,8 @@ class SGA_Panel_Views_Part1 {
 
 
                 // --- [MODIFICADO] MANEJO DE FILTROS ---
-                $("#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado").on("keyup change", function() {
+                // Filtros para la vista de Inscripciones (delegados)
+                $("#gestion-academica-app-container").on("keyup change", "#buscador-estudiantes-pendientes, #filtro-curso-pendientes, #filtro-estado-llamada, #filtro-agente-asignado", function() {
                     // Usar debounce para evitar llamadas AJAX en cada pulsación
                     sga_debounce(function() {
                         sgaCurrentPageNuevas = 1; // Resetear página al filtrar
@@ -1189,6 +1305,8 @@ class SGA_Panel_Views_Part1 {
                 // --- [ELIMINADO] updateToggleCounters() ---
                 // --- [ELIMINADO] sga_apply_pagination() ---
 
+                // --- [MODIFICADO] Filtros de vistas cargadas por AJAX (delegados) ---
+                
                 function filterTable(tableSelector, searchInputSelector, courseFilterSelector) {
                     var searchTerm = sga_normalize_string($(searchInputSelector).val().toLowerCase()); 
                     var courseFilter = courseFilterSelector ? $(courseFilterSelector).val() : '';
@@ -1289,12 +1407,31 @@ class SGA_Panel_Views_Part1 {
                         }
                     });
                 }
-                $("#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos").on("keyup change", filterCourses);
-                $("#buscador-matriculados, #filtro-curso-matriculados").on("keyup change", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
-                $("#buscador-general-estudiantes").on("keyup", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
-                $("#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin").on("keyup change", function() { filterLogTable(); });
+                
+                // --- [MODIFICADO] Delegación de eventos para filtros ---
+                var container = $("#gestion-academica-app-container");
+                
+                container.on("keyup change", "#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos", filterCourses);
+                container.on("keyup change", "#buscador-matriculados, #filtro-curso-matriculados", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
+                
+                // [ELIMINADO] El filtro de estudiantes ahora es AJAX
+                // container.on("keyup", "#buscador-general-estudiantes", function() { filterTable('#tabla-general-estudiantes', '#buscador-general-estudiantes', null); });
+                
+                container.on("keyup change", "#buscador-log, #filtro-usuario-log, #filtro-fecha-inicio, #filtro-fecha-fin", filterLogTable);
+                container.on("keyup change", "#buscador-pagos", function() { filterTable('#tabla-pagos', '#buscador-pagos', null); });
 
-                $("#exportar-btn").on("click", function(e) {
+                // *** INICIO - [NUEVO] Filtro de búsqueda para Estudiantes (AJAX) ***
+                container.on("keyup", "#buscador-general-estudiantes", function() {
+                    sga_debounce(function() {
+                        sgaCurrentPageEstudiantes = 1; // Resetear página en búsqueda
+                        sga_load_paginated_students();
+                    }, 400);
+                });
+                // *** FIN - [NUEVO] Filtro de búsqueda para Estudiantes (AJAX) ***
+
+
+                // --- Exportaciones (delegadas) ---
+                container.on("click", "#exportar-btn", function(e) {
                     e.preventDefault();
                     var format = $('#export-format-select').val();
                     var searchTerm = $('#buscador-matriculados').val();
@@ -1389,21 +1526,32 @@ class SGA_Panel_Views_Part1 {
                         noResultsRow.remove();
                     }
                 }
-                $('#buscador-registro-llamadas, #filtro-curso-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro').on('keyup change', filterCallLog);
+                // Delegar filtros de registro de llamadas
+                container.on('keyup change', '#buscador-registro-llamadas, #filtro-curso-llamadas, #filtro-agente-llamadas, #filtro-estado-llamadas-registro', filterCallLog);
 
 
-                $("#panel-view-cursos").on("click", ".ver-matriculados-btn", function(e) {
+                container.on("click", ".ver-matriculados-btn", function(e) {
                     e.preventDefault();
                     var courseName = $(this).data('curso-nombre');
                     $('.panel-view').removeClass('active').hide();
-                    $('#panel-view-lista_matriculados').addClass('active').show();
-                    $('#filtro-curso-matriculados').val(courseName).change();
-                    $('#buscador-matriculados').val('');
+                    
+                    var targetPanel = $('#panel-view-lista_matriculados');
+                    targetPanel.addClass('active').show();
+                    
+                    if ($.trim(targetPanel.html()) === '') {
+                        reloadPanelView('lista_matriculados');
+                        // Esperar a que se cargue el contenido antes de filtrar
+                        setTimeout(function() {
+                            $('#filtro-curso-matriculados').val(courseName).trigger('change');
+                        }, 500); 
+                    } else {
+                         $('#filtro-curso-matriculados').val(courseName).trigger('change');
+                         $('#buscador-matriculados').val('');
+                    }
                 });
-                
-                $("#buscador-pagos").on("keyup", function() { filterTable('#tabla-pagos', '#buscador-pagos', null); });
 
-                $("#tabla-general-estudiantes").on("click", ".ver-perfil-btn", function() {
+                // Perfil de estudiante (delegado)
+                container.on("click", "#tabla-general-estudiantes .ver-perfil-btn", function() {
                     var studentId = $(this).data('estudiante-id');
                     var profileContainer = $("#sga-student-profile-content");
                     profileContainer.html('<div class="sga-profile-loading"><div class="spinner is-active" style="float:none; width:auto; height:auto; margin: 20px auto;"></div>Cargando perfil del estudiante...</div>');
@@ -1428,14 +1576,16 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
 
-                $("#gestion-academica-app-container").on("click", "#sga-profile-back-btn", function() {
+                container.on("click", "#sga-profile-back-btn", function() {
                     $(".panel-view.active").fadeOut(200, function() {
                         $(this).removeClass("active");
-                        $("#panel-view-estudiantes").fadeIn(200).addClass("active");
+                        // [MODIFICADO] Recargar la vista de estudiantes al volver
+                        sga_load_paginated_students();
+                        $("#panel-view-lista_estudiantes").fadeIn(200).addClass("active");
                     });
                 });
 
-                $("#gestion-academica-app-container").on("click", "#sga-print-expediente-btn", function(e) {
+                container.on("click", "#sga-print-expediente-btn", function(e) {
                     e.preventDefault();
                     var btn = $(this);
                     var studentId = btn.data('student-id');
@@ -1477,7 +1627,7 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
                 
-                $("#gestion-academica-app-container").on("click", "#sga-profile-save-btn", function() {
+                container.on("click", "#sga-profile-save-btn", function() {
                     var btn = $(this);
                     btn.text('Guardando...').prop('disabled', true);
                     var studentId = btn.data('student-id');
@@ -1505,7 +1655,7 @@ class SGA_Panel_Views_Part1 {
                     }).done(function(response) {
                         if (response.success) {
                             alert('Perfil actualizado correctamente.');
-                            viewsToRefresh['estudiantes'] = true;
+                            viewsToRefresh['lista_estudiantes'] = true; // Marcar para recargar
                             viewsToRefresh['lista_matriculados'] = true;
                             viewsToRefresh['enviar_a_matriculacion'] = true; // Marcar para recargar
                         } else {
@@ -1518,7 +1668,8 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
 
-                $('#sga-email-recipient-group').on('change', function() {
+                // Comunicación (delegado)
+                container.on('change', '#sga-email-recipient-group', function() {
                     var selectedGroup = $(this).val();
                     if (selectedGroup === 'por_curso') {
                         $('#sga-curso-selector-group').slideDown();
@@ -1532,7 +1683,7 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                $('#sga-estudiantes-search').on('keyup', function() {
+                container.on('keyup', '#sga-estudiantes-search', function() {
                     var searchTerm = sga_normalize_string($(this).val().toLowerCase()); 
                     $('#sga-estudiantes-checkbox-list .sga-student-item').each(function() {
                         var itemText = $(this).data('search-term');
@@ -1545,7 +1696,7 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
 
-                $('#sga-send-bulk-email-btn').on('click', function() {
+                container.on('click', '#sga-send-bulk-email-btn', function() {
                     var btn = $(this);
                     var statusDiv = $('#sga-email-status');
                     var editorContent = typeof tinymce !== 'undefined' && tinymce.get('sga-email-body') ? tinymce.get('sga-email-body').getContent() : $('#sga-email-body').val();
@@ -1601,7 +1752,8 @@ class SGA_Panel_Views_Part1 {
                     });
                 });
 
-                $('#report_type').on('change', function() {
+                // Reportes (delegado)
+                container.on('change', '#report_type', function() {
                     const reportType = $(this).val();
                     const cursoFilter = $('#report-curso-filter-container');
                     const agenteFilter = $('#report-agente-filter-container');
@@ -1613,9 +1765,10 @@ class SGA_Panel_Views_Part1 {
                     if (reportType === 'historial_llamadas') {
                         agenteFilter.slideDown();
                     }
-                }).trigger('change');
+                });//.trigger('change'); // No podemos hacer trigger en un elemento delegado que aún no existe
                 
-                $('.view-switcher').on('click', '.view-btn', function(e) {
+                // Switcher de vista Cursos (delegado)
+                container.on('click', '.view-switcher .view-btn', function(e) {
                     e.preventDefault();
                     var $this = $(this);
                     if ($this.hasClass('active')) return;
@@ -1629,6 +1782,7 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
+                // Gráfico de Reportes
                 function renderInscriptionsChart() {
                     if (inscriptionsChart) { inscriptionsChart.destroy(); }
                     var ctx = document.getElementById('inscriptionsChart').getContext('2d');
@@ -1656,7 +1810,8 @@ class SGA_Panel_Views_Part1 {
                     });
                 }
                 
-                $('#gestion-academica-app-container').on('click', '#sga-call-log-accordion .user-log-title button', function() {
+                // Acordeón de Registro de Llamadas (delegado)
+                container.on('click', '#sga-call-log-accordion .user-log-title button', function() {
                     var button = $(this);
                     var content = button.closest('.user-log-section').find('.user-log-content');
                     var isExpanded = button.attr('aria-expanded') === 'true';
@@ -1664,8 +1819,8 @@ class SGA_Panel_Views_Part1 {
                     content.slideToggle(200);
                 });
 
-                // --- Lógica de Reparto de Agentes ---
-                $('#panel-view-enviar_a_matriculacion').on('click', '#sga-distribute-btn', function() {
+                // --- Lógica de Reparto de Agentes (delegado) ---
+                container.on('click', '#sga-distribute-btn', function() {
                     var agentListHtml = '';
                     if (sgaAgents.length > 0) {
                         sgaAgents.forEach(function(agent) {
@@ -1700,9 +1855,8 @@ class SGA_Panel_Views_Part1 {
                     }).done(function(response) {
                         if (response.success) {
                             alert(response.data.message);
-                            viewsToRefresh['enviar_a_matriculacion'] = true;
-                            // Forzar recarga de la vista actual
-                            reloadPanelView('enviar_a_matriculacion');
+                            // [MODIFICADO] Forzar recarga de la vista actual
+                            sga_load_paginated_inscriptions();
                         } else {
                             alert('Error: ' + response.data.message);
                         }
@@ -1719,117 +1873,49 @@ class SGA_Panel_Views_Part1 {
                     $('#ga-modal-repartir-agentes').fadeOut(200);
                 });
 
-                // --- [NUEVO] Manejadores de paginación ---
-                $('#gestion-academica-app-container').on('click', '#sga-pagination-nuevas .sga-page-prev', function() {
+                // --- [NUEVO] Manejadores de paginación (delegados) ---
+                
+                // Paginación de Inscripciones (Nuevas)
+                container.on('click', '#sga-pagination-nuevas .sga-page-prev', function() {
                     if ($(this).is(':disabled')) return;
                     sgaCurrentPageNuevas--;
                     sga_load_paginated_inscriptions();
                 });
 
-                $('#gestion-academica-app-container').on('click', '#sga-pagination-nuevas .sga-page-next', function() {
+                container.on('click', '#sga-pagination-nuevas .sga-page-next', function() {
                     if ($(this).is(':disabled')) return;
                     sgaCurrentPageNuevas++;
                     sga_load_paginated_inscriptions();
                 });
 
-                $('#gestion-academica-app-container').on('click', '#sga-pagination-seguimiento .sga-page-prev', function() {
+                // Paginación de Inscripciones (Seguimiento)
+                container.on('click', '#sga-pagination-seguimiento .sga-page-prev', function() {
                     if ($(this).is(':disabled')) return;
                     sgaCurrentPageSeguimiento--;
                     sga_load_paginated_inscriptions();
                 });
 
-                $('#gestion-academica-app-container').on('click', '#sga-pagination-seguimiento .sga-page-next', function() {
+                container.on('click', '#sga-pagination-seguimiento .sga-page-next', function() {
                     if ($(this).is(':disabled')) return;
                     sgaCurrentPageSeguimiento++;
                     sga_load_paginated_inscriptions();
                 });
 
-                // --- [NUEVO] Manejador para paginación de Lista General de Estudiantes ---
-                $('#gestion-academica-app-container').on('click', '#panel-view-lista_estudiantes .tablenav-pages a', function(e) {
+                // *** INICIO - [NUEVO] Paginación de Estudiantes (Delegada) ***
+                container.on('click', '#sga-pagination-estudiantes .pagination-links a', function(e) {
                     e.preventDefault();
+                    if ($(this).hasClass('current') || $(this).hasClass('disabled')) return;
+
                     var href = $(this).attr('href');
+                    // Extraer el número de página de la URL (ej. ?paged=3)
                     var pagedMatch = href.match(/paged=(\d+)/);
-                    if (pagedMatch) {
-                        var paged = pagedMatch[1];
-                        // Simular una recarga de la vista con el parámetro paged
-                        // (Nota: esto requiere que el JS de navegación maneje los parámetros GET, lo cual no hace actualmente)
-                        // Por ahora, recargaremos la vista completa
-                        viewsToRefresh['lista_estudiantes'] = true;
-                        
-                        // Una forma más simple de manejar esto es navegar realmente
-                        // Pero como estamos en un SPA, debemos simularlo.
-                        // La forma más fácil es recargar el panel
-                        var targetPanel = $('#panel-view-lista_estudiantes');
-                        var loader = $("#sga-panel-loader");
-                        
-                        loader.fadeIn(150);
-                        
-                        // Modificar la URL de la petición AJAX
-                        var ajaxData = {
-                            action: 'sga_get_panel_view_html',
-                            view: 'lista_estudiantes',
-                            _ajax_nonce: '<?php echo wp_create_nonce("sga_get_view_nonce"); ?>',
-                            paged: paged // <-- ¡Añadir el parámetro paged!
-                        };
-                        
-                        // Esto requiere que el endpoint 'sga_get_panel_view_html' lea $_POST['paged']
-                        // Vayamos a class-sga-ajax.php para añadirlo.
-                        
-                        // *** Pausa - Necesitamos modificar class-sga-ajax.php y class-sga-panel-views-part2.php
-                        // *** para que acepten 'paged'.
-                        
-                        // *** Solución temporal (y más simple) ***
-                        // La paginación en "Lista General de Estudiantes" funcionaba con recarga de página.
-                        // Mi cambio a '#' la rompió. La devolveré a la normalidad.
-                        // Esta función de JS no es necesaria si los enlaces de paginación en 
-                        // `render_view_lista_estudiantes` (en part2.php) son enlaces reales.
-                        
-                        // No es necesario JS aquí. El cambio se debe hacer en part2.php
-                        // Ya lo hice en part2.php, los enlaces usan `?paged=X`
-                        // ¡PERO! El panel es AJAX.
-                        
-                        // OK, el problema es que `paginate_links` en `class-sga-panel-views-part2.php`
-                        // no puede funcionar porque estamos en una sola página.
-                        // La paginación de esa tabla también debe ser AJAX.
-                        
-                        // Esto se complica. Dejemos la paginación de "Lista General de Estudiantes"
-                        // como estaba (con recarga de página) por ahora.
-                        
-                        // Devolveré los enlaces de paginación en part2.php a su estado original
-                        // para que recarguen la página.
-                        
-                        // *** Re-evaluación ***
-                        // El usuario está en una sola página /gestion.
-                        // La paginación de WP (`paginate_links`) genera enlaces a 
-                        // /wp-admin/admin.php?page=...
-                        // o
-                        // /gestion?paged=2
-                        // Ambas recargarán la página. 
-                        
-                        // ¡Ah! El `paginate_links` en `class-sga-panel-views-part2.php`
-                        // está mal. No funcionará en un shortcode.
-                        
-                        // Voy a dejar el JS aquí para *simular* la navegación,
-                        // pero la forma correcta sería rehacer esa vista con AJAX
-                        // igual que hicimos con 'enviar_a_matriculacion'.
-                        
-                        // Por ahora, hagamos que el clic en paginación
-                        // recargue la vista 'lista_estudiantes'
-                        
-                        viewsToRefresh['lista_estudiantes'] = true;
-                        reloadPanelView('lista_estudiantes');
-                        
-                        // Esto NO funcionará para pasar el número de página.
-                        // La paginación de esa vista está rota por diseño (no es compatible con AJAX).
-                        
-                        // Corrección final: Por ahora, la paginación de "Lista General"
-                        // no funcionará con este sistema AJAX. 
-                        // Nos enfocamos en 'enviar_a_matriculacion' que era el problema principal.
-                        
-                        // Voy a eliminar el JS de paginación de 'lista_estudiantes'
-                        // que acabo de añadir.
+                    
+                    if (pagedMatch && pagedMatch[1]) {
+                        sgaCurrentPageEstudiantes = parseInt(pagedMatch[1], 10);
+                        sga_load_paginated_students();
                     }
                 });
+                // *** FIN - [NUEVO] Paginación de Estudiantes (Delegada) ***
 
             });
         </script>
