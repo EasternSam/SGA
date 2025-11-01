@@ -99,16 +99,16 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
                 <div id="panel-view-lista_matriculados" class="panel-view"></div>
                 <div id="panel-view-registro_llamadas" class="panel-view"></div>
                 
-                <!-- **** INICIO DE LA CORRECCIÓN **** -->
+                <!-- **** INICIO DE LA CORRECCIÓN: Pre-cargar los 'shells' de las vistas **** -->
                 <!-- Los IDs deben coincidir con los data-view de los enlaces en class-sga-panel-views-part1.php -->
-                <div id="panel-view-lista_estudiantes" class="panel-view"></div>
-                <div id="panel-view-lista_cursos" class="panel-view"></div>
+                <div id="panel-view-lista_estudiantes" class="panel-view"><?php $this->render_view_lista_estudiantes(); ?></div>
+                <div id="panel-view-lista_cursos" class="panel-view"><?php $this->render_view_lista_cursos(); ?></div>
                  <!-- **** FIN DE LA CORRECCIÓN **** -->
                  
                 <div id="panel-view-registro_pagos" class="panel-view"></div>
                 <div id="panel-view-reportes" class="panel-view"></div>
                 <div id="panel-view-log" class="panel-view"></div>
-                <div id="panel-view-perfil_estudiante" class="panel-view"></div>
+                <div id="panel-view-perfil_estudiante" class="panel-view"><?php $this->render_view_perfil_estudiante(); ?></div>
                 <div id="panel-view-comunicacion" class="panel-view"></div>
                  <!-- *** FIN OPTIMIZACIÓN DE CARGA *** -->
             </div>
@@ -126,3 +126,4 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
         return $payments_handler->render_pagos_page();
     }
 }
+

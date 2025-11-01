@@ -267,7 +267,7 @@ class SGA_Utils {
             $content_html = '<p>Hola ' . esc_html($nombre) . ',</p>';
             if ($es_primera_matricula) {
                 $content_html .= '<p>Te informamos con gran alegría que tu inscripción ha sido procesada y has sido matriculado exitosamente. A continuación, encontrarás los detalles de tu matriculación.</p>';
-                $content_html .= '<h2>Próximos Pasos</h2>';
+                $content_html .= '<h2>PróximOS Pasos</h2>';
                 $content_html .= '<p class="last">Guarda tu número de matrícula, ya que será tu identificador principal. Pronto recibirás más información sobre el inicio de clases y acceso a nuestra plataforma. ¡Te damos la bienvenida a CENTU!</p>';
             } else {
                 $content_html .= '<p>Nos complace informarte que hemos añadido un nuevo curso a tu perfil. Hemos utilizado tu número de matrícula existente para esta nueva inscripción.</p>';
@@ -522,7 +522,7 @@ class SGA_Utils {
 
         ob_start();
         ?>
-        <a href="#" id="sga-profile-back-btn" class="back-link panel-nav-link">&larr; Volver a Lista de Estudiantes</a>
+        <a href="#" id="sga-profile-back-btn" class="back-link">&larr; Volver a Lista de Estudiantes</a>
         <h1 class="panel-title">Perfil de Estudiante: <?php echo esc_html($nombre_completo); ?></h1>
         <div class="sga-profile-grid">
             <div class="sga-profile-card">
@@ -1192,8 +1192,8 @@ class SGA_Utils {
             'post_type' => 'estudiante',
             'posts_per_page' => -1,
             'post__in' => $pending_student_ids,
-            'orderby' => 'post_title',
-            'order' => 'ASC'
+            'orderby' => 'ID', // Cambiado de post_title a ID
+            'order' => 'DESC' // Cambiado de ASC a DESC
         ));
 
         // 5. Pre-cargar el mapa de categorías de cursos
@@ -1310,6 +1310,18 @@ class SGA_Utils {
                 }
             } // end foreach curso
         } // end foreach estudiante
+
+        // *** NUEVA SECCIÓN DE ORDENAMIENTO ***
+        // Ordenar ambas listas por fecha de inscripción descendente
+        $sort_by_date_desc = function($a, $b) {
+            $time_a = isset($a['curso']['fecha_inscripcion']) ? strtotime($a['curso']['fecha_inscripcion']) : 0;
+            $time_b = isset($b['curso']['fecha_inscripcion']) ? strtotime($b['curso']['fecha_inscripcion']) : 0;
+            return $time_b - $time_a; // Descendente
+        };
+        
+        usort($pending_calls_data_filtered, $sort_by_date_desc);
+        usort($in_progress_data_filtered, $sort_by_date_desc);
+        // *** FIN NUEVA SECCIÓN DE ORDENAMIENTO ***
 
         // 8. PAGINACIÓN
         $posts_per_page = (int)$args['posts_per_page'];
