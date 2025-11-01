@@ -45,8 +45,25 @@ class SGA_Shortcodes extends SGA_Panel_Views_Part3 { // Extiende la última part
         <div id="ga-modal-comentario-llamada" class="ga-modal" style="display:none;">
             <div class="ga-modal-content">
                 <h4 id="ga-modal-comentario-title">Añadir Comentario a la Llamada</h4>
-                <p>Puedes añadir una nota o comentario sobre esta llamada (opcional).</p>
-                <textarea id="sga-comentario-llamada-texto" placeholder="Escribe tu comentario aquí..." rows="4" style="width: 100%;"></textarea>
+                
+                <!-- INICIO: MODIFICACIÓN SOLICITADA -->
+                <div class="sga-form-group">
+                    <label for="sga-comentario-llamada-estado">Actualizar Estado <span>*</span></label>
+                    <select id="sga-comentario-llamada-estado">
+                        <option value="pendiente">Pendiente</option>
+                        <option value="contactado">Contactado</option>
+                        <option value="no_contesta">No Contesta</option>
+                        <option value="numero_incorrecto">Número Incorrecto</option>
+                        <option value="rechazado">Rechazado</option>
+                    </select>
+                </div>
+
+                <div class="sga-form-group">
+                     <label for="sga-comentario-llamada-texto">Comentario (Opcional)</label>
+                    <textarea id="sga-comentario-llamada-texto" placeholder="Escribe tu comentario aquí..." rows="4" style="width: 100%;"></textarea>
+                </div>
+                <!-- FIN: MODIFICACIÓN SOLICITADA -->
+                
                 <div class="ga-modal-actions">
                     <button id="ga-modal-comentario-cancelar" class="button button-secondary">Cancelar</button>
                     <button id="ga-modal-comentario-guardar" class="button button-primary">Marcar y Guardar</button>

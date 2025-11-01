@@ -24,7 +24,7 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_get_report_chart_data', array($this, 'ajax_get_report_chart_data'));
         add_action('wp_ajax_sga_test_api_connection', array($this, 'ajax_test_api_connection'));
         add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
-        add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status')); // <-- Hook para actualizar estado
+        // add_action('wp_ajax_sga_update_call_status', array($this, 'ajax_update_call_status')); // <-- ELIMINADO: Esta acción ya no se usa
         add_action('wp_ajax_sga_marcar_llamado', array($this, 'ajax_sga_marcar_llamado'));
         add_action('wp_ajax_sga_edit_llamado_comment', array($this, 'ajax_sga_edit_llamado_comment'));
         add_action('wp_ajax_sga_get_panel_view_html', array($this, 'ajax_get_panel_view_html'));
@@ -95,9 +95,43 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'No se seleccionaron agentes.']);
         }
         
+        // --- INICIO MODIFICACIÓN: Separar agentes seleccionados por rol ---
+        $infotep_agent_ids = [];
+        $general_agent_ids = [];
+        
+        foreach ($agent_ids as $agent_id) {
+            $user_data = get_userdata($agent_id);
+            if ($user_data && in_array('agente_infotep', (array)$user_data->roles)) {
+                $infotep_agent_ids[] = $agent_id;
+            } else if ($user_data && in_array('agente', (array)$user_data->roles)) {
+                // Asumimos que cualquier otro agente (que no sea infotep) es general
+                $general_agent_ids[] = $agent_id;
+            }
+        }
+        // --- FIN MODIFICACIÓN ---
+        
         // 1. Recolectar TODAS las inscripciones pendientes.
         $all_pending_inscriptions = [];
         $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1]);
+        
+        // --- INICIO MODIFICACIÓN: Pre-cargar mapa de categorías de cursos ---
+        $all_cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'post_status' => array('publish', 'private')));
+        $course_category_map = [];
+        $course_ids_to_check = wp_list_pluck($all_cursos, 'ID');
+        $infotep_slug = 'cursos-infotep'; // Asumir slug
+
+        if (!empty($course_ids_to_check)) {
+            $all_terms = wp_get_object_terms($course_ids_to_check, 'category', ['fields' => 'all_with_object_id']);
+            $terms_by_course_id = [];
+            foreach ($all_terms as $term) {
+                if (!isset($terms_by_course_id[$term->object_id])) $terms_by_course_id[$term->object_id] = [];
+                $terms_by_course_id[$term->object_id][] = $term->slug;
+            }
+            foreach ($all_cursos as $course_post) {
+                $course_category_map[$course_post->post_title] = $terms_by_course_id[$course_post->ID] ?? [];
+            }
+        }
+        // --- FIN MODIFICACIÓN ---
 
         foreach ($estudiantes as $estudiante) {
             $cursos = get_field('cursos_inscritos', $estudiante->ID);
@@ -105,10 +139,18 @@ class SGA_Ajax {
             if ($cursos) {
                 foreach ($cursos as $index => $curso) {
                     if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
+                        
+                        // --- INICIO MODIFICACIÓN: Determinar si el curso es de Infotep ---
+                        $course_name = $curso['nombre_curso'];
+                        $course_categories = $course_category_map[$course_name] ?? [];
+                        $is_infotep_course = in_array($infotep_slug, $course_categories);
+                        // --- FIN MODIFICACIÓN ---
+                        
                         $all_pending_inscriptions[] = [
                             'student_id' => $estudiante->ID,
                             'row_index'  => $index,
-                            'course_name' => $curso['nombre_curso'],
+                            'course_name' => $course_name,
+                            'is_infotep' => $is_infotep_course // Guardar esta información
                         ];
                     }
                 }
@@ -126,6 +168,10 @@ class SGA_Ajax {
         foreach ($all_pending_inscriptions as $inscription) {
             $student_id = $inscription['student_id'];
             $row_index = $inscription['row_index'];
+            // --- INICIO MODIFICACIÓN: Obtener tipo de curso ---
+            $is_infotep_course = $inscription['is_infotep'];
+            // --- FIN MODIFICACIÓN ---
+            
             $agent_to_assign = null;
             $should_apply_rotation = true;
             
@@ -136,17 +182,33 @@ class SGA_Ajax {
             if ($call_info && isset($call_info['user_id'])) {
                 $calling_agent_id = intval($call_info['user_id']);
                 
-                // Si el agente que llamó está en la lista de agentes seleccionados, se le asigna.
-                if (in_array($calling_agent_id, $agent_ids)) {
+                // --- INICIO MODIFICACIÓN: Revisar si el agente que llamó es del tipo correcto ---
+                // Si el agente que llamó está en la lista de agentes seleccionados *Y ES DEL TIPO CORRECTO*:
+                if ($is_infotep_course && in_array($calling_agent_id, $infotep_agent_ids)) {
                     $agent_to_assign = $calling_agent_id;
-                    $should_apply_rotation = false; // Cumple la prioridad 1, no entra en rotación
+                    $should_apply_rotation = false; 
+                } else if (!$is_infotep_course && in_array($calling_agent_id, $general_agent_ids)) {
+                    $agent_to_assign = $calling_agent_id;
+                    $should_apply_rotation = false;
                 }
+                // --- FIN MODIFICACIÓN ---
             }
             
-            // B. PRIORIDAD 2: Rotación forzada si no se encontró un agente llamador válido
+            // B. PRIORIDAD 2: Rotación
             if ($should_apply_rotation) {
-                // Si no se asignó por prioridad 1 (o si no hay llamada registrada), usa la rotación.
-                $agent_to_assign = SGA_Utils::_get_next_agent_from_list($agent_ids);
+                // --- INICIO MODIFICACIÓN: Asignar al grupo correcto ---
+                if ($is_infotep_course) {
+                    if (!empty($infotep_agent_ids)) {
+                        // Usar un sufijo de transient_key diferente para la rotación de Infotep
+                        $agent_to_assign = SGA_Utils::_get_next_agent_from_list($infotep_agent_ids, 'infotep_distribute');
+                    }
+                } else {
+                    if (!empty($general_agent_ids)) {
+                        // Usar un sufijo de transient_key diferente para la rotación General
+                        $agent_to_assign = SGA_Utils::_get_next_agent_from_list($general_agent_ids, 'general_distribute');
+                    }
+                }
+                // --- FIN MODIFICACIÓN ---
             }
             
             // C. Asignar y registrar el log
@@ -793,6 +855,10 @@ class SGA_Ajax {
         }
 
         $comment = isset($_POST['comment']) ? sanitize_textarea_field($_POST['comment']) : '';
+        // --- INICIO: MODIFICACIÓN SOLICITADA ---
+        $status = isset($_POST['status']) ? sanitize_key($_POST['status']) : 'pendiente'; // Obtener el estado del POST
+        // --- FIN: MODIFICACIÓN SOLICITADA ---
+        
         $user_id = get_current_user_id();
         $user_info = get_userdata($user_id);
         $student_post = get_post($post_id);
@@ -839,11 +905,22 @@ class SGA_Ajax {
         ];
         $call_log_meta[$row_index] = $call_info;
         update_post_meta($post_id, '_sga_call_log', $call_log_meta);
+        
+        // --- INICIO: MODIFICACIÓN SOLICITADA ---
+        // 6. Guardar el estado de la llamada
+        $call_statuses = get_post_meta($post_id, '_sga_call_statuses', true);
+        if (!is_array($call_statuses)) {
+            $call_statuses = [];
+        }
+        $call_statuses[$row_index] = $status;
+        update_post_meta($post_id, '_sga_call_statuses', $call_statuses);
+        // --- FIN: MODIFICACIÓN SOLICITADA ---
 
-        // 6. Generar el HTML de respuesta
+
+        // 7. Generar el HTML de respuesta
         $html_response = SGA_Utils::_get_call_log_html($post_id, $row_index, $call_info, $call_log_post_id, true);
         
-        SGA_Utils::_log_activity('Llamada Registrada', "{$user_info->display_name} marcó como llamado a {$student_post->post_title} para el curso {$curso_info['nombre_curso']}.", $user_id);
+        SGA_Utils::_log_activity('Llamada Registrada', "{$user_info->display_name} marcó como llamado a {$student_post->post_title} (curso {$curso_info['nombre_curso']}) y actualizó el estado a '{$status}'.", $user_id);
         
         wp_send_json_success(['html' => $html_response]);
     }
@@ -863,6 +940,9 @@ class SGA_Ajax {
         $log_id = intval($_POST['log_id']); // ID del CPT sga_llamada
         $nonce = sanitize_text_field($_POST['_ajax_nonce']);
         $comment = isset($_POST['comment']) ? sanitize_textarea_field($_POST['comment']) : '';
+        // --- INICIO: MODIFICACIÓN SOLICITADA ---
+        $status = isset($_POST['status']) ? sanitize_key($_POST['status']) : 'pendiente'; // Obtener el estado del POST
+        // --- FIN: MODIFICACIÓN SOLICITADA ---
 
         // El nonce de edición se genera dinámicamente en el JS
         if (!wp_verify_nonce($nonce, 'sga_edit_llamado_' . $student_id . '_' . $row_index)) {
@@ -882,7 +962,25 @@ class SGA_Ajax {
              wp_send_json_error(['message' => 'No se pudo actualizar el comentario. El registro de llamada no fue encontrado.'], 404);
         }
 
-        // 4. Obtener la información actualizada
+        // --- INICIO: MODIFICACIÓN SOLICITADA ---
+        // 4. Guardar el estado de la llamada
+        $call_statuses = get_post_meta($student_id, '_sga_call_statuses', true);
+        if (!is_array($call_statuses)) {
+            $call_statuses = [];
+        }
+        $call_statuses[$row_index] = $status;
+        update_post_meta($student_id, '_sga_call_statuses', $call_statuses);
+
+        // Loggear el cambio de estado
+        $student_post = get_post($student_id);
+        SGA_Utils::_log_activity(
+            'Llamada/Estado Actualizado', 
+            "{$user_name} actualizó la llamada para {$student_post->post_title} (inscripción #{$row_index}) al estado '{$status}'.", 
+            get_current_user_id()
+        );
+        // --- FIN: MODIFICACIÓN SOLICITADA ---
+
+        // 5. Obtener la información actualizada
         $call_log_meta = get_post_meta($student_id, '_sga_call_log', true);
         $call_info = $call_log_meta[$row_index] ?? null;
         
@@ -890,59 +988,19 @@ class SGA_Ajax {
              wp_send_json_error(['message' => 'No se pudo recuperar la información de la llamada actualizada.'], 500);
         }
         
-        // 5. Generar y enviar el nuevo HTML
+        // 6. Generar y enviar el nuevo HTML
         $html_response = SGA_Utils::_get_call_log_html($student_id, $row_index, $call_info, $log_id, true);
 
         wp_send_json_success(['html' => $html_response]);
     }
     
+    // --- INICIO: MODIFICACIÓN SOLICITADA ---
     /**
      * AJAX: Actualiza el estado de la llamada para una inscripción específica.
+     * ESTA FUNCIÓN HA SIDO ELIMINADA PORQUE SU LÓGICA SE MOVIÓ A
+     * ajax_sga_marcar_llamado() y ajax_sga_edit_llamado_comment()
      */
-    public function ajax_update_call_status() {
-        // 1. Verificación de seguridad (Nonce)
-        if (!isset($_POST['_ajax_nonce'], $_POST['post_id'], $_POST['row_index'], $_POST['status'])) {
-            wp_send_json_error(['message' => 'Datos incompletos.'], 400);
-        }
-        $post_id = intval($_POST['post_id']);
-        $row_index = intval($_POST['row_index']);
-        $nonce = sanitize_text_field($_POST['_ajax_nonce']);
-        $status = sanitize_key($_POST['status']); // Asegura que el estado sea un slug válido
-
-        if (!wp_verify_nonce($nonce, 'sga_update_call_status_' . $post_id . '_' . $row_index)) {
-            wp_send_json_error(['message' => 'Error de seguridad (Nonce).'], 403);
-        }
-
-        // 2. Verificación de permisos
-        if (!current_user_can('edit_estudiantes')) { // O un permiso más específico si es necesario
-            wp_send_json_error(['message' => 'No tienes permisos para esta acción.'], 403);
-        }
-
-        // 3. Obtener los estados actuales
-        $call_statuses = get_post_meta($post_id, '_sga_call_statuses', true);
-        if (!is_array($call_statuses)) {
-            $call_statuses = [];
-        }
-
-        // 4. Actualizar el estado específico
-        $call_statuses[$row_index] = $status;
-
-        // 5. Guardar los estados actualizados
-        $updated = update_post_meta($post_id, '_sga_call_statuses', $call_statuses);
-
-        if ($updated) {
-            $user_info = wp_get_current_user();
-            $student_post = get_post($post_id);
-            SGA_Utils::_log_activity(
-                'Estado de Llamada Actualizado', 
-                "{$user_info->display_name} cambió el estado de llamada para {$student_post->post_title} (inscripción #{$row_index}) a '{$status}'.", 
-                $user_info->ID
-            );
-            wp_send_json_success(['message' => 'Estado actualizado.']);
-        } else {
-            // Podría ser que el valor no cambió o hubo un error al guardar
-             wp_send_json_error(['message' => 'No se pudo actualizar el estado o no hubo cambios.'], 500);
-        }
-    }
+    // public function ajax_update_call_status() { ... }
+    // --- FIN: MODIFICACIÓN SOLICITADA ---
 }
 

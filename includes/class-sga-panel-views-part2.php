@@ -19,7 +19,16 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         
         $cursos_disponibles = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
         $can_approve = $this->sga_user_has_role(['administrator', 'gestor_academico']);
-        $agents = SGA_Utils::_get_sga_agents();
+        
+        // --- INICIO MODIFICACIÓN: Obtener ambos tipos de agentes para el filtro ---
+        $agents_general = SGA_Utils::_get_sga_agents('agente');
+        $agents_infotep = SGA_Utils::_get_sga_agents('agente_infotep');
+        $agents = array_merge($agents_general, $agents_infotep);
+        // Ordenar la lista combinada por nombre
+        usort($agents, function($a, $b) {
+            return strcmp($a->display_name, $b->display_name);
+        });
+        // --- FIN MODIFICACIÓN ---
         
         ?>
         <a href="#" data-view="matriculacion" class="back-link panel-nav-link">&larr; Volver a Matriculación</a>
@@ -58,9 +67,15 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
              <select id="filtro-agente-asignado">
                 <option value="">Todos los Agentes</option>
                 <option value="unassigned">Sin Asignar</option>
-                <?php foreach ($agents as $agent) : ?>
-                    <option value="<?php echo esc_attr($agent->ID); ?>"><?php echo esc_html($agent->display_name); ?></option>
-                <?php endforeach; ?>
+                <?php 
+                // --- INICIO MODIFICACIÓN: Mostrar agentes con su rol ---
+                foreach ($agents as $agent) : 
+                    $role_label = in_array('agente_infotep', (array)$agent->roles) ? ' (Infotep)' : ' (General)';
+                ?>
+                    <option value="<?php echo esc_attr($agent->ID); ?>"><?php echo esc_html($agent->display_name . $role_label); ?></option>
+                <?php endforeach; 
+                // --- FIN MODIFICACIÓN ---
+                ?>
             </select>
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])): ?>
             <a href="<?php echo esc_url(admin_url('admin.php?page=sga_dashboard')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
@@ -162,7 +177,10 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $can_approve = $args['can_approve'];
         
         // 2. Obtener mapa de agentes (para nombres)
-        $agents = array_merge(SGA_Utils::_get_sga_agents('agente'), SGA_Utils::_get_sga_agents('agente_infotep'));
+        $agents_general = SGA_Utils::_get_sga_agents('agente');
+        $agents_infotep = SGA_Utils::_get_sga_agents('agente_infotep');
+        $agents = array_merge($agents_general, $agents_infotep);
+        
         $agent_map = [];
         foreach ($agents as $agent) {
             $agent_map[$agent->ID] = $agent->display_name;
@@ -221,6 +239,17 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
         $agent_colors = [];
         $color_palette = ['#e0f2fe', '#e0e7ff', '#dcfce7', '#fef9c3', '#fee2e2', '#f3e8ff', '#dbeafe'];
         $color_index = 0;
+        
+        // --- INICIO: MODIFICACIÓN SOLICITADA ---
+        // Definir el mapa de píldoras
+        $status_pill_map = [
+            'pendiente' => ['text' => 'Pendiente', 'class' => 'ga-pill-llamada-pendiente'],
+            'contactado' => ['text' => 'Contactado', 'class' => 'ga-pill-llamada-contactado'],
+            'no_contesta' => ['text' => 'No Contesta', 'class' => 'ga-pill-llamada-no_contesta'],
+            'numero_incorrecto' => ['text' => 'Número Incorrecto', 'class' => 'ga-pill-llamada-numero_incorrecto'],
+            'rechazado' => ['text' => 'Rechazado', 'class' => 'ga-pill-llamada-rechazado'],
+        ];
+        // --- FIN: MODIFICACIÓN SOLICITADA ---
 
         ob_start();
 
@@ -266,18 +295,18 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                     <td><?php echo esc_html($curso['nombre_curso']); ?></td>
                     <td><?php echo esc_html($curso['horario']); ?></td>
                     <td><span class="estado-inscrito">Inscrito</span></td>
+                    
+                    <!-- --- INICIO: MODIFICACIÓN SOLICITADA (Renderizar Píldora) --- -->
                     <td>
-                        <div class="sga-call-status-wrapper">
-                            <select class="sga-call-status-select" data-postid="<?php echo esc_attr($estudiante->ID); ?>" data-rowindex="<?php echo esc_attr($index); ?>" data-nonce="<?php echo wp_create_nonce('sga_update_call_status_' . $estudiante->ID . '_' . $index); ?>">
-                                <option value="pendiente" <?php selected($current_call_status, 'pendiente'); ?>>Pendiente</option>
-                                <option value="contactado" <?php selected($current_call_status, 'contactado'); ?>>Contactado</option>
-                                <option value="no_contesta" <?php selected($current_call_status, 'no_contesta'); ?>>No Contesta</option>
-                                <option value="numero_incorrecto" <?php selected($current_call_status, 'numero_incorrecto'); ?>>Número Incorrecto</option>
-                                <option value="rechazado" <?php selected($current_call_status, 'rechazado'); ?>>Rechazado</option>
-                            </select>
-                            <span class="spinner"></span>
-                        </div>
+                        <?php 
+                        $status_details = $status_pill_map[$current_call_status] ?? ['text' => ucfirst($current_call_status), 'class' => 'ga-pill-llamada-pendiente'];
+                        ?>
+                        <span class="ga-pill <?php echo esc_attr($status_details['class']); ?>">
+                            <?php echo esc_html($status_details['text']); ?>
+                        </span>
                     </td>
+                    <!-- --- FIN: MODIFICACIÓN SOLICITADA --- -->
+                    
                     <td>
                         <?php
                         if ($call_info) {

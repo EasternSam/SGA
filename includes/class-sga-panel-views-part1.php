@@ -700,11 +700,25 @@ class SGA_Panel_Views_Part1 {
     }
 
     public function render_panel_navigation_js() {
-        $agents = SGA_Utils::_get_sga_agents();
+        // --- INICIO MODIFICACIÓN: Obtener ambos tipos de agentes ---
+        $agents_general = SGA_Utils::_get_sga_agents('agente');
+        $agents_infotep = SGA_Utils::_get_sga_agents('agente_infotep');
+        $agents = array_merge($agents_general, $agents_infotep);
+        // Ordenar la lista combinada por nombre
+        usort($agents, function($a, $b) {
+            return strcmp($a->display_name, $b->display_name);
+        });
+
         $agents_for_js = [];
         foreach($agents as $agent) {
-            $agents_for_js[] = ['id' => $agent->ID, 'name' => $agent->display_name];
+            // Añadir una etiqueta para saber el rol en el modal
+            $role_label = in_array('agente_infotep', (array)$agent->roles) ? 'Infotep' : 'General';
+            $agents_for_js[] = [
+                'id' => $agent->ID, 
+                'name' => $agent->display_name . ' (' . $role_label . ')'
+            ];
         }
+        // --- FIN MODIFICACIÓN ---
         ?>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
@@ -1065,43 +1079,13 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
 
-                // --- [NUEVO] Lógica de cambio de estado de llamada (delegado) ---
+                // --- [ELIMINADO] Lógica de cambio de estado de llamada (delegado) ---
+                // Esta lógica ahora está dentro del modal de "Guardar Comentario"
+                /*
                 $("#gestion-academica-app-container").on("change", ".sga-call-status-select", function() {
-                    var select = $(this);
-                    var spinner = select.siblings('.spinner');
-                    var post_id = select.data('postid');
-                    var row_index = select.data('rowindex');
-                    var status = select.val();
-                    var nonce = select.data('nonce');
-
-                    spinner.addClass('is-active');
-                    select.prop('disabled', true);
-
-                    $.post(ajaxurl, {
-                        action: 'sga_update_call_status',
-                        _ajax_nonce: nonce,
-                        post_id: post_id,
-                        row_index: row_index,
-                        status: status
-                    }).done(function(response) {
-                        if (response.success) {
-                            // Marcar ambas vistas para recargar si se navega a ellas
-                            viewsToRefresh['enviar_a_matriculacion'] = true;
-                            viewsToRefresh['registro_llamadas'] = true;
-                            // [MODIFICADO] Recargar la vista actual para mover la fila
-                            sga_load_paginated_inscriptions(); 
-                        } else {
-                            alert('Error al actualizar el estado: ' + (response.data.message || 'Error desconocido'));
-                            select.prop('disabled', false); // Revertir en caso de error
-                        }
-                    }).fail(function() {
-                        alert('Error de comunicación. No se pudo actualizar el estado.');
-                        select.prop('disabled', false); // Revertir en caso de error
-                    }).always(function() {
-                        // El spinner se ocultará cuando se recargue la tabla
-                        // spinner.removeClass('is-active'); 
-                    });
+                    // ... CÓDIGO ELIMINADO ...
                 });
+                */
                 
                 // MANEJO DE LOS SELECT ALL
                 $("#gestion-academica-app-container").on("click", "#select-all-pendientes-nuevas", function() {
@@ -1120,9 +1104,11 @@ class SGA_Panel_Views_Part1 {
 
 
                 // --- [MODIFICADO] Lógica de Marcar/Editar Llamada ---
+                // Evento delegado para "Marcar como Llamado"
                 $("#gestion-academica-app-container").on("click", ".sga-marcar-llamado-btn", function() {
                     var btn = $(this);
                     var tr = btn.closest('tr');
+                    var currentStatus = tr.data('call-status') || 'pendiente';
                     
                     $('#sga-comentario-action-type').val('marcar');
                     $('#ga-modal-comentario-title').text('Marcar Llamada');
@@ -1141,12 +1127,17 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-log-id').val(''); 
                     $('#sga-comentario-llamada-texto').val('');
                     
+                    // Preseleccionar el estado actual
+                    $('#sga-comentario-llamada-estado').val(currentStatus);
+                    
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
-
+                
+                // Evento delegado para "Editar Comentario"
                 $("#gestion-academica-app-container").on("click", "#tabla-pendientes-nuevas .sga-edit-llamado-btn, #tabla-pendientes-seguimiento .sga-edit-llamado-btn", function() {
                     var btn = $(this);
                     var tr = btn.closest('tr');
+                    var currentStatus = tr.data('call-status') || 'pendiente';
                     
                     $('#sga-comentario-action-type').val('editar');
                     var currentComment = btn.data('comment');
@@ -1172,14 +1163,23 @@ class SGA_Panel_Views_Part1 {
                     $('#sga-comentario-row-index').val(callData.row_index);
                     $('#sga-comentario-log-id').val(callData.log_id);
                     $('#sga-comentario-nonce').val(callData.nonce);
+                    
+                    // Preseleccionar el estado actual
+                    $('#sga-comentario-llamada-estado').val(currentStatus);
 
                     $('#ga-modal-comentario-llamada').fadeIn(200);
                 });
 
+                // Evento del botón "Guardar" en el Modal de Comentario
                 $('#ga-modal-comentario-guardar').on('click', function() {
                     var btn = $(this);
                     var comment = $('#sga-comentario-llamada-texto').val();
                     var actionType = $('#sga-comentario-action-type').val();
+                    
+                    // --- INICIO: MODIFICACIÓN SOLICITADA ---
+                    // Capturar el nuevo estado seleccionado
+                    var newStatus = $('#sga-comentario-llamada-estado').val();
+                    // --- FIN: MODIFICACIÓN SOLICITADA ---
                     
                     var post_id = $('#sga-comentario-post-id').val();
                     var row_index = $('#sga-comentario-row-index').val();
@@ -1195,7 +1195,8 @@ class SGA_Panel_Views_Part1 {
                             _ajax_nonce: nonce,
                             post_id: post_id,
                             row_index: row_index,
-                            comment: comment
+                            comment: comment,
+                            status: newStatus // Enviar el nuevo estado
                         };
                     } else if (actionType === 'editar') {
                         ajaxAction = 'sga_edit_llamado_comment';
@@ -1205,7 +1206,8 @@ class SGA_Panel_Views_Part1 {
                             student_id: post_id,
                             row_index: row_index,
                             log_id: log_id,
-                            comment: comment
+                            comment: comment,
+                            status: newStatus // Enviar el nuevo estado
                         };
                     } else {
                         alert('Acción de comentario desconocida.');

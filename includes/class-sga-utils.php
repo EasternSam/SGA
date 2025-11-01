@@ -94,9 +94,10 @@ class SGA_Utils {
      * Obtiene el siguiente agente en la rotación basado en una lista de IDs proporcionada.
      * Utilizado para el reparto manual.
      * @param array $agent_ids Lista de IDs de agentes seleccionados para la rotación.
+     * @param string $transient_key_suffix Un sufijo único para el transient de esta rotación.
      * @return int|null ID del agente o null si la lista está vacía.
      */
-    public static function _get_next_agent_from_list($agent_ids) {
+    public static function _get_next_agent_from_list($agent_ids, $transient_key_suffix = 'default') {
         if (empty($agent_ids)) {
             return null;
         }
@@ -108,7 +109,7 @@ class SGA_Utils {
         }
         
         // Usar un transient único para esta acción de reparto manual
-        $transient_key = 'sga_last_distributed_agent_index';
+        $transient_key = 'sga_last_distributed_agent_index_' . $transient_key_suffix;
         $agent_count = count($valid_agent_ids);
         
         $last_assigned_index = get_transient($transient_key);
@@ -572,7 +573,7 @@ class SGA_Utils {
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
-                            <?php else: ?>
+                                    <?php else: ?>
                                 <tr><td colspan="4">No hay cursos inscritos.</td></tr>
                             <?php endif; ?>
                         </tbody>
