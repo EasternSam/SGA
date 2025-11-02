@@ -247,9 +247,13 @@ class SGA_Ajax {
             wp_send_json_error(['message' => 'No tienes permisos.'], 403);
         }
         
-        $count = SGA_Utils::_get_pending_inscriptions_count();
+        // *** INICIO MODIFICACIÓN: Llamar a la función plural ***
+        $counts = SGA_Utils::_get_pending_inscriptions_counts();
+        // *** FIN MODIFICACIÓN ***
 
-        wp_send_json_success(['count' => $count]);
+        // *** INICIO MODIFICACIÓN: Devolver el array completo (incluye 'total') ***
+        wp_send_json_success($counts);
+        // *** FIN MODIFICACIÓN ***
     }
 
     /**
@@ -1003,4 +1007,3 @@ class SGA_Ajax {
     // public function ajax_update_call_status() { ... }
     // --- FIN: MODIFICACIÓN SOLICITADA ---
 }
-

@@ -34,11 +34,13 @@ class SGA_Panel_Views_Part1 {
         $total_cursos_obj = wp_count_posts('curso');
         $total_estudiantes = isset($total_estudiantes_obj->publish) ? $total_estudiantes_obj->publish : 0;
         $total_cursos = isset($total_cursos_obj->publish) ? $total_cursos_obj->publish : 0;
-        // *** INICIO OPTIMIZACIÓN ***
-        // Estas funciones ahora usan transients y SQL optimizado (de class-sga-utils.php)
-        $inscripciones_pendientes = SGA_Utils::_get_pending_inscriptions_count();
-        $llamadas_pendientes = SGA_Utils::_get_pending_calls_count();
-        // *** FIN OPTIMIZACIÓN ***
+        
+        // --- INICIO MODIFICACIÓN CONTADORES ---
+        // Usar las nuevas funciones plurales de SGA_Utils
+        $pending_counts = SGA_Utils::_get_pending_inscriptions_counts();
+        $call_counts = SGA_Utils::_get_pending_calls_counts();
+        // --- FIN MODIFICACIÓN CONTADORES ---
+
         $current_user = wp_get_current_user();
         ?>
         <div class="panel-header-info">
@@ -51,12 +53,65 @@ class SGA_Panel_Views_Part1 {
                 <div class="date-display" id="dynamic-date"></div>
                 <div class="time-display" id="dynamic-time"></div>
             </div>
+
+            <!-- [NUEVO] Botón para Ocultar/Mostrar Contadores -->
+            <div class="sga-column-toggle-wrapper">
+                <button id="sga-stat-toggle-btn" class="button button-secondary">
+                    <svg style="width: 16px; height: 16px; margin-right: 5px; vertical-align: text-bottom;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg>
+                    Contadores
+                </button>
+                <div id="sga-stat-toggle-dropdown" class="sga-column-toggle-dropdown" style="display: none;">
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="insc-general" checked> Inscrip. (General)</label>
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="insc-infotep" checked> Inscrip. (Infotep)</label>
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="llamadas-general" checked> Llamadas (General)</label>
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="llamadas-infotep" checked> Llamadas (Infotep)</label>
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="estudiantes" checked> Estudiantes Totales</label>
+                    <label><input type="checkbox" class="sga-stat-toggle" data-stat-name="cursos" checked> Cursos Activos</label>
+                </div>
+            </div>
         </div>
 
         <h1 class="panel-title">Panel Principal</h1>
 
         <div class="panel-stats-grid">
-            <div class="stat-card">
+            <!-- --- INICIO MODIFICACIÓN CONTADORES (HTML) --- -->
+            <div class="stat-card" data-stat-name="insc-general">
+                <div class="stat-icon pending">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $pending_counts['general']; ?></span>
+                    <span class="stat-label">Inscrip. (General)</span>
+                </div>
+            </div>
+             <div class="stat-card" data-stat-name="insc-infotep">
+                <div class="stat-icon pending">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $pending_counts['infotep']; ?></span>
+                    <span class="stat-label">Inscrip. (Infotep)</span>
+                </div>
+            </div>
+            <div class="stat-card" data-stat-name="llamadas-general">
+                <div class="stat-icon calls">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $call_counts['general']; ?></span>
+                    <span class="stat-label">Llamadas (General)</span>
+                </div>
+            </div>
+            <div class="stat-card" data-stat-name="llamadas-infotep">
+                <div class="stat-icon calls">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-number"><?php echo $call_counts['infotep']; ?></span>
+                    <span class="stat-label">Llamadas (Infotep)</span>
+                </div>
+            </div>
+             <div class="stat-card" data-stat-name="estudiantes">
                 <div class="stat-icon students">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                 </div>
@@ -65,25 +120,7 @@ class SGA_Panel_Views_Part1 {
                     <span class="stat-label">Estudiantes Totales</span>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon pending">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-number"><?php echo $inscripciones_pendientes; ?></span>
-                    <span class="stat-label">Inscripciones Pendientes</span>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon calls">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-number"><?php echo $llamadas_pendientes; ?></span>
-                    <span class="stat-label">Pendientes a Llamar</span>
-                </div>
-            </div>
-            <div class="stat-card">
+            <div class="stat-card" data-stat-name="cursos">
                 <div class="stat-icon courses">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                 </div>
@@ -92,6 +129,7 @@ class SGA_Panel_Views_Part1 {
                     <span class="stat-label">Cursos Activos</span>
                 </div>
             </div>
+             <!-- --- FIN MODIFICACIÓN CONTADORES (HTML) --- -->
         </div>
 
         <div class="panel-grid main-menu">
@@ -299,7 +337,16 @@ class SGA_Panel_Views_Part1 {
             .panel-view.active { display: block; }
             
             /* Header */
-            .panel-header-info { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--sga-gray); }
+            .panel-header-info { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: flex-start; /* Modificado */
+                flex-wrap: wrap; 
+                gap: 20px; 
+                margin-bottom: 20px; 
+                padding-bottom: 20px; 
+                border-bottom: 1px solid var(--sga-gray); 
+            }
             .user-welcome p { margin: 0; color: var(--sga-text-light); font-size: 14px; }
             .user-welcome h3 { margin: 0; color: var(--sga-primary); font-size: 20px; font-weight: 600; }
             .datetime-widget { text-align: right; }
@@ -747,6 +794,66 @@ class SGA_Panel_Views_Part1 {
                  outline: none;
             }
 
+            /* --- [NUEVO] ESTILOS PARA EL SELECTOR DE COLUMNAS --- */
+            .sga-column-toggle-wrapper {
+                position: relative;
+                margin-left: auto; /* Moverlo al final de la barra de filtros */
+            }
+            /* [MODIFICADO] Alinear el del header a la derecha */
+            .panel-header-info .sga-column-toggle-wrapper {
+                margin-left: 0;
+            }
+            .sga-column-toggle-dropdown {
+                position: absolute;
+                top: calc(100% + 5px);
+                right: 0;
+                background-color: var(--sga-white);
+                border: 1px solid var(--sga-gray);
+                border-radius: 8px;
+                box-shadow: var(--shadow-lg);
+                padding: 10px;
+                z-index: 100;
+                min-width: 180px;
+            }
+            .sga-column-toggle-dropdown label {
+                display: block;
+                padding: 5px 10px;
+                font-size: 13px;
+                color: var(--sga-text);
+                cursor: pointer;
+                border-radius: 4px;
+                transition: background-color 0.2s;
+            }
+            .sga-column-toggle-dropdown label:hover {
+                background-color: #f1f5f9;
+            }
+            .sga-column-toggle-dropdown label input {
+                margin-right: 8px;
+            }
+
+            /* Reglas para Ocultar Columnas */
+            #gestion-academica-app-container.sga-hide-col-nombre [data-col-name="nombre"],
+            #gestion-academica-app-container.sga-hide-col-agente [data-col-name="agente"],
+            #gestion-academica-app-container.sga-hide-col-cedula [data-col-name="cedula"],
+            #gestion-academica-app-container.sga-hide-col-email [data-col-name="email"],
+            #gestion-academica-app-container.sga-hide-col-telefono [data-col-name="telefono"],
+            #gestion-academica-app-container.sga-hide-col-curso [data-col-name="curso"],
+            #gestion-academica-app-container.sga-hide-col-horario [data-col-name="horario"],
+            #gestion-academica-app-container.sga-hide-col-estado [data-col-name="estado"],
+            #gestion-academica-app-container.sga-hide-col-estado-llamada [data-col-name="estado-llamada"] {
+                display: none;
+            }
+
+            /* [NUEVO] Reglas para Ocultar Contadores */
+            #gestion-academica-app-container.sga-hide-stat-insc-general [data-stat-name="insc-general"],
+            #gestion-academica-app-container.sga-hide-stat-insc-infotep [data-stat-name="insc-infotep"],
+            #gestion-academica-app-container.sga-hide-stat-llamadas-general [data-stat-name="llamadas-general"],
+            #gestion-academica-app-container.sga-hide-stat-llamadas-infotep [data-stat-name="llamadas-infotep"],
+            #gestion-academica-app-container.sga-hide-stat-estudiantes [data-stat-name="estudiantes"],
+            #gestion-academica-app-container.sga-hide-stat-cursos [data-stat-name="cursos"] {
+                display: none;
+            }
+
 
         </style>
         <?php
@@ -815,6 +922,7 @@ class SGA_Panel_Views_Part1 {
                 var inscriptionsChart;
                 var viewsToRefresh = {};
                 var sgaAgents = <?php echo json_encode($agents_for_js); ?>;
+                var container = $("#gestion-academica-app-container"); // Definir el contenedor principal aquí
 
                 /**
                  * [NUEVA] Función Debounce para retrasar la ejecución de AJAX al teclear.
@@ -1464,7 +1572,6 @@ class SGA_Panel_Views_Part1 {
                 }
                 
                 // --- [MODIFICADO] Delegación de eventos para filtros ---
-                var container = $("#gestion-academica-app-container");
                 
                 container.on("keyup change", "#buscador-cursos, #filtro-escuela-cursos, #filtro-visibilidad-cursos", filterCourses);
                 container.on("keyup change", "#buscador-matriculados, #filtro-curso-matriculados", function() { filterTable('#tabla-matriculados', '#buscador-matriculados', '#filtro-curso-matriculados'); });
@@ -1971,6 +2078,52 @@ class SGA_Panel_Views_Part1 {
                     }
                 });
                 // *** FIN - [NUEVO] Paginación de Estudiantes (Delegada) ***
+
+                // --- [NUEVO] Lógica del Selector de Columnas ---
+                
+                // 1. Mostrar/Ocultar el dropdown
+                container.on("click", "#sga-column-toggle-btn", function(e) {
+                    e.stopPropagation(); // Evitar que el click se propague al body
+                    $("#sga-column-toggle-dropdown").fadeToggle(150);
+                });
+
+                // 2. No cerrar el dropdown si se hace clic dentro de él
+                container.on("click", "#sga-column-toggle-dropdown", function(e) {
+                    e.stopPropagation();
+                });
+
+                // 3. Ocultar los dropdowns si se hace clic fuera
+                $(document).on("click", function() {
+                    $("#sga-column-toggle-dropdown").fadeOut(150);
+                    $("#sga-stat-toggle-dropdown").fadeOut(150); // Añadido
+                });
+
+                // 4. Aplicar/Quitar clases al cambiar un checkbox
+                container.on("change", ".sga-col-toggle", function() {
+                    var colName = $(this).data('col-name');
+                    // Alternar la clase en el contenedor principal
+                    // Si no está chequeado (this.checked es false), AÑADIR la clase .sga-hide-col-
+                    container.toggleClass('sga-hide-col-' + colName, !this.checked);
+                });
+
+                // --- [NUEVO] Lógica del Selector de Contadores ---
+            
+                // 1. Mostrar/Ocultar el dropdown de contadores
+                container.on("click", "#sga-stat-toggle-btn", function(e) {
+                    e.stopPropagation(); // Evitar que el click se propague al body
+                    $("#sga-stat-toggle-dropdown").fadeToggle(150);
+                });
+
+                // 2. No cerrar el dropdown si se hace clic dentro de él
+                container.on("click", "#sga-stat-toggle-dropdown", function(e) {
+                    e.stopPropagation();
+                });
+
+                // 3. Aplicar/Quitar clases al cambiar un checkbox de contador
+                container.on("change", ".sga-stat-toggle", function() {
+                    var statName = $(this).data('stat-name');
+                    container.toggleClass('sga-hide-stat-' + statName, !this.checked);
+                });
 
             });
         </script>

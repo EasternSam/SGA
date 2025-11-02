@@ -255,6 +255,8 @@ class SGA_Utils {
         // Al aprobar, el conteo de pendientes cambia. Borramos el transient.
         delete_transient('sga_pending_insc_count');
         delete_transient('sga_pending_calls_count');
+        delete_transient('sga_pending_insc_counts_v2'); // Borrar el nuevo transient plural
+        delete_transient('sga_pending_calls_counts_v2'); // Borrar el nuevo transient plural
         // *** FIN OPTIMIZACIÓN ***
 
 
@@ -521,6 +523,31 @@ class SGA_Utils {
         $print_nonce = wp_create_nonce('sga_render_print_profile_' . $student_id);
         $print_url = "#"; // Se maneja con JS
 
+        // --- INICIO LÓGICA DE MENOR DE EDAD (PARA VISTA DE PANEL) ---
+        $info_menor_html = '';
+        if (strpos($cedula, '-') !== false) {
+            // Es un menor, la cédula es del tutor
+            list($cedula_tutor, $id_menor) = explode('-', $cedula, 2);
+            
+            // Buscar al tutor por su cédula
+            $tutor_query = get_posts(array(
+                'post_type' => 'estudiante',
+                'meta_key' => 'cedula',
+                'meta_value' => $cedula_tutor, // Busca la cédula exacta del tutor
+                'posts_per_page' => 1
+            ));
+            
+            $info_menor_html = '<span style="color: #ef4444; font-weight: bold; font-size: 12px; display: block; margin-top: 5px;">* Es menor de edad.</span>';
+
+            if ($tutor_query) {
+                $nombre_tutor = $tutor_query[0]->post_title;
+                $info_menor_html .= '<span style="color: #64748b; font-weight: bold; font-size: 12px; display: block; margin-top: 5px;">* Tutor registrado: ' . esc_html($nombre_tutor) . ' (Cédula: ' . esc_html($cedula_tutor) . ')</span>';
+            } else {
+                 $info_menor_html .= '<span style="color: #64748b; font-weight: bold; font-size: 12px; display: block; margin-top: 5px;">* Cédula de tutor: ' . esc_html($cedula_tutor) . ' (No registrado como estudiante).</span>';
+            }
+        }
+        // --- FIN LÓGICA DE MENOR DE EDAD ---
+
         ob_start();
         ?>
         <a href="#" id="sga-profile-back-btn" class="back-link">&larr; Volver a Lista de Estudiantes</a>
@@ -535,6 +562,7 @@ class SGA_Utils {
                 <div class="sga-profile-form-group">
                     <label for="sga-profile-cedula">Cédula / Identificación</label>
                     <input type="text" id="sga-profile-cedula" value="<?php echo esc_attr($cedula); ?>">
+                    <?php echo $info_menor_html; // Mostrar información del tutor/menor ?>
                 </div>
                 <div class="sga-profile-form-group">
                     <label for="sga-profile-email">Correo Electrónico</label>
@@ -598,82 +626,136 @@ class SGA_Utils {
     }
     
     /**
-     * Obtiene el número de inscripciones pendientes.
-     * @return int Cantidad de inscripciones pendientes.
+     * [NUEVA FUNCIÓN] Obtiene conteos de inscripciones pendientes divididos por categoría.
+     * @return array ['total' => int, 'general' => int, 'infotep' => int]
      */
-    public static function _get_pending_inscriptions_count() {
-        // *** INICIO OPTIMIZACIÓN ***
-        // Usamos un "transient" (caché de WP) para guardar el conteo por 5 minutos
-        $transient_key = 'sga_pending_insc_count';
-        $cached_count = get_transient($transient_key);
+    public static function _get_pending_inscriptions_counts() {
+        $transient_key = 'sga_pending_insc_counts_v2';
+        $cached_counts = get_transient($transient_key);
 
-        if (false !== $cached_count) {
-            return $cached_count; // Devuelve el valor cacheado si existe
+        if (false !== $cached_counts && is_array($cached_counts)) {
+            return $cached_counts;
         }
+
+        $counts = [
+            'total' => 0,
+            'general' => 0,
+            'infotep' => 0,
+        ];
         
-        $count = 0;
-        // Usamos la nueva función rápida para obtener solo los IDs de estudiantes con inscripciones pendientes
         $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
         
         if (empty($estudiantes_ids)) {
-            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
-            return 0;
+            set_transient($transient_key, $counts, 5 * MINUTE_IN_SECONDS);
+            return $counts;
         }
 
-        // Pre-calentar caché de metadatos
         update_postmeta_cache($estudiantes_ids);
 
+        // Pre-cargar todos los cursos y sus categorías
+        $course_category_map = [];
+        $infotep_slug = 'cursos-infotep';
+        $all_cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'post_status' => array('publish', 'private'), 'fields' => 'all_with_meta'));
+        
+        if ($all_cursos) {
+            $course_ids_to_check = wp_list_pluck($all_cursos, 'ID');
+            $terms_by_course_id = [];
+            if (!empty($course_ids_to_check)) {
+                $all_terms = wp_get_object_terms($course_ids_to_check, 'category', ['fields' => 'all_with_object_id']);
+                foreach ($all_terms as $term) {
+                    if (!isset($terms_by_course_id[$term->object_id])) $terms_by_course_id[$term->object_id] = [];
+                    $terms_by_course_id[$term->object_id][] = $term->slug;
+                }
+            }
+            foreach ($all_cursos as $course_post) {
+                $categories = $terms_by_course_id[$course_post->ID] ?? [];
+                $course_category_map[$course_post->post_title] = in_array($infotep_slug, $categories) ? 'infotep' : 'general';
+            }
+        }
+        
         if (function_exists('get_field')) {
-            // Este bucle ahora es mucho más rápido y rápido (lee de caché)
             foreach ($estudiantes_ids as $estudiante_id) {
-                $cursos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
                 if ($cursos) {
                     foreach ($cursos as $curso) {
                         if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
-                            $count++;
+                            $course_name = $curso['nombre_curso'];
+                            $type = $course_category_map[$course_name] ?? 'general';
+                            
+                            $counts['total']++;
+                            $counts[$type]++;
                         }
                     }
                 }
             }
         }
-        // *** FIN OPTIMIZACIÓN ***
         
-        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
-        return $count;
+        set_transient($transient_key, $counts, 5 * MINUTE_IN_SECONDS);
+        return $counts;
     }
 
     /**
-     * Obtiene el número de inscripciones pendientes de llamar.
-     * @return int Cantidad de inscripciones pendientes de llamar.
+     * Obtiene el número de inscripciones pendientes (Total).
+     * @return int Cantidad de inscripciones pendientes.
      */
-    public static function _get_pending_calls_count() {
-        // *** INICIO OPTIMIZACIÓN ***
-        // Usamos un "transient" (caché de WP) para guardar el conteo por 5 minutos
-        $transient_key = 'sga_pending_calls_count';
-        $cached_count = get_transient($transient_key);
+    public static function _get_pending_inscriptions_count() {
+        // Esta función ahora llama a la nueva función plural y devuelve solo el total
+        $counts = self::_get_pending_inscriptions_counts();
+        return $counts['total'];
+    }
 
-        if (false !== $cached_count) {
-            return $cached_count;
+    /**
+     * [NUEVA FUNCIÓN] Obtiene conteos de llamadas pendientes divididos por categoría.
+     * @return array ['total' => int, 'general' => int, 'infotep' => int]
+     */
+    public static function _get_pending_calls_counts() {
+        $transient_key = 'sga_pending_calls_counts_v2';
+        $cached_counts = get_transient($transient_key);
+
+        if (false !== $cached_counts && is_array($cached_counts)) {
+            return $cached_counts;
         }
 
-        $count = 0;
-        // Obtenemos solo IDs de estudiantes con estado 'Inscrito'
+        $counts = [
+            'total' => 0,
+            'general' => 0,
+            'infotep' => 0,
+        ];
+
         $estudiantes_ids = self::_get_student_ids_by_enrollment_status('Inscrito');
 
         if (empty($estudiantes_ids)) {
-            set_transient($transient_key, 0, 5 * MINUTE_IN_SECONDS); // Cachea el resultado 0
-            return 0;
+            set_transient($transient_key, $counts, 5 * MINUTE_IN_SECONDS);
+            return $counts;
         }
         
-        // Pre-calentar caché de metadatos
         update_postmeta_cache($estudiantes_ids);
-        // *** FIN OPTIMIZACIÓN ***
 
-        if ($estudiantes_ids && function_exists('get_field')) {
-            // Este bucle ahora es mucho más rápido y rápido (lee de caché)
+        // Pre-cargar todos los cursos y sus categorías (lógica duplicada de la función anterior, se podría optimizar)
+        $course_category_map = [];
+        $infotep_slug = 'cursos-infotep';
+        $all_cursos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'post_status' => array('publish', 'private'), 'fields' => 'all_with_meta'));
+        
+        if ($all_cursos) {
+            $course_ids_to_check = wp_list_pluck($all_cursos, 'ID');
+            $terms_by_course_id = [];
+            if (!empty($course_ids_to_check)) {
+                $all_terms = wp_get_object_terms($course_ids_to_check, 'category', ['fields' => 'all_with_object_id']);
+                foreach ($all_terms as $term) {
+                    if (!isset($terms_by_course_id[$term->object_id])) $terms_by_course_id[$term->object_id] = [];
+                    $terms_by_course_id[$term->object_id][] = $term->slug;
+                }
+            }
+            foreach ($all_cursos as $course_post) {
+                $categories = $terms_by_course_id[$course_post->ID] ?? [];
+                $course_category_map[$course_post->post_title] = in_array($infotep_slug, $categories) ? 'infotep' : 'general';
+            }
+        }
+
+        if (function_exists('get_field')) {
             foreach ($estudiantes_ids as $estudiante_id) {
-                $cursos = get_field('cursos_inscritos', $estudiante_id); // Rápido (desde caché)
-                $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true); // Rápido (desde caché)
+                $cursos = get_field('cursos_inscritos', $estudiante_id);
+                $call_statuses = get_post_meta($estudiante_id, '_sga_call_statuses', true);
                 if (!is_array($call_statuses)) {
                     $call_statuses = [];
                 }
@@ -683,7 +765,12 @@ class SGA_Utils {
                         if (isset($curso['estado']) && $curso['estado'] === 'Inscrito') {
                             $current_call_status = $call_statuses[$index] ?? 'pendiente';
                             if ($current_call_status === 'pendiente') {
-                                $count++;
+                                // Es una llamada pendiente, ahora determinar tipo
+                                $course_name = $curso['nombre_curso'];
+                                $type = $course_category_map[$course_name] ?? 'general';
+                                
+                                $counts['total']++;
+                                $counts[$type]++;
                             }
                         }
                     }
@@ -691,8 +778,18 @@ class SGA_Utils {
             }
         }
         
-        set_transient($transient_key, $count, 5 * MINUTE_IN_SECONDS); // Guarda el resultado en caché por 5 minutos
-        return $count;
+        set_transient($transient_key, $counts, 5 * MINUTE_IN_SECONDS);
+        return $counts;
+    }
+
+    /**
+     * Obtiene el número de inscripciones pendientes de llamar (Total).
+     * @return int Cantidad de inscripciones pendientes de llamar.
+     */
+    public static function _get_pending_calls_count() {
+        // Esta función ahora llama a la nueva función plural y devuelve solo el total
+        $counts = self::_get_pending_calls_counts();
+        return $counts['total'];
     }
     
     /**
@@ -870,6 +967,32 @@ class SGA_Utils {
         
         $report_title = 'Expediente Estudiantil: ' . $nombre_completo;
 
+        // --- INICIO LÓGICA DE MENOR DE EDAD (PARA VISTA DE IMPRESIÓN) ---
+        $info_menor_html = '';
+        if (strpos($cedula, '-') !== false) {
+            // Es un menor, la cédula es del tutor
+            list($cedula_tutor, $id_menor) = explode('-', $cedula, 2);
+            
+            // Buscar al tutor por su cédula
+            $tutor_query = get_posts(array(
+                'post_type' => 'estudiante',
+                'meta_key' => 'cedula',
+                'meta_value' => $cedula_tutor, // Busca la cédula exacta del tutor
+                'posts_per_page' => 1
+            ));
+            
+            // Para el PDF, usamos un estilo más simple
+            $info_menor_html = '<div style="font-size: 10pt; color: #ef4444; font-weight: bold; margin-top: 5px;">* Es menor de edad.</div>';
+
+            if ($tutor_query) {
+                $nombre_tutor = $tutor_query[0]->post_title;
+                $info_menor_html .= '<div style="font-size: 10pt; color: #555; font-weight: bold; margin-top: 5px;">* Tutor registrado: ' . esc_html($nombre_tutor) . ' (Cédula: ' . esc_html($cedula_tutor) . ')</div>';
+            } else {
+                 $info_menor_html .= '<div style="font-size: 10pt; color: #555; font-weight: bold; margin-top: 5px;">* Cédula de tutor: ' . esc_html($cedula_tutor) . ' (No registrado como estudiante).</div>';
+            }
+        }
+        // --- FIN LÓGICA DE MENOR DE EDAD ---
+
         ob_start();
         ?>
         <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
@@ -969,7 +1092,13 @@ class SGA_Utils {
                 <h2 class="section-title">Datos Personales y de Contacto</h2>
                 <div class="data-grid">
                     <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
-                    <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
+                    <div class="data-row">
+                        <div class="data-label">Cédula / ID:</div>
+                        <div class="data-value">
+                            <?php echo esc_html($cedula); ?>
+                            <?php echo $info_menor_html; // Mostrar información del tutor/menor ?>
+                        </div>
+                    </div>
                     <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
                     <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
                     <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
@@ -1488,3 +1617,4 @@ class SGA_Utils {
     }
     // *** FIN - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
 }
+

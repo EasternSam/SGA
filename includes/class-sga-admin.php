@@ -77,8 +77,12 @@ class SGA_Admin {
             );
         } else {
             // --- Menú para Administradores ---
-            $pending_count = SGA_Utils::_get_pending_inscriptions_count();
-            $notification_bubble = $pending_count > 0 ? ' <span class="awaiting-mod">' . $pending_count . '</span>' : '';
+            
+            // *** INICIO MODIFICACIÓN: Obtener conteos divididos y usar el total ***
+            $pending_counts = SGA_Utils::_get_pending_inscriptions_counts();
+            $total_pending = $pending_counts['total']; // Usar el total para la burbuja
+            $notification_bubble = $total_pending > 0 ? ' <span class="awaiting-mod">' . $total_pending . '</span>' : '';
+            // *** FIN MODIFICACIÓN ***
 
             add_menu_page(
                 'Gestión Académica',
@@ -283,7 +287,9 @@ class SGA_Admin {
                     security: '<?php echo wp_create_nonce("sga_pending_nonce"); ?>'
                 }).done(function(response) {
                     if (response.success) {
-                        var count = parseInt(response.data.count, 10);
+                        // *** INICIO MODIFICACIÓN: Esperar 'total' en lugar de 'count' ***
+                        var count = parseInt(response.data.total, 10);
+                        // *** FIN MODIFICACIÓN ***
                         var bubble = sgaMenuLink.find('.awaiting-mod');
 
                         if (count > 0) {

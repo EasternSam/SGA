@@ -77,6 +77,27 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                 // --- FIN MODIFICACIÓN ---
                 ?>
             </select>
+
+            <!-- [NUEVO] Botón para Ocultar/Mostrar Columnas -->
+            <div class="sga-column-toggle-wrapper">
+                <button id="sga-column-toggle-btn" class="button button-secondary">
+                    <svg style="width: 16px; height: 16px; margin-right: 5px; vertical-align: text-bottom;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                    Columnas
+                </button>
+                <div id="sga-column-toggle-dropdown" class="sga-column-toggle-dropdown" style="display: none;">
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="nombre" checked> Nombre</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="agente" checked> Agente Asignado</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="cedula" checked> Cédula</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="email" checked> Email</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="telefono" checked> Teléfono</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="curso" checked> Curso</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="horario" checked> Horario</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="estado" checked> Estado</label>
+                    <label><input type="checkbox" class="sga-col-toggle" data-col-name="estado-llamada" checked> Estado de Llamada</label>
+                    <!-- Acción y Checkbox son mandatorios -->
+                </div>
+            </div>
+
             <?php if ($this->sga_user_has_role(['administrator', 'gestor_academico'])): ?>
             <a href="<?php echo esc_url(admin_url('admin.php?page=sga_dashboard')); ?>" class="button button-secondary" target="_blank">Gestión Avanzada</a>
             <?php endif; ?>
@@ -109,8 +130,15 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             <?php if ($can_approve): ?>
                             <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-nuevas"></th>
                             <?php endif; ?>
-                            <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                            <th>Estado de Llamada</th>
+                            <th data-col-name="nombre">Nombre</th>
+                            <th data-col-name="agente">Agente Asignado</th>
+                            <th data-col-name="cedula">Cédula</th>
+                            <th data-col-name="email">Email</th>
+                            <th data-col-name="telefono">Teléfono</th>
+                            <th data-col-name="curso">Curso</th>
+                            <th data-col-name="horario">Horario</th>
+                            <th data-col-name="estado">Estado</th>
+                            <th data-col-name="estado-llamada">Estado de Llamada</th>
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -137,8 +165,15 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                             <?php if ($can_approve): ?>
                             <th class="ga-check-column"><input type="checkbox" id="select-all-pendientes-seguimiento"></th>
                             <?php endif; ?>
-                            <th>Nombre</th><th>Agente Asignado</th><th>Cédula</th><th>Email</th><th>Teléfono</th><th>Curso</th><th>Horario</th><th>Estado</th>
-                            <th>Estado de Llamada</th>
+                            <th data-col-name="nombre">Nombre</th>
+                            <th data-col-name="agente">Agente Asignado</th>
+                            <th data-col-name="cedula">Cédula</th>
+                            <th data-col-name="email">Email</th>
+                            <th data-col-name="telefono">Teléfono</th>
+                            <th data-col-name="curso">Curso</th>
+                            <th data-col-name="horario">Horario</th>
+                            <th data-col-name="estado">Estado</th>
+                            <th data-col-name="estado-llamada">Estado de Llamada</th>
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -282,22 +317,54 @@ class SGA_Panel_Views_Part2 extends SGA_Panel_Views_Part1 {
                      $call_log_post_id = SGA_Utils::_get_last_call_log_post_id($estudiante->ID, $index);
                 }
                 
+                // --- INICIO LÓGICA DE MENOR DE EDAD (PARA VISTA DE TABLA) ---
+                $cedula = get_field('cedula', $estudiante->ID);
+                $info_menor_html = '';
+                if (strpos($cedula, '-') !== false) {
+                    // Es un menor, la cédula es del tutor
+                    list($cedula_tutor, $id_menor) = explode('-', $cedula, 2);
+                    
+                    // Buscar al tutor por su cédula
+                    $tutor_query = get_posts(array(
+                        'post_type' => 'estudiante',
+                        'meta_key' => 'cedula',
+                        'meta_value' => $cedula_tutor, // Busca la cédula exacta del tutor
+                        'posts_per_page' => 1,
+                        'post_status' => 'publish',
+                        'fields' => 'ids' // Optimizar
+                    ));
+                    
+                    $info_menor_html = '<br><span style="color: #ef4444; font-weight: bold; font-size: 11px;">* Es menor de edad</span>';
+
+                    if ($tutor_query) {
+                        $nombre_tutor = get_the_title($tutor_query[0]); // Obtener título del ID
+                        $info_menor_html .= '<br><span style="color: #64748b; font-size: 11px;">* Tutor: ' . esc_html($nombre_tutor) . '</span>';
+                    } else {
+                         $info_menor_html .= '<br><span style="color: #64748b; font-size: 11px;">* Tutor ('.esc_html($cedula_tutor).') no reg.</span>';
+                    }
+                }
+                // --- FIN LÓGICA DE MENOR DE EDAD ---
+
                 ?>
                 <tr data-curso="<?php echo esc_attr($curso['nombre_curso']); ?>" data-call-status="<?php echo esc_attr($current_call_status); ?>" data-agent-id="<?php echo esc_attr($agent_id); ?>" <?php echo $row_style; ?>>
                     <?php if ($can_approve): ?>
                     <td class="ga-check-column"><input type="checkbox" class="bulk-checkbox" data-postid="<?php echo $estudiante->ID; ?>" data-rowindex="<?php echo $index; ?>" data-cedula="<?php echo esc_attr(get_field('cedula', $estudiante->ID)); ?>" data-nombre="<?php echo esc_attr($estudiante->post_title); ?>"></td>
                     <?php endif; ?>
-                    <td><?php echo esc_html($estudiante->post_title); ?></td>
-                    <td><strong><?php echo esc_html($agent_name); ?></strong></td>
-                    <td><?php echo esc_html(get_field('cedula', $estudiante->ID)); ?></td>
-                    <td><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
-                    <td><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
-                    <td><?php echo esc_html($curso['nombre_curso']); ?></td>
-                    <td><?php echo esc_html($curso['horario']); ?></td>
-                    <td><span class="estado-inscrito">Inscrito</span></td>
+                    <td data-col-name="nombre"><?php echo esc_html($estudiante->post_title); ?></td>
+                    <td data-col-name="agente"><strong><?php echo esc_html($agent_name); ?></strong></td>
+                    
+                    <!-- INICIO: CÉDULA CON INFO DE MENOR -->
+                    <td data-col-name="cedula"><?php echo esc_html($cedula); ?><?php echo $info_menor_html; // Mostrar info de menor ?></td>
+                    <!-- FIN: CÉDULA CON INFO DE MENOR -->
+                    
+                    <td data-col-name="email"><?php echo esc_html(get_field('email', $estudiante->ID)); ?></td>
+                    <td data-col-name="telefono"><?php echo esc_html(get_field('telefono', $estudiante->ID)); ?></td>
+                    <td data-col-name="curso"><?php echo esc_html($curso['nombre_curso']); ?></td>
+                    <td data-col-name="horario"><?php echo esc_html($curso['horario']); ?></td>
+                    <td data-col-name="estado"><span class="estado-inscrito">Inscrito</span></td>
                     
                     <!-- --- INICIO: MODIFICACIÓN SOLICITADA (Renderizar Píldora) --- -->
-                    <td>
+                    <td data-col-name="estado-llamada">
                         <?php 
                         $status_details = $status_pill_map[$current_call_status] ?? ['text' => ucfirst($current_call_status), 'class' => 'ga-pill-llamada-pendiente'];
                         ?>
