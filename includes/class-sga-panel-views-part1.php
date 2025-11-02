@@ -349,7 +349,10 @@ class SGA_Panel_Views_Part1 {
             }
             .user-welcome p { margin: 0; color: var(--sga-text-light); font-size: 14px; }
             .user-welcome h3 { margin: 0; color: var(--sga-primary); font-size: 20px; font-weight: 600; }
-            .datetime-widget { text-align: right; }
+            .datetime-widget { 
+                /* CAMBIO: Se cambió de 'right' a 'center' */
+                text-align: center; 
+            }
             .date-display { font-size: 14px; font-weight: 500; color: var(--sga-text); }
             .time-display { font-size: 12px; color: var(--sga-text-light); }
             .panel-title { font-size: 24px; margin: 25px 0; color: var(--sga-text); font-weight: 700; letter-spacing: -0.5px; }
@@ -2130,4 +2133,3 @@ class SGA_Panel_Views_Part1 {
         <?php
     }
 }
-
