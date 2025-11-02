@@ -76,15 +76,33 @@ class SGA_Integration {
                 'estado' => 'Inscrito'
             ), $post_id);
 
-            // --- Asignación automática a un agente ---
+            // --- Lógica de Asignación a Agente Específico (Infotep o General) ---
             $cursos = get_field('cursos_inscritos', $post_id);
             $new_row_index = count($cursos) - 1; // El índice del repeater recién añadido
             
-            $next_agent_id = SGA_Utils::_get_next_agent_for_assignment();
+            $next_agent_id = null;
+            $agent_role = 'agente'; // Rol por defecto
+
+            // 1. Determinar si el curso es de Infotep
+            $course_post = get_posts(['post_type' => 'curso', 'title' => $curso_inscrito, 'posts_per_page' => 1]);
+            $is_infotep_course = false;
+            
+            if ($course_post) {
+                $terms = wp_get_post_terms($course_post[0]->ID, 'category', ['fields' => 'slugs']);
+                if (!is_wp_error($terms) && in_array('cursos-infotep', $terms)) {
+                    $is_infotep_course = true;
+                    $agent_role = 'agente_infotep'; // Cambiar rol al rol exclusivo
+                }
+            }
+
+            // 2. Obtener el siguiente agente en rotación para el rol determinado
+            $next_agent_id = SGA_Utils::_get_next_agent_for_assignment($agent_role);
+
+            // 3. Asignar
             if ($next_agent_id) {
                 SGA_Utils::_assign_inscription_to_agent($post_id, $new_row_index, $next_agent_id);
                 $agent_info = get_userdata($next_agent_id);
-                $log_content_agent = "La inscripción de {$nombre_completo} para '{$curso_inscrito}' fue asignada automáticamente al agente: {$agent_info->display_name}.";
+                $log_content_agent = "La inscripción de {$nombre_completo} para '{$curso_inscrito}' (Rol: {$agent_role}) fue asignada automáticamente al agente: {$agent_info->display_name}.";
                 SGA_Utils::_log_activity('Inscripción Asignada', $log_content_agent, 0);
             }
         }

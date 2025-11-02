@@ -47,7 +47,7 @@ class SGA_Roles {
 
         // Capacidades base de WordPress (equivalentes a Editor) para que los roles funcionen globalmente
         $base_wp_caps = [
-            'read' => true,
+            'read' => true, // Esta es la clave para acceder al admin!
             // Permisos de lectura
             'read_private_pages' => true,
             'read_private_posts' => true,
@@ -89,10 +89,13 @@ class SGA_Roles {
         remove_role('gestor_academico');
         remove_role('agente');
         remove_role('gestor_de_cursos');
-        
+        remove_role('agente_infotep'); // <--- Aseguramos la eliminación para actualización
+
+        // <-- Creación de roles -->
         add_role('gestor_academico', __('Gestor Académico', 'sga-plugin'), $full_permissions);
         add_role('agente', __('Agente', 'sga-plugin'), $full_permissions);
         add_role('gestor_de_cursos', __('Gestor de Cursos', 'sga-plugin'), $full_permissions);
+        add_role('agente_infotep', __('Agente de Infotep', 'sga-plugin'), $full_permissions); // <--- NUEVO ROL AÑADIDO
 
         // --- 3. Asignar todas las capacidades al Administrador también ---
         $admin_role = get_role('administrator');
@@ -120,4 +123,3 @@ class SGA_Roles {
         wp_clear_scheduled_hook('sga_archive_and_reset_call_log');
     }
 }
-

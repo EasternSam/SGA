@@ -2,22 +2,18 @@
 
 if (!defined('ABSPATH')) exit;
 
+use Dompdf\Dompdf;
+use Dompdf\Options;
+
 /**
  * Clase SGA_Reports
  *
  * Gestiona la generación de todos los reportes en PDF, exportaciones a Excel/CSV
- * y maneja las acciones de admin-post relacionadas. Delega la construcción del PDF
- * y la obtención de datos a clases auxiliares.
+ * y maneja las acciones de admin-post relacionadas.
  */
 class SGA_Reports {
 
-    private $generator;
-    private $processor;
-
     public function __construct() {
-        $this->generator = new SGA_Report_Generator();
-        $this->processor = new SGA_Report_Data_Processor();
-        
         // Hooks para acciones de admin-post (formularios en el backend)
         add_action('admin_post_sga_generate_manual_report', array($this, 'handle_manual_report_generation'));
         add_action('admin_post_sga_print_payment_history', array($this, 'handle_print_payment_history'));
@@ -87,14 +83,13 @@ class SGA_Reports {
             'agente_filtro' => isset($_POST['agente_filtro']) ? sanitize_text_field($_POST['agente_filtro']) : ''
         ];
 
-        // FIX: If the current user is an Agent, force the filter to their ID.
+        // FIX: If the current user is an Agent (of any type), force the filter to their ID.
         $current_user = wp_get_current_user();
-        if (in_array('agente', (array) $current_user->roles)) {
+        if (in_array('agente', (array) $current_user->roles) || in_array('agente_infotep', (array) $current_user->roles)) {
             $args['agente_filtro'] = $current_user->ID;
         }
 
-        $report_data = $this->generator->generate_general_report($report_type, $args);
-
+        $report_data = $this->_generate_report($report_type, $args);
         if (!$report_data) {
             add_settings_error('sga_reports', 'sga_report_error', 'Error: La librería Dompdf es necesaria para generar reportes en PDF. Por favor, instálala y vuelve a intentarlo.', 'error');
             wp_redirect(admin_url('admin.php?page=sga-settings&tab=reportes'));
@@ -127,7 +122,7 @@ class SGA_Reports {
         if (!current_user_can('edit_posts')) {
             wp_die('No tienes permisos para realizar esta acción.');
         }
-        $report_data = $this->generator->generate_general_report('payment_history');
+        $report_data = $this->_generate_report('payment_history');
         if (!$report_data) {
             wp_die('Error: La librería Dompdf es necesaria para generar reportes en PDF. Por favor, instálala y vuelve a intentarlo.');
         }
@@ -138,7 +133,7 @@ class SGA_Reports {
         exit;
     }
 
-    // --- LÓGICA DE REPORTES PROGRAMADOS ---
+    // --- LÓGICA DE REPORTES Y EXPORTACIONES ---
     
     public function handle_scheduled_reports() {
         $options = get_option('sga_report_options');
@@ -146,38 +141,490 @@ class SGA_Reports {
         $day_of_month = date('j');
 
         if ($today == 1 && !empty($options['enable_weekly'])) { // Si es Lunes
-            $report_pendientes = $this->generator->generate_general_report('pendientes');
+            $report_pendientes = $this->_generate_report('pendientes');
             if($report_pendientes) SGA_Utils::_send_report_email($report_pendientes['pdf_data'], $report_pendientes['title'], $report_pendientes['filename']);
             
-            $report_matriculados = $this->generator->generate_general_report('matriculados');
+            $report_matriculados = $this->_generate_report('matriculados');
             if($report_matriculados) SGA_Utils::_send_report_email($report_matriculados['pdf_data'], $report_matriculados['title'], $report_matriculados['filename']);
         }
 
         if ($day_of_month == 1 && !empty($options['enable_monthly'])) { // Si es el primer día del mes
             foreach (['matriculados', 'pendientes', 'cursos', 'log'] as $type) {
-                $report_data = $this->generator->generate_general_report($type);
+                $report_data = $this->_generate_report($type);
                 if($report_data) SGA_Utils::_send_report_email($report_data['pdf_data'], $report_data['title'], $report_data['filename']);
                 sleep(2); // Pequeña pausa entre envíos
             }
         }
     }
-    
-    /**
-     * Genera la factura/recibo de pago en PDF.
-     */
-    public function generate_payment_invoice_pdf($invoice_data) {
-        return $this->generator->generate_payment_invoice_pdf($invoice_data);
+
+    private function _generate_report($type, $args = []) {
+        if (!class_exists('Dompdf\Dompdf')) {
+            SGA_Utils::_log_activity('Error de Reporte', 'La librería Dompdf no está instalada o no se puede encontrar.');
+            return false;
+        }
+
+        $logo_id = 5024; // Considera hacer esto una opción en los ajustes del plugin
+        $logo_src = '';
+        if ($logo_id && $logo_path = get_attached_file($logo_id)) {
+            $mime_type = get_post_mime_type($logo_id);
+            if ($mime_type && file_exists($logo_path)) {
+                $logo_data = file_get_contents($logo_path);
+                $logo_base64 = base64_encode($logo_data);
+                $logo_src = 'data:' . $mime_type . ';base64,' . $logo_base64;
+            }
+        }
+
+        $report_title = '';
+        $headers = [];
+        $rows = [];
+
+        switch ($type) {
+            case 'matriculados':
+                $report_title = 'Reporte de Estudiantes Matriculados';
+                $headers = ['Matrícula', 'Nombre', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Horario'];
+                $students_data = SGA_Utils::_get_filtered_students('', $args['curso_filtro'] ?? '');
+                foreach ($students_data as $data) {
+                    $rows[] = [
+                        esc_html(isset($data['curso']['matricula']) ? $data['curso']['matricula'] : ''),
+                        esc_html($data['estudiante']->post_title),
+                        esc_html(get_field('cedula', $data['estudiante']->ID)),
+                        esc_html(get_field('email', $data['estudiante']->ID)),
+                        esc_html(get_field('telefono', $data['estudiante']->ID)),
+                        esc_html($data['curso']['nombre_curso']),
+                        esc_html(isset($data['curso']['horario']) ? $data['curso']['horario'] : '')
+                    ];
+                }
+                break;
+            case 'pendientes':
+                $report_title = 'Reporte de Inscripciones Pendientes';
+                $headers = ['Nombre', 'Cédula', 'Email', 'Teléfono', 'Curso Inscrito', 'Horario', 'Fecha Inscripción'];
+                $estudiantes_query = get_posts(array('post_type' => 'estudiante', 'posts_per_page' => -1));
+                if ($estudiantes_query && function_exists('get_field')) {
+                    foreach ($estudiantes_query as $estudiante) {
+                        $cursos = get_field('cursos_inscritos', $estudiante->ID);
+                        if ($cursos) {
+                            foreach ($cursos as $curso) {
+                                if (isset($curso['estado']) && $curso['estado'] == 'Inscrito') {
+                                     if (!empty($args['curso_filtro']) && $curso['nombre_curso'] !== $args['curso_filtro']) {
+                                        continue;
+                                    }
+                                    $rows[] = [
+                                        esc_html($estudiante->post_title),
+                                        esc_html(get_field('cedula', $estudiante->ID)),
+                                        esc_html(get_field('email', $estudiante->ID)),
+                                        esc_html(get_field('telefono', $estudiante->ID)),
+                                        esc_html($curso['nombre_curso']),
+                                        esc_html($curso['horario']),
+                                        esc_html($curso['fecha_inscripcion'])
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case 'cursos':
+                $report_title = 'Reporte de Cursos Activos';
+                $headers = ['Nombre del Curso', 'Horarios', 'Escuela', 'Modalidad', 'Precio', 'Mensualidad', 'Duración', 'Fecha de Inicio'];
+                $cursos_activos = get_posts(array('post_type' => 'curso', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC'));
+                if ($cursos_activos && function_exists('get_field')) {
+                    foreach ($cursos_activos as $curso) {
+                        $horarios_repeater = get_field('horarios_del_curso', $curso->ID);
+                        $horarios_display = '';
+                        if ($horarios_repeater) {
+                            $horarios_array = [];
+                            foreach ($horarios_repeater as $horario) $horarios_array[] = $horario['dias_de_la_semana'] . ' ' . $horario['hora'];
+                            $horarios_display = implode(', ', $horarios_array);
+                        }
+                        $modalidad = !empty($horarios_repeater) ? $horarios_repeater[0]['modalidad'] : '';
+                        $fecha_inicio = !empty($horarios_repeater) ? $horarios_repeater[0]['fecha_de_inicio'] : '';
+
+                        $escuelas = get_the_terms($curso->ID, 'category');
+                        $escuela_display = 'N/A';
+                        if ($escuelas && !is_wp_error($escuelas)) {
+                            $escuela_names = array_map(function($term) { return $term->name; }, $escuelas);
+                            $escuela_display = implode(', ', $escuela_names);
+                        }
+                        $rows[] = [
+                            esc_html($curso->post_title),
+                            esc_html($horarios_display),
+                            esc_html($escuela_display),
+                            esc_html($modalidad),
+                            esc_html(get_field('precio_del_curso', $curso->ID)),
+                            esc_html(get_field('mensualidad', $curso->ID)),
+                            esc_html(get_field('duracion_del_curso', $curso->ID)),
+                            esc_html($fecha_inicio),
+                        ];
+                    }
+                }
+                break;
+            case 'log':
+                $report_title = 'Reporte de Actividad';
+                $headers = ['Acción', 'Detalles', 'Usuario', 'Fecha'];
+                $query_args = [
+                    'post_type' => 'gestion_log', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                if (!empty($args['date_from']) || !empty($args['date_to'])) {
+                    $query_args['date_query'] = [];
+                    if (!empty($args['date_from'])) $query_args['date_query']['after'] = $args['date_from'];
+                    if (!empty($args['date_to'])) $query_args['date_query']['before'] = $args['date_to'];
+                }
+                $log_entries = get_posts($query_args);
+
+                if ($log_entries) {
+                    foreach ($log_entries as $entry) {
+                        $user_id = get_post_meta($entry->ID, '_log_user_id', true);
+                        $user_info = get_userdata($user_id);
+                        $user_name = ($user_id == 0) ? 'Sistema' : ($user_info ? $user_info->display_name : 'Usuario Desconocido');
+                        $rows[] = [
+                            esc_html($entry->post_title),
+                            wp_strip_all_tags($entry->post_content),
+                            esc_html($user_name),
+                            get_the_date('Y-m-d H:i:s', $entry),
+                        ];
+                    }
+                }
+                break;
+            case 'historial_llamadas':
+                $report_title = 'Reporte de Historial de Llamadas';
+                // Aumentamos el tamaño de la columna de Comentario.
+                $headers = ['Agente', 'Estudiante', 'Cédula', 'Email', 'Teléfono', 'Curso', 'Comentario (Última Edición)', 'Fecha (Llamada)'];
+                
+                // 1. Obtener llamadas archivadas
+                $query_args_hist = [
+                    'post_type' => 'sga_llamada_hist', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                if (!empty($args['date_from']) || !empty($args['date_to'])) {
+                    $query_args_hist['date_query'] = [];
+                    if (!empty($args['date_from'])) $query_args_hist['date_query']['after'] = $args['date_from'];
+                    if (!empty($args['date_to'])) $query_args_hist['date_query']['before'] = $args['date_to'];
+                }
+                 if (!empty($args['agente_filtro'])) {
+                    $query_args_hist['author'] = intval($args['agente_filtro']);
+                }
+                if (!empty($args['curso_filtro'])) {
+                    $query_args_hist['meta_query'] = [['key' => '_course_name', 'value' => $args['curso_filtro']]];
+                }
+                $llamadas_hist_query = new WP_Query($query_args_hist);
+
+                // 2. Obtener llamadas del día actual
+                $query_args_hoy = [
+                    'post_type' => 'sga_llamada', 'posts_per_page' => -1,
+                    'orderby' => 'date', 'order' => 'DESC'
+                ];
+                 if (!empty($args['agente_filtro'])) {
+                    $query_args_hoy['author'] = intval($args['agente_filtro']);
+                }
+                if (!empty($args['curso_filtro'])) {
+                    $query_args_hoy['meta_query'] = [['key' => '_course_name', 'value' => $args['curso_filtro']]];
+                }
+                $llamadas_hoy_query = new WP_Query($query_args_hoy);
+                
+                $todas_las_llamadas = array_merge($llamadas_hist_query->posts, $llamadas_hoy_query->posts);
+
+                if (!empty($todas_las_llamadas)) {
+                    foreach ($todas_las_llamadas as $llamada) {
+                         $user_info = get_userdata($llamada->post_author);
+                         $student_id = get_post_meta($llamada->ID, '_student_id', true);
+                         
+                         // Obtener los datos de la última llamada/comentario desde el meta del estudiante
+                         $assignments = get_post_meta($student_id, '_sga_agent_assignments', true);
+                         $row_index = get_post_meta($llamada->ID, '_row_index', true);
+                         $call_log = get_post_meta($student_id, '_sga_call_log', true);
+                         $call_info = $call_log[$row_index] ?? null;
+
+                         $comment = $call_info['comment'] ?? $llamada->post_content;
+                         $last_edited_by = $call_info['last_edited_by'] ?? ($user_info ? $user_info->display_name : 'N/A');
+                         $last_edited_timestamp = $call_info['last_edited_timestamp'] ?? $llamada->post_date;
+                         // $last_edited_date ya no es necesaria en el output simplificado
+                         // $last_edited_date = is_numeric($last_edited_timestamp) ? date_i18n('Y-m-d H:i:s', $last_edited_timestamp) : get_the_date('Y-m-d H:i:s', $llamada);
+
+                        $rows[] = [
+                            esc_html($user_info ? $user_info->display_name : 'N/A'),
+                            esc_html(get_post_meta($llamada->ID, '_student_name', true)),
+                            esc_html(get_field('cedula', $student_id)),
+                            esc_html(get_field('email', $student_id)),
+                            esc_html(get_field('telefono', $student_id)),
+                            esc_html(get_post_meta($llamada->ID, '_course_name', true)),
+                            // MODIFICACIÓN AQUI: Simplificar el texto de la última edición
+                            wp_strip_all_tags($comment) . " (por: " . esc_html($last_edited_by) . ")",
+                            get_the_date('Y-m-d H:i:s', $llamada),
+                        ];
+                    }
+                }
+                break;
+            case 'payment_history':
+                $report_title = 'Historial Completo de Pagos';
+                $headers = ['Fecha', 'Estudiante', 'Concepto', 'Monto', 'Moneda', 'ID Transacción'];
+                $pagos = get_posts(array('post_type' => 'sga_pago', 'posts_per_page' => -1, 'orderby' => 'date', 'order' => 'DESC'));
+                if ($pagos) {
+                    foreach ($pagos as $pago) {
+                        $rows[] = [
+                            get_the_date('Y-m-d H:i:s', $pago),
+                            esc_html(get_post_meta($pago->ID, '_student_name', true)),
+                            esc_html(get_post_meta($pago->ID, '_payment_description', true)),
+                            esc_html(get_post_meta($pago->ID, '_payment_amount', true)),
+                            esc_html(get_post_meta($pago->ID, '_payment_currency', true)),
+                            esc_html(get_post_meta($pago->ID, '_transaction_id', true))
+                        ];
+                    }
+                }
+                break;
+        }
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+        <style>body{font-family:Arial,sans-serif;font-size:10pt;color:#333}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #002060;padding-bottom:15px}.header img{max-height:60px;margin-bottom:10px}h1{font-size:16pt;color:#002060;margin:0}.subtitle{font-size:9pt;color:#555}table{width:100%;border-collapse:collapse;margin-top:20px;font-size:9pt}th,td{border:1px solid #ccc;padding:8px;text-align:left}thead th{background-color:#002060;color:#fff;font-weight:700}tbody tr:nth-child(2n){background-color:#f2f2f2}
+        
+        /* Aumentar ancho de la columna de comentarios en el reporte de llamadas */
+        <?php if ($type === 'historial_llamadas'): ?>
+        table th:nth-child(7), table td:nth-child(7) { width: 30%; }
+        <?php endif; ?>
+
+        </style>
+        </head><body>
+            <div class="header">
+                <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                <h1><?php echo esc_html($report_title); ?></h1>
+                <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
+            </div>
+            <?php if (!empty($rows)): ?>
+                <table>
+                    <thead><tr><?php foreach ($headers as $header) echo '<th>' . esc_html($header) . '</th>'; ?></tr></thead>
+                    <tbody><?php foreach ($rows as $row): ?><tr><?php foreach ($row as $cell) echo '<td>' . $cell . '</td>'; ?></tr><?php endforeach; ?></tbody>
+                </table>
+            <?php else: ?><p>No hay datos disponibles para este reporte en este momento.</p><?php endif; ?>
+        </body></html>
+        <?php
+        $html_content = ob_get_clean();
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new Dompdf($options);
+        // Si es el historial de llamadas, usar papel apaisado para acomodar más columnas
+        if ($type === 'historial_llamadas') {
+            $dompdf->setPaper('A4', 'landscape');
+        } else {
+             $dompdf->setPaper('A4', 'portrait');
+        }
+        $dompdf->loadHtml($html_content);
+        $dompdf->render();
+        $pdf_output = $dompdf->output();
+
+        return [
+            'pdf_data' => $pdf_output,
+            'title' => $report_title,
+            'filename' => sanitize_title($report_title) . '-' . date('Y-m-d') . '.pdf'
+        ];
+    }
+
+    public function _generate_payment_invoice_pdf($invoice_data) {
+        if (!class_exists('Dompdf\Dompdf')) {
+            SGA_Utils::_log_activity('Error de Factura', 'La librería Dompdf no está instalada.');
+            return false;
+        }
+        $logo_id = 5024;
+        $logo_src = '';
+        if ($logo_id && $logo_path = get_attached_file($logo_id)) {
+            $mime_type = get_post_mime_type($logo_id);
+            if ($mime_type && file_exists($logo_path)) {
+                $logo_data = file_get_contents($logo_path);
+                $logo_base64 = base64_encode($logo_data);
+                $logo_src = 'data:' . $mime_type . ';base64,' . $logo_base64;
+            }
+        }
+        $invoice_title = 'Recibo de Pago #' . $invoice_data['invoice_id'];
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; color: #333; }
+            .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, .15); font-size: 16px; line-height: 24px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header img { max-width: 200px; }
+            .header h1 { color: #141f53; margin: 10px 0 0; }
+            .invoice-details { margin-bottom: 40px; }
+            .invoice-details table { width: 100%; }
+            .invoice-details td { padding: 5px; }
+            .invoice-details .right { text-align: right; }
+            .item-table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+            .item-table td { padding: 10px; vertical-align: top; }
+            .item-table .heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
+            .item-table .item td { border-bottom: 1px solid #eee; }
+            .item-table .total td { border-top: 2px solid #eee; font-weight: bold; }
+            .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #777; }
+        </style>
+        </head><body>
+            <div class="invoice-box">
+                <div class="header">
+                    <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                    <h1>RECIBO DE PAGO</h1>
+                </div>
+                <div class="invoice-details">
+                    <table>
+                        <tr>
+                            <td>
+                                <strong>Facturado a:</strong><br>
+                                <?php echo esc_html($invoice_data['student_name']); ?><br>
+                                Cédula: <?php echo esc_html($invoice_data['student_cedula']); ?>
+                            </td>
+                            <td class="right">
+                                <strong>Recibo #:</strong> <?php echo esc_html($invoice_data['invoice_id']); ?><br>
+                                <strong>Fecha de Pago:</strong> <?php echo esc_html(date_i18n('j \d\e F \d\e Y', strtotime($invoice_data['payment_date']))); ?><br>
+                                <strong>ID de Transacción:</strong> <?php echo esc_html($invoice_data['transaction_id']); ?>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <table class="item-table">
+                    <tr class="heading">
+                        <td>Descripción</td>
+                        <td style="text-align: right;">Precio</td>
+                    </tr>
+                    <tr class="item">
+                        <td><?php echo esc_html($invoice_data['payment_description']); ?></td>
+                        <td style="text-align: right;"><?php echo esc_html(number_format(floatval($invoice_data['amount']), 2)); ?> <?php echo esc_html($invoice_data['currency']); ?></td>
+                    </tr>
+                    <tr class="total">
+                        <td></td>
+                        <td style="text-align: right;"><strong>Total: <?php echo esc_html(number_format(floatval($invoice_data['amount']), 2)); ?> <?php echo esc_html($invoice_data['currency']); ?></strong></td>
+                    </tr>
+                </table>
+                <div class="footer">
+                    <p>Gracias por su pago. Este es un recibo generado automáticamente.</p>
+                    <p>CENTU | <?php echo esc_url(home_url('/')); ?></p>
+                </div>
+            </div>
+        </body></html>
+        <?php
+        $html_content = ob_get_clean();
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html_content);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $pdf_output = $dompdf->output();
+
+        return [
+            'pdf_data' => $pdf_output,
+            'title'    => $invoice_title,
+            'filename' => 'recibo-pago-' . $invoice_data['invoice_id'] . '.pdf'
+        ];
     }
     
     /**
      * Genera el Expediente del estudiante en formato PDF.
+     * @param int $student_id ID del post del estudiante.
+     * @return array|false Datos del PDF o false si Dompdf no existe.
      */
-    public function generate_student_profile_pdf($student_id) {
-        return $this->generator->generate_student_profile_pdf($student_id);
+    public function _generate_student_profile_pdf($student_id) {
+        if (!class_exists('Dompdf\Dompdf')) {
+            SGA_Utils::_log_activity('Error de Reporte', 'La librería Dompdf no está instalada o no se puede encontrar.');
+            return false;
+        }
+
+        $student_post = get_post($student_id);
+        if (!$student_post || 'estudiante' !== $student_post->post_type) return false;
+
+        // 1. Obtener datos del estudiante
+        $nombre_completo = $student_post->post_title;
+        $cedula = get_field('cedula', $student_id);
+        $email = get_field('email', $student_id);
+        $telefono = get_field('telefono', $student_id);
+        $direccion = get_field('direccion', $student_id);
+        $cursos = get_field('cursos_inscritos', $student_id);
+
+        $logo_id = 5024; // ID de ejemplo para el logo
+        $logo_src = '';
+        if ($logo_id && $logo_path = get_attached_file($logo_id)) {
+            $mime_type = get_post_mime_type($logo_id);
+            if ($mime_type && file_exists($logo_path)) {
+                $logo_data = file_get_contents($logo_path);
+                $logo_base64 = base64_encode($logo_data);
+                $logo_src = 'data:' . $mime_type . ';base64,' . $logo_base64;
+            }
+        }
+        
+        $report_title = 'Expediente Estudiantil: ' . $nombre_completo;
+
+        ob_start();
+        ?>
+        <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+        <style>
+            body{font-family:Arial,sans-serif;font-size:12pt;color:#333;margin:0;padding:0}.header{text-align:center;margin-bottom:30px;border-bottom:3px solid #141f53;padding-bottom:15px}.header img{max-height:80px;margin-bottom:10px}h1{font-size:24pt;color:#141f53;margin:0}.subtitle{font-size:10pt;color:#555;margin-top:5px}.section-title{font-size:16pt;color:#4f46e5;border-bottom:2px solid #e0e0e0;padding-bottom:5px;margin-top:30px;margin-bottom:15px}.data-grid{display:table;width:100%;border-collapse:collapse;margin-bottom:20px}.data-row{display:table-row;}.data-label{display:table-cell;font-weight:700;padding:8px 0;width:30%;vertical-align:top;font-size:11pt}.data-value{display:table-cell;padding:8px 0;width:70%;vertical-align:top;font-size:11pt}.curso-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10pt}th,td{border:1px solid #ccc;padding:10px;text-align:left}thead th{background-color:#141f53;color:#fff;font-weight:700}tbody tr:nth-child(even){background-color:#f8f9fa}.pill{display:inline-block;padding:4px 10px;font-size:10pt;font-weight:700;border-radius:12px;color:#fff;}.pill-inscrito{background-color:#f59e0b}.pill-matriculado{background-color:#10b981}.pill-completado{background-color:#3b82f6}.pill-cancelado{background-color:#ef4444}
+        </style>
+        </head><body>
+            <div class="invoice-box">
+                <div class="header">
+                    <?php if (!empty($logo_src)): ?><img src="<?php echo esc_url($logo_src); ?>" alt="Logo"><?php endif; ?>
+                    <h1><?php echo esc_html($report_title); ?></h1>
+                    <p class="subtitle">Generado el: <?php echo date_i18n('j \d\e F \d\e Y \a \l\a\s H:i'); ?></p>
+                </div>
+                
+                <h2 class="section-title">Datos Personales y de Contacto</h2>
+                <div class="data-grid">
+                    <div class="data-row"><div class="data-label">Nombre Completo:</div><div class="data-value"><?php echo esc_html($nombre_completo); ?></div></div>
+                    <div class="data-row"><div class="data-label">Cédula / ID:</div><div class="data-value"><?php echo esc_html($cedula); ?></div></div>
+                    <div class="data-row"><div class="data-label">Correo Electrónico:</div><div class="data-value"><?php echo esc_html($email); ?></div></div>
+                    <div class="data-row"><div class="data-label">Teléfono:</div><div class="data-value"><?php echo esc_html($telefono); ?></div></div>
+                    <div class="data-row"><div class="data-label">Dirección:</div><div class="data-value"><?php echo esc_html($direccion); ?></div></div>
+                </div>
+
+                <h2 class="section-title">Historial Académico y Cursos</h2>
+                <?php if ($cursos): ?>
+                    <table class="curso-table">
+                        <thead><tr><th>Curso</th><th>Horario</th><th>Fecha Inscripción</th><th>Matrícula</th><th>Estado</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($cursos as $curso): 
+                                $estado_class = 'pill-inscrito';
+                                switch ($curso['estado']) {
+                                    case 'Matriculado': $estado_class = 'pill-matriculado'; break;
+                                    case 'Completado': $estado_class = 'pill-completado'; break;
+                                    case 'Cancelado': $estado_class = 'pill-cancelado'; break;
+                                }
+                            ?>
+                                <tr>
+                                    <td><?php echo esc_html($curso['nombre_curso']); ?></td>
+                                    <td><?php echo esc_html($curso['horario']); ?></td>
+                                    <td><?php echo esc_html($curso['fecha_inscripcion']); ?></td>
+                                    <td><?php echo esc_html($curso['matricula'] ?? 'N/A'); ?></td>
+                                    <td><span class="pill <?php echo $estado_class; ?>"><?php echo esc_html($curso['estado']); ?></span></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p>No hay cursos inscritos para este estudiante.</p>
+                <?php endif; ?>
+            </div>
+        </body></html>
+        <?php
+        $html_content = ob_get_clean();
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html_content);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+        $pdf_output = $dompdf->output();
+
+        return [
+            'pdf_data' => $pdf_output,
+            'title' => $report_title,
+            'filename' => 'expediente-' . sanitize_title($nombre_completo) . '-' . date('Y-m-d') . '.pdf'
+        ];
     }
-
-    // --- MÉTODOS DE EXPORTACIÓN (AJAX, Mantienen su lugar para delegar) ---
-
+    
     public function ajax_sga_print_invoice() {
         if (!isset($_REQUEST['payment_id']) || !isset($_REQUEST['_wpnonce'])) {
             wp_die('Parámetros inválidos.');
@@ -204,10 +651,10 @@ class SGA_Reports {
             'payment_description' => get_post_meta($payment_id, '_payment_description', true),
             'amount'              => get_post_meta($payment_id, '_payment_amount', true),
             'currency'            => get_post_meta($payment_id, '_payment_currency', true),
-            'transaction_id'      => get_post_meta($pago->ID, '_transaction_id', true),
+            'transaction_id'      => get_post_meta($payment_id, '_transaction_id', true),
         ];
 
-        $pdf_data = $this->generator->generate_payment_invoice_pdf($invoice_data);
+        $pdf_data = $this->_generate_payment_invoice_pdf($invoice_data);
 
         if ($pdf_data && is_array($pdf_data) && !empty($pdf_data['pdf_data'])) {
             header('Content-Type: application/pdf');
@@ -320,17 +767,26 @@ class SGA_Reports {
         $status_filter = isset($_GET['status_filter']) ? sanitize_text_field(stripslashes($_GET['status_filter'])) : '';
         
         $filename = 'registro-llamadas-' . date('Y-m-d') . '.xls';
+        // Para exportar la data completa y legible, generamos una tabla HTML que Excel puede abrir.
         header('Content-Type: application/vnd.ms-excel; charset=utf-8');
         header('Content-Disposition: attachment; filename=' . $filename);
         header('Pragma: no-cache');
         header('Expires: 0');
 
         $args = array(
-            'post_type' => 'sga_llamada',
+            'post_type' => ['sga_llamada', 'sga_llamada_hist'], // Buscar en registros del día y archivados
             'posts_per_page' => -1,
             'orderby' => 'date',
             'order' => 'DESC',
         );
+
+        // Agente y Curso se filtrarán en PHP ya que son meta querys complejas o campos de post
+        if (!empty($_GET['agent_filter'])) {
+            $args['author'] = intval($_GET['agent_filter']);
+        }
+        if (!empty($_GET['course_filter'])) {
+            $args['meta_query'] = [['key' => '_course_name', 'value' => sanitize_text_field($_GET['course_filter'])]];
+        }
 
         $call_logs_query = new WP_Query($args);
         $filtered_calls = [];
@@ -350,12 +806,6 @@ class SGA_Reports {
                 $post_id = get_the_ID();
                 $author_info = get_userdata(get_the_author_meta('ID'));
                 $agent_name = $author_info->display_name;
-
-                // Agent filter
-                if (!empty($agent_filter) && $agent_name != $agent_filter) {
-                    continue;
-                }
-
                 $student_id = get_post_meta($post_id, '_student_id', true);
                 $row_index = get_post_meta($post_id, '_row_index', true);
                 
@@ -370,10 +820,19 @@ class SGA_Reports {
                 
                 $student_name = get_post_meta($post_id, '_student_name', true);
                 $course_name = get_post_meta($post_id, '_course_name', true);
+
+                // Obtener el comentario más reciente y la información de edición
+                $call_log_meta = get_post_meta($student_id, '_sga_call_log', true);
+                $call_info = $call_log_meta[$row_index] ?? null;
+
+                $comment = $call_info['comment'] ?? get_the_content();
+                $last_edited_by = $call_info['last_edited_by'] ?? $agent_name;
+                $last_edited_timestamp = $call_info['last_edited_timestamp'] ?? get_the_date('U', $post_id);
+                $last_edited_date = date_i18n('d/m/Y h:i A', $last_edited_timestamp);
                 
-                // Search term filter (for meta fields)
+                // Search term filter (for meta fields and comment)
                 if (!empty($search_term)) {
-                    $searchable_string = strtolower($student_name . ' ' . $course_name . ' ' . get_the_content());
+                    $searchable_string = strtolower($student_name . ' ' . $course_name . ' ' . $comment . ' ' . get_field('cedula', $student_id));
                     if (strpos($searchable_string, strtolower($search_term)) === false) {
                         continue;
                     }
@@ -389,8 +848,10 @@ class SGA_Reports {
                     'telefono' => get_field('telefono', $student_id),
                     'course' => $course_name,
                     'status' => $status_text,
-                    'comment' => get_the_content(),
-                    'date' => get_the_date('d/m/Y h:i A', $post_id)
+                    'comment' => $comment, // Usar el comentario más reciente
+                    'last_edited_by' => $last_edited_by,
+                    'last_edited_date' => $last_edited_date,
+                    'call_date' => get_the_date('d/m/Y h:i A', $post_id)
                 ];
             }
             wp_reset_postdata();
@@ -413,7 +874,9 @@ class SGA_Reports {
                         <th>Curso</th>
                         <th>Estado de Llamada</th>
                         <th>Comentario</th>
-                        <th>Fecha</th>
+                        <th>Última Edición por</th>
+                        <th>Fecha de Última Edición</th>
+                        <th>Fecha de Registro de Llamada</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -428,12 +891,14 @@ class SGA_Reports {
                                 <td><?php echo esc_html($call['course']); ?></td>
                                 <td><?php echo esc_html($call['status']); ?></td>
                                 <td><?php echo esc_html($call['comment']); ?></td>
-                                <td><?php echo esc_html($call['date']); ?></td>
+                                <td><?php echo esc_html($call['last_edited_by']); ?></td>
+                                <td><?php echo esc_html($call['last_edited_date']); ?></td>
+                                <td><?php echo esc_html($call['call_date']); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="9">No se encontraron registros con los filtros aplicados.</td>
+                            <td colspan="11">No se encontraron registros con los filtros aplicados.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

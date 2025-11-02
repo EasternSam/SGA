@@ -19,6 +19,11 @@ class SGA_Main {
      * Carga e instancia las clases necesarias para el funcionamiento del plugin.
      */
     private function load_dependencies() {
+        // Cargar los tres archivos de vistas
+        require_once SGA_PLUGIN_PATH . 'includes/class-sga-panel-views-part1.php';
+        require_once SGA_PLUGIN_PATH . 'includes/class-sga-panel-views-part2.php';
+        require_once SGA_PLUGIN_PATH . 'includes/class-sga-panel-views-part3.php';
+
         // Cada clase se encarga de una funcionalidad específica.
         new SGA_CPT();
         new SGA_Admin();
