@@ -129,78 +129,125 @@ class SGA_Utils {
     }
     
     /**
-     * Envía el correo inicial al estudiante para que proceda con el pago.
+     * Envía el correo inicial al estudiante tras la inscripción.
+     * * [NUEVA LÓGICA v1.1]
+     * - Si el curso es de categoría "Cursos-Infotep", envía un correo con el PDF adjunto (ID 12195).
+     * - Si es un curso normal, envía un correo con las instrucciones de pago manual (bancos).
      */
     public static function _send_pending_payment_email($student_name, $student_email, $student_cedula, $course_name, $horario) {
         if (empty($student_email) || !is_email($student_email)) {
-            self::_log_activity('Error de Correo', "Intento de envío de correo de pago pendiente a dirección inválida: " . esc_html($student_email));
+            self::_log_activity('Error de Correo', "Intento de envío de correo de inscripción a dirección inválida: " . esc_html($student_email));
             return;
         }
         
-        $payment_options = get_option('sga_payment_options');
-        $payments_enabled = isset($payment_options['enable_payments']) && $payment_options['enable_payments'] == 1;
-
-        if ($payments_enabled) {
-            $precio_display = 'No especificado';
-            $curso_post_query = get_posts(array('post_type' => 'curso', 'title' => $course_name, 'posts_per_page' => 1, 'post_status' => 'publish'));
-            if ($curso_post_query && function_exists('get_field')) {
-                $precio_del_curso = get_field('precio_del_curso', $curso_post_query[0]->ID);
-                if ($precio_del_curso) {
-                    $precio_display = $precio_del_curso;
-                }
-            }
-
-            $subject = 'Hemos recibido tu solicitud de inscripción';
-            $email_title = 'Inscripción Pendiente de Pago';
-            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
-            $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y la hemos puesto en espera hasta que se complete el pago de la inscripción. A continuación, encontrarás los detalles de tu solicitud.</p>';
-            $content_html .= '<h2>Siguiente Paso: Realizar el Pago</h2>';
-            $content_html .= '<p class="last">Para completar tu inscripción y asegurar tu cupo, por favor realiza el pago a través de nuestro portal seguro. Una vez completado el pago, tu matrícula será procesada automáticamente.</p>';
-
-            $payment_page_url = site_url('/pagos/');
-            $payment_url_with_cedula = add_query_arg('identificador', urlencode($student_cedula), $payment_page_url);
-            $payment_url_with_cedula = add_query_arg('tipo_id', 'cedula', $payment_url_with_cedula);
-
-            $summary_table_title = 'Resumen de tu Solicitud';
-            $summary_data = [
-                'Estudiante' => $student_name,
-                'Cédula' => $student_cedula,
-                'Curso Solicitado' => $course_name,
-                'Horario' => $horario,
-                'Monto a Pagar' => $precio_display,
-            ];
-
-            $button_data = [
-                'url' => $payment_url_with_cedula,
-                'text' => 'Pagar Ahora'
-            ];
+        // Variables para el correo
+        $subject = '';
+        $email_title = '';
+        $content_html = '';
+        $summary_table_title = 'Resumen de tu Solicitud';
+        $summary_data = [
+            'Estudiante' => $student_name,
+            'Cédula' => $student_cedula,
+            'Curso Solicitado' => $course_name,
+            'Horario' => $horario,
+        ];
+        $attachments = [];
+        $headers = ['Content-Type: text/html; charset=UTF-8'];
+        $log_message = '';
+        
+        // 1. Obtener el post del curso para verificar su categoría
+        $curso_post = null;
+        $is_infotep_course = false;
+        $curso_post_query = get_posts(array('post_type' => 'curso', 'title' => $course_name, 'posts_per_page' => 1, 'post_status' => 'publish'));
+        
+        if ($curso_post_query) {
+            $curso_post = $curso_post_query[0];
             
-            $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data, $button_data);
-            self::_log_activity('Correo Enviado', "Correo de pago pendiente enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
-
-        } else {
-             // Payments are disabled, send manual payment instructions
-            $subject = 'Hemos recibido tu solicitud de inscripción';
-            $email_title = 'Solicitud de Inscripción Recibida';
-            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
-            $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y nuestro equipo la está procesando. A continuación, encontrarás los detalles de tu solicitud.</p>';
-            $content_html .= '<h2>Siguientes Pasos</h2>';
-            $content_html .= '<p class="last">Nuestro equipo de admisiones se pondrá en contacto contigo a la brevedad para confirmar los detalles y guiarte con los siguientes pasos para completar tu matriculación. Tu cupo está reservado temporalmente.</p>';
-
-            $summary_table_title = 'Resumen de tu Solicitud';
-            $summary_data = [
-                'Estudiante' => $student_name,
-                'Cédula' => $student_cedula,
-                'Curso Solicitado' => $course_name,
-                'Horario' => $horario,
-            ];
-
-            $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data);
-            self::_log_activity('Correo Enviado', "Correo de inscripción (pagos manuales) enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.", 0);
+            // --- CORRECCIÓN ---
+            // Verificar por 'slug' (cursos-infotep) en lugar de 'name' (Cursos-Infotep)
+            // has_term() por defecto busca por 'name'. Al pasar el slug (que es lo correcto),
+            // la comprobación funcionará como se espera.
+            if (has_term('cursos-infotep', 'category', $curso_post->ID)) {
+                $is_infotep_course = true;
+            }
+            // --- FIN CORRECCIÓN ---
         }
 
-        $headers = ['Content-Type: text/html; charset=UTF-8'];
-        wp_mail($student_email, $subject, $body, $headers);
+        if ($is_infotep_course) {
+            // --- CASO 1: CURSO DE INFOTEP ---
+            // Enviar correo con el formulario PDF adjunto.
+            
+            $subject = 'Importante: Formulario de Inscripción INFOTEP';
+            $email_title = 'Formulario INFOTEP Requerido';
+            
+            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
+            $content_html .= '<p>Gracias por tu solicitud de inscripción para el curso <strong>' . esc_html($course_name) . '</strong>. Hemos recibido tus datos correctamente.</p>';
+            $content_html .= '<h2>Paso Obligatorio: Formulario INFOTEP</h2>';
+            $content_html .= '<p>Para completar tu inscripción en este curso avalado por INFOTEP, es <strong>obligatorio</strong> descargar, llenar y presentar el formulario que hemos adjuntado a este correo.</p>';
+            $content_html .= '<p class="last">Por favor, imprime este documento, complétalo con tu información y tráelo físicamente a nuestras instalaciones en CENTU para finalizar tu proceso.</p>';
+
+            // Obtener la ruta del archivo adjunto desde la Biblioteca de Medios
+            $attachment_id = 12273; // ID del PDF Formulario de INFOTEP
+            $attachment_path = get_attached_file($attachment_id);
+            
+            if ($attachment_path && file_exists($attachment_path)) {
+                $attachments[] = $attachment_path;
+                $log_message = "Correo de INFOTEP (con adjunto ID: {$attachment_id}) enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.";
+            } else {
+                $content_html .= '<p style="color: red; font-weight: bold; margin-top: 15px;">Error: No se pudo adjuntar el formulario. Por favor, contacta a la administración.</p>';
+                $log_message = "Error: Correo de INFOTEP para {$student_name} ({$student_email}). NO SE PUDO ADJUNTAR el archivo ID: {$attachment_id}.";
+                self::_log_activity('Error Adjunto Correo', $log_message, 0);
+            }
+
+        } else {
+            // --- CASO 2: CURSO NORMAL ---
+            // Enviar correo con instrucciones de pago manual (bancos).
+            
+            $subject = 'Instrucciones para Completar tu Inscripción';
+            $email_title = 'Solicitud de Inscripción Recibida';
+
+            $content_html = '<p>Hola ' . esc_html($student_name) . ',</p>';
+            $content_html .= '<p>Gracias por inscribirte en CENTU. Hemos recibido tu solicitud y tu cupo está reservado temporalmente. A continuación, encontrarás los detalles de tu solicitud.</p>';
+            $content_html .= '<h2>Siguiente Paso: Realizar el Pago</h2>';
+            $content_html .= '<p>Para completar tu inscripción y asegurar tu cupo, por favor realiza el pago utilizando una de las siguientes opciones:</p>';
+
+            // Opciones de pago proporcionadas
+            $content_html .= '<h3 style="color: #141f53; margin-top: 20px; margin-bottom: 10px;">Opción 1: Transferencia Bancaria</h3>';
+            $content_html .= '<p style="margin-bottom: 10px;">Puede hacer su pago por transferencia o depósito bancario. Las cuentas disponibles para realizar su pago son las siguientes:</p>';
+            $content_html .= '<ul style="list-style-type: disc; margin-left: 25px; padding-left: 0; line-height: 1.6;">';
+            $content_html .= '<li><strong>Banco Popular:</strong> 056088148</li>';
+            $content_html .= '<li><strong>Banreservas:</strong> 0201059070</li>';
+            $content_html .= '<li><strong>Banco BHD:</strong> 01887270011</li>';
+            $content_html .= '<li><strong>Banco Santa Cruz:</strong> 11311020001576</li>';
+            $content_html .= '</ul>';
+            $content_html .= '<p style="margin-top: 10px;">Todas las cuentas son corrientes, a nombre de <strong>CENTU</strong>. Por favor coloque en comentarios su nombre y curso.</p>';
+            $content_html .= '<p style="font-weight: bold; color: #141f53;">El comprobante lo deberá remitir al correo: <a href="mailto:mercadeocentu@gmail.com">mercadeocentu@gmail.com</a></p>';
+
+            $content_html .= '<h3 style="color: #141f53; margin-top: 25px; margin-bottom: 10px;">Opción 2: Pago en Físico</h3>';
+            $content_html .= '<p>Puedes visitar nuestras instalaciones y realizar el pago directamente en caja.</p>';
+            $content_html .= '<p style="margin-top: 5px;"><strong>Dirección:</strong> Av. Doctor Delgado #103; Gazcue, Distrito Nacional, República Dominicana</p>';
+            
+            $content_html .= '<p class="last" style="margin-top: 25px;">Quedamos a su orden.</p>';
+            
+            $log_message = "Correo de Inscripción (con instrucciones de pago manual) enviado a {$student_name} ({$student_email}) para el curso '{$course_name}'.";
+        }
+
+        // 3. Ensamblar y enviar el correo
+        $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data);
+        
+        // Registrar la actividad
+        self::_log_activity('Correo Enviado', $log_message, 0);
+
+        // Enviar el correo
+        $mail_sent = wp_mail($student_email, $subject, $body, $headers, $attachments);
+
+        // --- INICIO DE LA DEPURACIÓN DE CORREO ---
+        // Añadimos un log específico si wp_mail() falla.
+        if (false === $mail_sent) {
+            $error_message = "ERROR DE WP_MAIL: El correo para '{$student_email}' (Curso: '{$course_name}') no pudo ser enviado. Esto usualmente indica un problema con la configuración del servidor de correo.";
+            self::_log_activity('Error Crítico de Correo', $error_message, 0);
+        }
+        // --- FIN DE LA DEPURACIÓN DE CORREO ---
     }
     
     /**
@@ -289,7 +336,14 @@ class SGA_Utils {
 
             $body = self::_get_email_template($email_title, $content_html, $summary_table_title, $summary_data);
             $headers = ['Content-Type: text/html; charset=UTF-8'];
-            wp_mail($email, $subject, $body, $headers);
+            $mail_sent_approval = wp_mail($email, $subject, $body, $headers);
+
+            // --- INICIO DE LA DEPURACIÓN DE CORREO ---
+            if (false === $mail_sent_approval) {
+                $error_message = "ERROR DE WP_MAIL: El correo de APROBACIÓN para '{$email}' (Matrícula: {$matricula}) no pudo ser enviado.";
+                self::_log_activity('Error Crítico de Correo', $error_message, 0);
+            }
+            // --- FIN DE LA DEPURACIÓN DE CORREO ---
         }
 
         $log_content = "{$nombre} (Cédula: {$cedula}) fue matriculado en '{$curso_aprobado['nombre_curso']}' con la matrícula {$matricula}.";
@@ -398,6 +452,14 @@ class SGA_Utils {
 
         $log_title = $sent ? 'Recibo Enviado' : 'Error al Enviar Recibo';
         self::_log_activity($log_title, "El recibo '{$subject}' fue procesado para {$recipient_email}.");
+
+        // --- INICIO DE LA DEPURACIÓN DE CORREO ---
+        if (false === $sent) {
+            $error_message = "ERROR DE WP_MAIL: El correo de RECIBO DE PAGO para '{$recipient_email}' no pudo ser enviado.";
+            self::_log_activity('Error Crítico de Correo', $error_message, 0);
+        }
+        // --- FIN DE LA DEPURACIÓN DE CORREO ---
+
         return $sent;
     }
 
@@ -494,7 +556,14 @@ class SGA_Utils {
 
         $body = self::_get_email_template($email_title, $content_html);
         $headers = ['Content-Type: text/html; charset=UTF-8'];
-        wp_mail($student_email, $subject, $body, $headers);
+        $mail_sent_full = wp_mail($student_email, $subject, $body, $headers);
+
+        // --- INICIO DE LA DEPURACIÓN DE CORREO ---
+        if (false === $mail_sent_full) {
+            $error_message = "ERROR DE WP_MAIL: El correo de CURSO LLENO para '{$student_email}' (Curso: '{$course_name}') no pudo ser enviado.";
+            self::_log_activity('Error Crítico de Correo', $error_message, 0);
+        }
+        // --- FIN DE LA DEPURACIÓN DE CORREO ---
     }
     
     /**
@@ -1617,4 +1686,5 @@ class SGA_Utils {
     }
     // *** FIN - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
 }
+
 
