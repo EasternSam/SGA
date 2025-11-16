@@ -943,7 +943,7 @@ class SGA_Utils {
 
         // 1. Actualizar el CPT sga_llamada (post_content)
         $updated = wp_update_post(array(
-            'ID'           => $call_log_post_id,
+            'ID'            => $call_log_post_id,
             'post_content' => sanitize_textarea_field($new_comment),
             'post_modified' => current_time('mysql'), // Asegurar que la fecha de CPT se actualice
         ));
@@ -1685,6 +1685,107 @@ class SGA_Utils {
         ];
     }
     // *** FIN - NUEVA FUNCIÓN PARA PAGINACIÓN DE ESTUDIANTES ***
+
+    /**
+     * [NUEVA FUNCIÓN] Limpia las inscripciones duplicadas (mismo estudiante, mismo curso).
+     * Conserva solo la inscripción más reciente para cada par estudiante-curso.
+     * @return array Conteo de inscripciones eliminadas.
+     */
+    public static function _cleanup_duplicate_inscriptions() {
+        if (!function_exists('get_field') || !function_exists('update_field')) {
+            return ['error' => 'ACF no está disponible.'];
+        }
+
+        $estudiantes = get_posts(['post_type' => 'estudiante', 'posts_per_page' => -1, 'fields' => 'ids']);
+        $total_deleted = 0;
+        $log_details = [];
+
+        foreach ($estudiantes as $student_id) {
+            $cursos = get_field('cursos_inscritos', $student_id);
+            if (empty($cursos) || !is_array($cursos)) {
+                continue;
+            }
+
+            $seen_courses = [];
+            $duplicates_to_delete = [];
+
+            // 1. Identificar duplicados y cuál conservar
+            foreach ($cursos as $index => $curso) {
+                $course_name = $curso['nombre_curso'] ?? null;
+                if (empty($course_name)) {
+                    continue; // Saltar filas inválidas
+                }
+
+                // Usar una clave única para el curso y el estado (solo limpiar duplicados en el mismo estado)
+                $key = $course_name . '::' . $curso['estado'];
+                $inscription_date = strtotime($curso['fecha_inscripcion'] ?? 'now');
+
+                if (!isset($seen_courses[$key])) {
+                    // Es la primera vez que vemos este curso/estado, lo marcamos como el "más reciente" para conservar
+                    $seen_courses[$key] = [
+                        'latest_index' => $index,
+                        'latest_date'  => $inscription_date
+                    ];
+                } else {
+                    // Ya hemos visto este curso/estado. Decidir cuál conservar.
+                    if ($inscription_date > $seen_courses[$key]['latest_date']) {
+                        // Esta inscripción es más reciente. La *anterior* es ahora la duplicada.
+                        $duplicates_to_delete[] = $seen_courses[$key]['latest_index'];
+                        // Actualizar la "más reciente" para que sea esta.
+                        $seen_courses[$key]['latest_index'] = $index;
+                        $seen_courses[$key]['latest_date'] = $inscription_date;
+                    } else {
+                        // Esta inscripción es más antigua o igual. Es una duplicada.
+                        $duplicates_to_delete[] = $index;
+                    }
+                }
+            }
+
+            // 2. Si no hay duplicados para este estudiante, continuar
+            if (empty($duplicates_to_delete)) {
+                continue;
+            }
+
+            // 3. Re-construir el array de cursos, omitiendo los índices duplicados
+            $new_cursos_array = [];
+            $student_deleted_count = 0;
+            
+            $duplicates_to_delete = array_unique($duplicates_to_delete); // Asegurarse de que no haya índices repetidos
+
+            foreach ($cursos as $index => $curso) {
+                if (!in_array($index, $duplicates_to_delete)) {
+                    // Este índice NO está en la lista de eliminación, conservarlo
+                    $new_cursos_array[] = $curso;
+                } else {
+                    // Este índice SÍ está en la lista, contarlo como eliminado
+                    $student_deleted_count++;
+                }
+            }
+
+            // 4. Actualizar el campo repeater de ACF con el array limpio
+            update_field('cursos_inscritos', $new_cursos_array, $student_id);
+            
+            $total_deleted += $student_deleted_count;
+            $student_name = get_the_title($student_id);
+            $log_details[] = "Estudiante {$student_name} (ID: {$student_id}): {$student_deleted_count} inscripciones duplicadas eliminadas.";
+        }
+
+        // 5. Registrar la actividad
+        if ($total_deleted > 0) {
+            SGA_Utils::_log_activity(
+                'Limpieza de Duplicados Ejecutada', 
+                "Se eliminaron un total de {$total_deleted} inscripciones duplicadas.\n" . implode("\n", $log_details),
+                get_current_user_id()
+            );
+        } else {
+             SGA_Utils::_log_activity(
+                'Limpieza de Duplicados Ejecutada', 
+                "No se encontraron inscripciones duplicadas para eliminar.",
+                get_current_user_id()
+            );
+        }
+
+        return ['deleted_count' => $total_deleted];
+    }
+
 }
-
-

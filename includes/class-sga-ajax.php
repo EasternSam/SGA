@@ -42,6 +42,10 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_get_paginated_students', array($this, 'ajax_get_paginated_students'));
         // *** FIN - NUEVO HOOK DE PAGINACIÓN DE ESTUDIANTES ***
 
+        // *** INICIO - NUEVO HOOK DE LIMPIEZA DE DUPLICADOS ***
+        add_action('wp_ajax_sga_cleanup_duplicates', array($this, 'ajax_cleanup_duplicates'));
+        // *** FIN - NUEVO HOOK DE LIMPIEZA DE DUPLICADOS ***
+
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
     }
@@ -1006,4 +1010,32 @@ class SGA_Ajax {
      */
     // public function ajax_update_call_status() { ... }
     // --- FIN: MODIFICACIÓN SOLICITADA ---
+
+    // *** INICIO - NUEVA FUNCIÓN AJAX DE LIMPIEZA ***
+    /**
+     * AJAX: Ejecuta la limpieza de inscripciones duplicadas.
+     */
+    public function ajax_cleanup_duplicates() {
+        // 1. Seguridad y Permisos
+        if (!isset($_POST['_ajax_nonce']) || !check_ajax_referer('sga_cleanup_duplicates_nonce', '_ajax_nonce', false)) {
+            wp_send_json_error(['message' => 'Error de seguridad (Nonce).'], 403);
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'No tienes permisos para ejecutar esta acción de mantenimiento.'], 403);
+        }
+
+        // 2. Ejecutar la función de limpieza
+        try {
+            $result = SGA_Utils::_cleanup_duplicate_inscriptions();
+            if (isset($result['error'])) {
+                wp_send_json_error(['message' => $result['error']], 500);
+            } else {
+                wp_send_json_success(['deleted_count' => $result['deleted_count']]);
+            }
+        } catch (Throwable $e) {
+            SGA_Utils::_log_activity('Error Crítico en Limpieza Duplicados', $e->getMessage(), get_current_user_id());
+            wp_send_json_error(['message' => 'Ocurrió un error fatal durante la limpieza: ' . $e->getMessage()], 500);
+        }
+    }
+    // *** FIN - NUEVA FUNCIÓN AJAX DE LIMPIEZA ***
 }

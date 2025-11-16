@@ -16,6 +16,12 @@ class SGA_Admin {
         add_action('admin_init', array($this, 'register_plugin_settings'));
         add_action('admin_footer', array($this, 'add_realtime_notification_script'));
         
+        // Registrar el AJAX handler para la prueba de conexión SALIENTE (WP -> Laravel)
+        add_action('wp_ajax_sga_test_laravel_v1_connection', array($this, 'ajax_test_laravel_v1_connection'));
+        
+        // --- AÑADIDO: Registrar el AJAX handler para la simulación ENTRANTE (WP -> WP) ---
+        add_action('wp_ajax_sga_test_incoming_webhook', array($this, 'ajax_test_incoming_webhook'));
+        
         // Hooks para la pantalla de bienvenida y redirección
         add_filter('login_redirect', array($this, 'redirect_sga_users_on_login'), 10, 3);
         add_action('admin_init', array($this, 'force_redirect_from_dashboard'));
@@ -64,6 +70,20 @@ class SGA_Admin {
      * Añade el menú principal y los submenús del plugin al panel de administración.
      */
     public function add_admin_menu_pages() {
+        
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Asegurarnos de que la clase SGA_Utils esté disponible antes de usarla
+        if (!class_exists('SGA_Utils')) {
+            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
+            if (file_exists($utils_file)) {
+                require_once $utils_file;
+            } else {
+                // Si el archivo no existe, no podemos continuar.
+                return; 
+            }
+        }
+        // --- FIN DE LA CORRECCIÓN ---
+
         if ($this->sga_user_has_sga_role()) {
             // --- Menú para Roles SGA (Agente, Gestor de Cursos, etc.) ---
             add_menu_page(
@@ -191,7 +211,7 @@ class SGA_Admin {
         <?php
     }
 
-     /**
+    /**
      * Añade CSS para ocultar la UI de WordPress en la pantalla de bienvenida.
      */
     public function custom_welcome_screen_styles() {
@@ -314,11 +334,21 @@ class SGA_Admin {
 
     /**
      * Registra los grupos de opciones del plugin.
+     *
+     * MODIFICADO: Añadido registro para sga_api_url y sga_api_key.
      */
     public function register_plugin_settings() {
         register_setting('sga_report_options_group', 'sga_report_options', array($this, 'sanitize_report_options'));
+        
+        // Grupo principal para Pestaña Pagos e Integración
         register_setting('sga_main_settings_group', 'sga_payment_options', array($this, 'sanitize_payment_options'));
         register_setting('sga_main_settings_group', 'sga_integration_options', array($this, 'sanitize_integration_options'));
+        
+        // --- AÑADIDOS ---
+        // Registrar las opciones de API (saliente) para que se guarden desde el mismo grupo
+        register_setting('sga_main_settings_group', 'sga_api_url', 'esc_url_raw');
+        register_setting('sga_main_settings_group', 'sga_api_key', 'sanitize_text_field');
+        // --- FIN AÑADIDOS ---
     }
 
     public function sanitize_report_options($input) {
@@ -341,11 +371,18 @@ class SGA_Admin {
         if (isset($input['cardnet_environment'])) $sanitized_input['cardnet_environment'] = in_array($input['cardnet_environment'], ['sandbox', 'production']) ? $input['cardnet_environment'] : 'sandbox';
         return $sanitized_input;
     }
+
+    /**
+     * Sanitiza las opciones de integración.
+     *
+     * MODIFICADO: Eliminadas las claves de API, que ahora se guardan por separado.
+     * Solo se mantiene 'disable_auto_enroll'.
+     */
     public function sanitize_integration_options($input) {
         $sanitized_input = [];
-        if (isset($input['webhook_url'])) $sanitized_input['webhook_url'] = esc_url_raw($input['webhook_url']);
-        if (isset($input['student_query_url'])) $sanitized_input['student_query_url'] = esc_url_raw($input['student_query_url']);
-        if (isset($input['api_secret_key'])) $sanitized_input['api_secret_key'] = sanitize_text_field($input['api_secret_key']);
+        // if (isset($input['webhook_url'])) $sanitized_input['webhook_url'] = esc_url_raw($input['webhook_url']); // Eliminado
+        // if (isset($input['student_query_url'])) $sanitized_input['student_query_url'] = esc_url_raw($input['student_query_url']); // Eliminado
+        // if (isset($input['api_secret_key'])) $sanitized_input['api_secret_key'] = sanitize_text_field($input['api_secret_key']); // Eliminado
         $sanitized_input['disable_auto_enroll'] = isset($input['disable_auto_enroll']) ? 1 : 0;
         return $sanitized_input;
     }
@@ -358,9 +395,11 @@ class SGA_Admin {
             <h1>Ajustes de Gestión Académica</h1>
             <h2 class="nav-tab-wrapper">
                 <a href="?page=sga-settings&tab=pagos" class="nav-tab <?php echo $active_tab == 'pagos' ? 'nav-tab-active' : ''; ?>">Pagos y Moneda</a>
-                <a href="?page=sga-settings&tab=integracion" class="nav-tab <?php echo $active_tab == 'integracion' ? 'nav-tab-active' : ''; ?>">Integración con Sistema Interno (API)</a>
+                <!-- MODIFICADO: Título de la pestaña -->
+                <a href="?page=sga-settings&tab=integracion" class="nav-tab <?php echo $active_tab == 'integracion' ? 'nav-tab-active' : ''; ?>">Integración con Laravel (API)</a>
                 <a href="?page=sga-settings&tab=reportes" class="nav-tab <?php echo $active_tab == 'reportes' ? 'nav-tab-active' : ''; ?>">Reportes Automáticos</a>
                 <a href="?page=sga-settings&tab=debug" class="nav-tab <?php echo $active_tab == 'debug' ? 'nav-tab-active' : ''; ?>">Debug de la API</a>
+                <a href="?page=sga-settings&tab=mantenimiento" class="nav-tab <?php echo $active_tab == 'mantenimiento' ? 'nav-tab-active' : ''; ?>">Mantenimiento</a>
             </h2>
             <form method="post" action="options.php">
                 <?php
@@ -369,7 +408,8 @@ class SGA_Admin {
                     $this->render_payment_settings_tab();
                     submit_button('Guardar Cambios');
                 } elseif ($active_tab == 'integracion') {
-                    settings_fields('sga_main_settings_group');
+                    // Este grupo ahora guarda 'sga_payment_options', 'sga_integration_options', 'sga_api_url' y 'sga_api_key'
+                    settings_fields('sga_main_settings_group'); 
                     $this->render_integration_settings_tab();
                     submit_button('Guardar Cambios');
                 } elseif ($active_tab == 'reportes') {
@@ -378,6 +418,9 @@ class SGA_Admin {
                     submit_button('Guardar Cambios');
                 } elseif ($active_tab == 'debug') {
                     $this->render_debug_settings_tab();
+                } elseif ($active_tab == 'mantenimiento') {
+                    // Esta pestaña no guarda opciones de WP, usa AJAX
+                    $this->render_maintenance_settings_tab();
                 }
                 ?>
             </form>
@@ -419,41 +462,59 @@ class SGA_Admin {
         </table>
         <?php
     }
+
+    /**
+     * Renderiza la pestaña de Integración.
+     *
+     * MODIFICADO: Reemplazados los campos por sga_api_url y sga_api_key.
+     */
     private function render_integration_settings_tab() {
+        // Obtener las opciones guardadas
+        $api_url = get_option('sga_api_url');
+        $api_key = get_option('sga_api_key');
         $options = get_option('sga_integration_options', []);
         ?>
-        <h2>Integración con Sistema Interno (Webhooks y API)</h2>
+        <h2>Integración con Sistema Laravel (SGA Padre)</h2>
+        <p>Configura la conexión entre este plugin (WordPress) y el sistema principal (Laravel).</p>
+        
         <table class="form-table">
             <tr valign="top">
-                <th scope="row"><label for="webhook_url">URL del Webhook (Saliente)</label></th>
+                <th scope="row"><label for="sga_api_url">URL de la API de Laravel (Saliente)</label></th>
                 <td>
-                    <input type="url" id="webhook_url" name="sga_integration_options[webhook_url]" value="<?php echo esc_attr($options['webhook_url'] ?? ''); ?>" class="regular-text" />
+                    <input type="url" id="sga_api_url" name="sga_api_url" value="<?php echo esc_attr($api_url ?? ''); ?>" class="regular-text" placeholder="https://tu-url-ngrok.ngrok-free.app/api/v1" />
+                    <p class="description">
+                        La URL base del sistema Laravel, incluyendo el prefijo <code>/api/v1</code>.
+                        <br>Esta es la URL que <strong>WordPress usará para llamar a Laravel</strong> (ej. para obtener cursos).
+                    </p>
                 </td>
             </tr>
+            
             <tr valign="top">
-                <th scope="row"><label for="student_query_url">URL de Consulta de Estudiantes (Entrante)</label></th>
+                <th scope="row"><label for="sga_api_key">Clave API (Token)</label></th>
                 <td>
-                    <input type="url" id="student_query_url" name="sga_integration_options[student_query_url]" value="<?php echo esc_attr($options['student_query_url'] ?? ''); ?>" class="regular-text" />
+                    <input type="password" id="sga_api_key" name="sga_api_key" value="<?php echo esc_attr($api_key ?? ''); ?>" class="regular-text" />
+                    <p class="description">
+                        Esta clave se usa para <strong>ambas direcciones</strong>:
+                        <br>1. <strong>Saliente (WP -> Laravel):</strong> Es el Token de API generado en Laravel Sanctum (ej: <code>1|aBc...</code>).
+                        <br>2. <strong>Entrante (Laravel -> WP):</strong> Es la clave secreta que Laravel debe enviar en la cabecera <code>X-SGA-Signature</code> para llamara a este WordPress.
+                    </p>
                 </td>
             </tr>
+
             <tr valign="top">
-                <th scope="row"><label for="api_secret_key">Clave Secreta de la API</label></th>
-                <td>
-                    <input type="password" id="api_secret_key" name="sga_integration_options[api_secret_key]" value="<?php echo esc_attr($options['api_secret_key'] ?? ''); ?>" class="regular-text" />
-                </td>
-            </tr>
-             <tr valign="top">
-                <th scope="row">Matriculación Automática por Webhook</th>
+                <th scope="row">Matriculación Automática (Entrante)</th>
                 <td>
                     <label for="disable_auto_enroll">
                         <input type="checkbox" id="disable_auto_enroll" name="sga_integration_options[disable_auto_enroll]" value="1" <?php checked(1, $options['disable_auto_enroll'] ?? 0, true); ?> />
                         Desactivar matriculación automática
                     </label>
+                    <p class="description">Si está marcado, cuando Laravel envíe un webhook de "pagado", la inscripción NO se aprobará automáticamente y requerirá aprobación manual.</p>
                 </td>
             </tr>
         </table>
         <?php
     }
+
     private function render_reports_settings_tab() {
          $options = get_option('sga_report_options', []);
         ?>
@@ -485,20 +546,20 @@ class SGA_Admin {
         <h2>Herramientas de Debug para la Integración</h2>
         <div id="sga-debug-wrapper">
             <div id="sga-debug-tools">
-                <h3>Simulador de Webhook Entrante</h3>
+                <h3>Simulador de Webhook Entrante (Laravel -> WP)</h3>
                 <table class="form-table">
                     <tr><th><label for="sga-sim-cedula">Cédula</label></th><td><input type="text" id="sga-sim-cedula" /></td></tr>
                     <tr><th><label for="sga-sim-curso">Curso</label></th><td><input type="text" id="sga-sim-curso" /></td></tr>
                     <tr><th>Acción</th><td><button type="button" id="sga-test-webhook-btn">Simular</button></td></tr>
                 </table>
-                <h3>Prueba de Conexión Saliente</h3>
+                <h3>Prueba de Conexión Saliente (WP -> Laravel)</h3>
                  <table>
                      <tr><th>Probar</th><td><button type="button" id="sga-test-connection-btn">Iniciar Prueba</button></td></tr>
                  </table>
                  <div id="sga-test-results"></div>
             </div>
             <div id="sga-debug-log">
-                 <h3>Registro de la API</h3>
+                <h3>Registro de la API</h3>
                 <textarea readonly><?php
                     $log_query = new WP_Query(['post_type' => 'gestion_log', 'posts_per_page' => 50, 'orderby' => 'date', 'order' => 'DESC', 'meta_query' => [['key' => '_is_api_log', 'value' => '1']]]);
                     if ($log_query->have_posts()) { while($log_query->have_posts()) { $log_query->the_post(); echo '[' . get_the_date('Y-m-d H:i:s') . '] ' . esc_html(get_the_title()) . "\n" . esc_html(get_the_content()) . "\n\n"; } wp_reset_postdata(); }
@@ -508,7 +569,7 @@ class SGA_Admin {
         </div>
         <script>
         jQuery(document).ready(function($) {
-            // Test Conexión Saliente
+            // Test Conexión Saliente (WP -> Laravel v1)
             $('#sga-test-connection-btn').on('click', function() {
                 var btn = $(this);
                 var spinner = btn.next('.spinner');
@@ -519,20 +580,32 @@ class SGA_Admin {
                 resultsDiv.slideUp().html('');
 
                 $.post(ajaxurl, {
-                    action: 'sga_test_api_connection',
-                    _ajax_nonce: '<?php echo wp_create_nonce("sga_test_api_nonce"); ?>'
+                    // --- MODIFICADO: Llamar a la nueva acción AJAX ---
+                    action: 'sga_test_laravel_v1_connection', 
+                    // --- MODIFICADO: Usar un nuevo nonce ---
+                    _ajax_nonce: '<?php echo wp_create_nonce("sga_test_laravel_v1_nonce"); ?>' 
                 }).done(function(response) {
+                    // --- MODIFICADO: Interpretar la nueva respuesta ---
                     if (response.success) {
-                        resultsDiv.css('color', 'green').html('<strong>Prueba completada.</strong> Los resultados han sido añadidos al registro. Recarga la página para ver el log actualizado.').slideDown();
+                        // response.data contendrá el JSON de Laravel: {status: 'success', message: '¡Conexión...'}
+                        var response_msg = response.data.message || JSON.stringify(response.data);
+                        resultsDiv.css('color', 'green').html('<strong>Éxito:</strong> ' + response_msg).slideDown();
                     } else {
-                        resultsDiv.css('color', 'red').html('<strong>Error:</strong> ' + response.data.message).slideDown();
+                        // response.data.message contendrá el error
+                        var error_msg = response.data.message || 'Error desconocido.';
+                        resultsDiv.css('color', 'red').html('<strong>Error:</strong> ' + error_msg).slideDown();
                     }
-                }).fail(function() {
-                    resultsDiv.css('color', 'red').html('<strong>Error:</strong> Hubo un fallo de comunicación al intentar realizar la prueba.').slideDown();
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    // --- MODIFICADO: Añadir logs de consola ---
+                    console.error('SGA Debug: Fallo la prueba de conexión saliente.');
+                    console.error('AJAX Status:', textStatus, 'Error:', errorThrown);
+                    console.error('Server Response (XHR):', jqXHR);
+                    resultsDiv.css('color', 'red').html('<strong>Error:</strong> Hubo un fallo de comunicación AJAX. <strong>Revisa la consola del navegador (F12) para más detalles.</strong>').slideDown();
                 }).always(function() {
                     btn.prop('disabled', false);
                     spinner.removeClass('is-active');
-                    setTimeout(function() { location.reload(); }, 3000);
+                    // Recargar la página para ver el log actualizado
+                    setTimeout(function() { location.reload(); }, 3000); 
                 });
             });
 
@@ -546,7 +619,8 @@ class SGA_Admin {
                 var curso = $('#sga-sim-curso').val();
 
                 if (!cedula || !curso) {
-                    alert('Por favor, ingresa la cédula y el nombre del curso para la simulación.');
+                    // Reemplazar alert() por un mensaje en el div
+                    resultsDiv.css('color', 'red').html('<strong>Error:</strong> Por favor, ingresa la cédula y el nombre del curso para la simulación.').slideDown();
                     return;
                 }
 
@@ -570,12 +644,310 @@ class SGA_Admin {
                         message = '<strong>Error en la Simulación:</strong> ' + response.data.message;
                         resultsDiv.css('color', 'red').html(message).slideDown();
                     }
-                }).fail(function() {
-                     resultsDiv.css('color', 'red').html('<strong>Error:</strong> Hubo un fallo de comunicación al intentar realizar la simulación.').slideDown();
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                     // --- MODIFICADO: Añadir logs de consola ---
+                     console.error('SGA Debug: Fallo la simulación de webhook entrante.');
+                     console.error('AJAX Status:', textStatus, 'Error:', errorThrown);
+                     console.error('Server Response (XHR):', jqXHR);
+                     resultsDiv.css('color', 'red').html('<strong>Error:</strong> Hubo un fallo de comunicación al intentar realizar la simulación. <strong>Revisa la consola (F12).</strong>').slideDown();
                 }).always(function() {
-                    btn.prop('disabled', false);
+                     // --- MODIFICADO: Habilitar el spinner y el botón ---
+                     btn.prop('disabled', false);
+                     spinner.removeClass('is-active');
+                     // Recargar la página para ver el log actualizado
+                     setTimeout(function() { location.reload(); }, 5000);
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+
+    // --- MODIFICACIÓN: Esta función ahora usa SGA_API_Client ---
+    /**
+     * Función AJAX para el botón "Iniciar Prueba" de la pestaña Debug.
+     *
+     * Prueba la conexión con el endpoint /api/v1/test de Laravel.
+     */
+    public function ajax_test_laravel_v1_connection() {
+        check_ajax_referer('sga_test_laravel_v1_nonce', '_ajax_nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'No tienes permisos para realizar esta acción.']);
+        }
+
+        // Cargar SGA_Utils (para loguear)
+        if (!class_exists('SGA_Utils')) {
+            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
+            if (file_exists($utils_file)) {
+                require_once $utils_file;
+            } else {
+                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-utils.php.']);
+                return;
+            }
+        }
+
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Cargar la NUEVA clase de cliente API
+        if (!class_exists('SGA_API_Client')) { // <-- USAR NUEVO NOMBRE DE CLASE
+            $client_file = plugin_dir_path(__FILE__) . 'class-sga-api-client.php'; // <-- USAR NUEVO ARCHIVO
+            if (file_exists($client_file)) {
+                require_once $client_file;
+            } else {
+                // Ahora podemos usar SGA_Utils para loguear el error
+                SGA_Utils::_log_activity('API Test (v1): Error Fatal', 'No se pudo cargar class-sga-api-client.php.', 0, true);
+                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-api-client.php.']);
+                return;
+            }
+        }
+        // --- FIN DE LA CORRECCIÓN ---
+
+
+        // Usamos la nueva clase de Cliente API
+        $api_client = new SGA_API_Client(); // <-- USAR NUEVO NOMBRE DE CLASE
+        $response = $api_client->test_connection(); // Llama a /api/v1/test
+
+        if (is_wp_error($response)) {
+            // Error de WordPress (ej. cURL timeout, no se pudo conectar)
+            $error_message = $response->get_error_message();
+            SGA_Utils::_log_activity('API Test (v1): Error de WP', $error_message, 0, true);
+            wp_send_json_error(['message' => $error_message]);
+            return;
+        }
+
+        // Comprobar si la respuesta de la API fue un éxito
+        if (isset($response['status']) && $response['status'] === 'success') {
+            // Éxito: Laravel respondió { "status": "success", "message": "¡Conexión..." }
+            SGA_Utils::_log_activity('API Test (v1): Éxito', json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, true);
+            wp_send_json_success($response);
+        } else {
+            // La API respondió, pero con un error (ej. 401 Unauthorized, 404, 500)
+            $log_message = 'La API de Laravel respondió, pero no fue exitosa: ' . json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            SGA_Utils::_log_activity('API Test (v1): Fallo', $log_message, 0, true);
+            
+            $error_text = 'La API respondió con un error. ';
+            if (isset($response['message'])) {
+                 $error_text .= $response['message'];
+            }
+            // Si es un 401, el token está mal
+            if (strpos(json_encode($response), '401') !== false || (isset($response['message']) && strpos($response['message'], 'Unauthenticated') !== false)) {
+                 $error_text = 'Error 401: No autenticado. Revisa que tu Clave API (Token) sea correcta.';
+            }
+            // Si es un 404, la URL está mal
+            if (strpos(json_encode($response), '404') !== false || (isset($response['message']) && strpos($response['message'], 'Not Found') !== false)) {
+                 $error_text = 'Error 404: No encontrado. Revisa que la URL de la API sea correcta y termine en /api/v1';
+            }
+
+            wp_send_json_error(['message' => $error_text, 'response' => $response]);
+        }
+    }
+    // --- FIN MODIFICACIÓN ---
+
+    // --- INICIO NUEVA FUNCIÓN (HANDLER PARA EL BOTÓN "SIMULAR") ---
+    
+    /**
+     * Función AJAX para el botón "Simular" de la pestaña Debug.
+     *
+     * Simula una llamada ENTRANTE (como si viniera de Laravel) al endpoint
+     * /wp-json/sga/v1/update-student-status/ de este mismo WordPress.
+     */
+    public function ajax_test_incoming_webhook() {
+        check_ajax_referer('sga_test_api_nonce', '_ajax_nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'No tienes permisos para realizar esta acción.']);
+        }
+
+        // Cargar SGA_Utils (para loguear)
+        if (!class_exists('SGA_Utils')) {
+            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
+            if (file_exists($utils_file)) {
+                require_once $utils_file;
+            } else {
+                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-utils.php.']);
+                return;
+            }
+        }
+        
+        $cedula = sanitize_text_field($_POST['cedula'] ?? '');
+        $curso = sanitize_text_field($_POST['curso'] ?? '');
+
+        if (empty($cedula) || empty($curso)) {
+            wp_send_json_error(['message' => 'La Cédula y el Curso son obligatorios para simular.']);
+            return;
+        }
+
+        // Obtener la clave API (la misma que usamos para salir)
+        $api_key = get_option('sga_api_key');
+        if (empty($api_key)) {
+            wp_send_json_error(['message' => 'No hay Clave API guardada en los Ajustes.']);
+            return;
+        }
+        
+        // El endpoint que creamos en class-sga-api.php
+        $url = home_url('/wp-json/sga/v1/update-student-status/');
+
+        $body_data = [
+            'cedula' => $cedula,
+            'curso_nombre' => $curso,
+            'status' => 'pagado' // Simulamos un pago
+        ];
+
+        $args = [
+            'method'  => 'POST',
+            'headers' => [
+                'Content-Type' => 'application/json; charset=utf-8',
+                'X-SGA-Signature' => $api_key // Aquí está la clave de seguridad
+            ],
+            'body'    => json_encode($body_data),
+            'timeout' => 15,
+            // 'cookies' => $_COOKIE // Añadir cookies para pasar el permission_callback de is_user_logged_in
+        ];
+        
+        // NOTA: Para que la simulación funcione, necesitamos que la llamada AJAX
+        // sea autenticada O que la API Key sea correcta.
+        // Como estamos haciendo una llamada de servidor a servidor (wp_remote_post),
+        // la cookie de admin no se pasa por defecto.
+        // PERO, nuestro 'check_api_permission' en class-sga-api.php
+        // permite el acceso si la 'X-SGA-Signature' es correcta.
+        // Así que esta simulación prueba la clave API perfectamente.
+
+        $response = wp_remote_post($url, $args);
+        
+        if (is_wp_error($response)) {
+            // Error de WordPress (ej. cURL timeout, no se pudo conectar)
+            $error_message = $response->get_error_message();
+            SGA_Utils::_log_activity('API Test (Simulación): Error de WP', $error_message, 0, true);
+            wp_send_json_error(['message' => $error_message]);
+            return;
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $decoded_body = json_decode($response_body, true);
+
+        // Registrar el intento
+        $log_content = "Simulación de Webhook Entrante (Laravel -> WP)\n";
+        $log_content .= "URL: $url\n";
+        $log_content .= "Cuerpo Enviado: " . json_encode($body_data) . "\n";
+        $log_content .= "Respuesta (Código: $response_code): " . $response_body;
+        SGA_Utils::_log_activity('API Test (Simulación)', $log_content, 0, true);
+
+        if ($response_code >= 200 && $response_code < 300) {
+            // Éxito
+            wp_send_json_success([
+                'response_code' => $response_code,
+                'response_body' => $decoded_body
+            ]);
+        } else {
+            // Error de la API (403, 404, 500)
+            $error_message = $decoded_body['message'] ?? $response_body;
+            if ($response_code === 403) {
+                $error_message = 'Error 403: Clave de API inválida. (X-SGA-Signature)';
+            }
+            wp_send_json_error([
+                'message' => $error_message,
+                'response_code' => $response_code,
+                'response_body' => $decoded_body
+            ]);
+        }
+    }
+    // --- FIN NUEVA FUNCIÓN ---
+
+
+    private function render_maintenance_settings_tab() {
+        ?>
+        <h2>Mantenimiento de Datos</h2>
+        <p>Herramientas para limpiar y optimizar la base de datos del plugin SGA.</p>
+        <style>
+            #sga-cleanup-duplicates-section {
+                background: #fff;
+                border: 1px solid #c3c4c7;
+                border-left: 4px solid #d63638;
+                padding: 20px;
+                margin-top: 20px;
+                max-width: 600px;
+            }
+            #sga-cleanup-duplicates-section h3 {
+                margin-top: 0;
+            }
+            #sga-cleanup-duplicates-section .button-danger {
+                background: #d63638;
+                border-color: #b32d2e;
+                color: #fff;
+            }
+            #sga-cleanup-duplicates-section .button-danger:hover {
+                background: #b32d2e;
+                border-color: #b32d2e;
+            }
+            #sga-cleanup-duplicates-section .button-danger:disabled {
+                background: #e0e0e0;
+                border-color: #c3c4c7;
+                color: #a7aaad;
+            }
+            #sga-cleanup-confirm-text {
+                margin-right: 10px;
+            }
+            #sga-cleanup-results {
+                margin-top: 15px;
+                padding: 10px;
+                border: 1px solid #c3c4c7;
+                display: none;
+            }
+        </style>
+        
+        <div id="sga-cleanup-duplicates-section">
+            <h3>Limpiar Inscripciones Duplicadas</h3>
+            <p><strong>¡Atención!</strong> Esta acción es permanente y no se puede deshacer.</p>
+            <p>El sistema buscará estudiantes que estén inscritos varias veces en el <strong>mismo curso</strong> y con el <strong>mismo estado</strong>. Conservará la inscripción más reciente (basada en la fecha) y eliminará las demás.</p>
+            <p>Esto es útil para limpiar datos antiguos creados antes de que el sistema bloqueara duplicados automáticamente.</p>
+            
+            <p>Para confirmar, escribe <strong>BORRAR</strong> en el campo de abajo y presiona el botón.</p>
+            <input type="text" id="sga-cleanup-confirm-text" placeholder="Escribe BORRAR" autocomplete="off">
+            <button type="button" id="sga-cleanup-duplicates-btn" class="button button-danger" disabled>Ejecutar Limpieza de Duplicados</button>
+            <span class="spinner" style="vertical-align: middle;"></span>
+
+            <div id="sga-cleanup-results" style="display:none; margin-top: 15px; padding: 10px; border-width: 1px; border-style: solid;"></div>
+        </div>
+
+        <script>
+        jQuery(document).ready(function($) {
+            // Habilitar/deshabilitar botón de limpieza
+            $('#sga-cleanup-confirm-text').on('keyup', function() {
+                if ($(this).val() === 'BORRAR') {
+                    $('#sga-cleanup-duplicates-btn').prop('disabled', false);
+                } else {
+                    $('#sga-cleanup-duplicates-btn').prop('disabled', true);
+                }
+            });
+
+            // Acción AJAX para limpiar duplicados
+            $('#sga-cleanup-duplicates-btn').on('click', function() {
+                var btn = $(this);
+                var spinner = btn.next('.spinner');
+                var resultsDiv = $('#sga-cleanup-results');
+                var confirmText = $('#sga-cleanup-confirm-text');
+
+                btn.prop('disabled', true);
+                spinner.addClass('is-active');
+                resultsDiv.slideUp().html('').css('color', 'inherit').css('border-color', '#c3c4c7');
+
+                $.post(ajaxurl, {
+                    action: 'sga_cleanup_duplicates',
+                    _ajax_nonce: '<?php echo wp_create_nonce("sga_cleanup_duplicates_nonce"); ?>'
+                }).done(function(response) {
+                    if (response.success) {
+                        var message = '<strong>Éxito:</strong> Se eliminaron ' + response.data.deleted_count + ' inscripciones duplicadas.';
+                        resultsDiv.css('color', 'green').css('border-color', 'green').html(message).slideDown();
+                    } else {
+                        resultsDiv.css('color', 'red').css('border-color', 'red').html('<strong>Error:</strong> ' + response.data.message).slideDown();
+                    }
+                }).fail(function() {
+                    resultsDiv.css('color', 'red').css('border-color', 'red').html('<strong>Error:</strong> Fallo de comunicación AJAX.').slideDown();
+                }).always(function() {
                     spinner.removeClass('is-active');
-                    setTimeout(function() { location.reload(); }, 5000);
+                    confirmText.val(''); // Resetear campo de confirmación
+                    // Dejamos el botón deshabilitado hasta que vuelvan a escribir
                 });
             });
         });

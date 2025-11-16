@@ -41,18 +41,22 @@ class SGA_API {
 
     /**
      * Callback de permisos para verificar la clave secreta de la API.
+     *
+     * MODIFICADO: Ahora usa la misma clave 'sga_api_key' del panel de Ajustes.
      */
     public function check_api_permission($request) {
-        $options = get_option('sga_integration_options', []);
-        $api_secret = $options['api_secret_key'] ?? '';
+        // Leemos la clave API guardada desde el panel de Ajustes > SGA Settings
+        $api_key = get_option('sga_api_key');
+        
+        // Obtenemos la clave enviada en el header
         $sent_secret = $request->get_header('X-SGA-Signature');
         
-        if (empty($api_secret)) {
+        if (empty($api_key)) {
             // Si no hay clave configurada, se bloquea por seguridad.
-            return new WP_Error('rest_forbidden', 'La clave secreta de la API no está configurada en el SGA.', ['status' => 403]);
+            return new WP_Error('rest_forbidden', 'La clave API no está configurada en Ajustes > SGA Settings.', ['status' => 403]);
         }
         
-        if ($sent_secret === $api_secret) {
+        if ($sent_secret === $api_key) {
             return true;
         }
 
@@ -152,17 +156,17 @@ class SGA_API {
 
         foreach($students_data as $data) {
              $response[] = [
-                'nombre' => $data['estudiante']->post_title,
-                'cedula' => get_field('cedula', $data['estudiante']->ID),
-                'email' => get_field('email', $data['estudiante']->ID),
-                'telefono' => get_field('telefono', $data['estudiante']->ID),
-                'curso' => [
-                    'nombre' => $data['curso']['nombre_curso'],
-                    'horario' => $data['curso']['horario'] ?? '',
-                    'matricula' => $data['curso']['matricula'] ?? '',
-                    'estado' => $data['curso']['estado'] ?? '',
-                ]
-            ];
+                 'nombre' => $data['estudiante']->post_title,
+                 'cedula' => get_field('cedula', $data['estudiante']->ID),
+                 'email' => get_field('email', $data['estudiante']->ID),
+                 'telefono' => get_field('telefono', $data['estudiante']->ID),
+                 'curso' => [
+                     'nombre' => $data['curso']['nombre_curso'],
+                     'horario' => $data['curso']['horario'] ?? '',
+                     'matricula' => $data['curso']['matricula'] ?? '',
+                     'estado' => $data['curso']['estado'] ?? '',
+                 ]
+             ];
         }
 
         return new WP_REST_Response($response, 200);

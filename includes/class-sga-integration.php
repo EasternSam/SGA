@@ -6,11 +6,15 @@ if (!defined('ABSPATH')) exit;
  * Clase SGA_Integration
  *
  * Gestiona las integraciones con plugins de terceros y el sistema interno.
+ * (Este archivo maneja la ENTRADA de datos desde Fluent Forms)
  */
 class SGA_Integration {
 
     public function __construct() {
         add_action('fluentform/submission_inserted', array($this, 'procesar_inscripcion_y_crear_perfil'), 10, 3);
+        
+        // --- AÑADIDO PARA EL SHORTCODE DE PRUEBA ---
+        add_shortcode('sga_cursos_laravel', array($this, 'render_cursos_laravel_shortcode'));
     }
 
     /**
@@ -314,5 +318,73 @@ class SGA_Integration {
 
         return false;
     }
-}
 
+    // --- INICIO DE NUEVA FUNCIÓN PARA SHORTCODE DE PRUEBA ---
+            
+    /**
+     * Renderiza el shortcode [sga_cursos_laravel]
+     *
+     * Llama a la API de Laravel y muestra una lista de cursos.
+     */
+    public function render_cursos_laravel_shortcode($atts) {
+        // 1. Cargar las clases necesarias (API Client y Utils para logs)
+        if (!class_exists('SGA_API_Client')) {
+            $client_file = plugin_dir_path(__FILE__) . 'class-sga-api-client.php';
+            if (file_exists($client_file)) {
+                require_once $client_file;
+            } else {
+                return '<div style="color: red;">Error: No se pudo cargar class-sga-api-client.php.</div>';
+            }
+        }
+        
+        if (!class_exists('SGA_Utils')) {
+            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
+            if (file_exists($utils_file)) {
+                require_once $utils_file;
+            }
+        }
+
+        // 2. Iniciar el cliente y llamar a la API
+        $api_client = new SGA_API_Client();
+        $response = $api_client->get_all_courses(); // Llama a /api/v1/courses
+        
+        // 3. Preparar el HTML
+        ob_start();
+
+        if (is_wp_error($response)) {
+            // Error de WordPress (ej. cURL timeout, ngrok caído)
+            echo '<div style="color: red; border: 1px solid red; padding: 10px;">';
+            echo '<strong>Error de Conexión de WordPress:</strong> ' . esc_html($response->get_error_message());
+            echo '<p><small>Asegúrate de que ngrok y el servidor de Laravel (php artisan serve) estén corriendo.</small></p>';
+            echo '</div>';
+            
+        } elseif (isset($response['status']) && $response['status'] === 'success') {
+            // Éxito
+            $courses = $response['data'];
+            
+            echo '<h3>Cursos Disponibles (conectado a Laravel):</h3>';
+            
+            if (empty($courses)) {
+                 echo '<p>La conexión fue exitosa, pero no se encontraron cursos en el sistema base.</p>';
+            } else {
+                echo '<ul>';
+                foreach ($courses as $course) {
+                    // Asumo que la columna se llama 'name' (de Laravel)
+                    // Si se llama 'nombre' o 'nombre_curso', debes cambiar 'name' aquí abajo
+                    echo '<li>' . esc_html($course['name']) . ' (ID: ' . esc_html($course['id']) . ')</li>';
+                }
+                echo '</ul>';
+            }
+        } else {
+            // Error devuelto por la API de Laravel (ej. 401, 404, 500)
+            $error_message = $response['message'] ?? 'Error desconocido al contactar la API.';
+            echo '<div style="color: red; border: 1px solid red; padding: 10px;">';
+            echo '<strong>Error de la API de Laravel:</strong> ' . esc_html($error_message);
+            echo '<p><small>Esto puede ser un error 401 (Token incorrecto) o 404 (URL incorrecta, ¿olvidaste /api/v1?).</small></p>';
+            echo '<!-- ' . esc_html(print_r($response, true)) . ' -->'; // Comentario HTML para debug
+        }
+        
+        return ob_get_clean();
+    }
+    // --- FIN DE NUEVA FUNCIÓN ---
+}
