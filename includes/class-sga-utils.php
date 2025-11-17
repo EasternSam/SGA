@@ -1788,4 +1788,71 @@ class SGA_Utils {
         return ['deleted_count' => $total_deleted];
     }
 
-}
+    // INICIO: NUEVA FUNCIÓN AÑADIDA
+    /**
+     * Obtiene y formatea los horarios de un curso desde el campo repetidor de ACF.
+     * Esta es la lógica centralizada que usará la API y el AJAX del formulario.
+     *
+     * @param int $post_id El ID del post (curso) de WordPress.
+     * @return array Lista de horarios formateados.
+     */
+    public static function get_schedules_for_wp_course($post_id) {
+        if (!function_exists('get_field')) {
+            return []; // ACF no está activo
+        }
+
+        // 1. Obtener el campo repetidor
+        $schedules_raw = get_field('horarios_del_curso', $post_id);
+
+        if (empty($schedules_raw) || !is_array($schedules_raw)) {
+            return []; // No hay horarios definidos o el campo no existe
+        }
+
+        $formatted_schedules = [];
+        foreach ($schedules_raw as $schedule) {
+            
+            // 2. Leer los nombres de sub-campos correctos (basado en tus imágenes)
+            $day = $schedule['dias_de_la_semana'] ?? null;
+            $time_range_string = $schedule['hora'] ?? null; // Ej: "9:00AM - 12:00PM"
+
+            $start_time = null;
+            $end_time = null;
+
+            // 3. Parsear el string de hora
+            if ($time_range_string) {
+                // Limpiar el string (quitar espacios extra, usar guión simple)
+                $time_range_string_cleaned = str_replace(' - ', '-', $time_range_string);
+                $parts = explode('-', $time_range_string_cleaned);
+
+                if (count($parts) === 2) {
+                    // $parts[0] es "9:00AM", $parts[1] es "12:00PM"
+                    // Convertir a formato H:i (24 horas) para consistencia
+                    $start_time_obj = strtotime(trim($parts[0]));
+                    $end_time_obj = strtotime(trim($parts[1]));
+
+                    if ($start_time_obj && $end_time_obj) {
+                        $start_time = date('H:i', $start_time_obj); // "09:00"
+                        $end_time = date('H:i', $end_time_obj);   // "12:00"
+                    }
+                }
+            }
+
+            // 4. Validar y crear el ID
+            if ( $day && $start_time && $end_time ) {
+                // Crear un ID único y legible (ej: sabado_0900_1200)
+                $schedule_id = sanitize_title( $day . '_' . str_replace(':', '', $start_time) . '_' . str_replace(':', '', $end_time) );
+                
+                $formatted_schedules[] = [
+                    'id'         => $schedule_id, 
+                    'day'        => $day,         
+                    'start_time' => $start_time,  
+                    'end_time'   => $end_time,    
+                ];
+            }
+        }
+
+        return $formatted_schedules;
+    }
+    // FIN: NUEVA FUNCIÓN AÑADIDA
+
+} // Fin de la clase SGA_Utils

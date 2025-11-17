@@ -46,6 +46,11 @@ class SGA_Ajax {
         add_action('wp_ajax_sga_cleanup_duplicates', array($this, 'ajax_cleanup_duplicates'));
         // *** FIN - NUEVO HOOK DE LIMPIEZA DE DUPLICADOS ***
 
+        // INICIO: NUEVO HOOK AJAX PARA FORMULARIOS
+        add_action('wp_ajax_sga_get_schedules_for_form', array($this, 'ajax_get_schedules_for_form'));
+        add_action('wp_ajax_nopriv_sga_get_schedules_for_form', array($this, 'ajax_get_schedules_for_form'));
+        // FIN: NUEVO HOOK AJAX
+
         // Hooks AJAX para usuarios no logueados (ej. imprimir factura desde el correo)
         add_action('wp_ajax_nopriv_sga_print_invoice', array($this, 'ajax_sga_print_invoice'));
     }
@@ -905,11 +910,11 @@ class SGA_Ajax {
             $call_log_meta = [];
         }
         $call_info = [
-            'user_id'     => $user_id,
-            'user_name'   => $user_info->display_name,
-            'timestamp'   => time(),
-            'comment'     => $comment,
-            'cpt_log_id'  => $call_log_post_id,
+            'user_id'    => $user_id,
+            'user_name'  => $user_info->display_name,
+            'timestamp'  => time(),
+            'comment'    => $comment,
+            'cpt_log_id' => $call_log_post_id,
         ];
         $call_log_meta[$row_index] = $call_info;
         update_post_meta($post_id, '_sga_call_log', $call_log_meta);
@@ -1038,4 +1043,33 @@ class SGA_Ajax {
         }
     }
     // *** FIN - NUEVA FUNCIÓN AJAX DE LIMPIEZA ***
+
+    // INICIO: NUEVA FUNCIÓN AJAX AÑADIDA
+    /**
+     * AJAX: Obtiene los horarios formateados para un ID de curso.
+     * Usado por el formulario de inscripción (Fluent Forms) para llenar
+     * el dropdown de horarios dinámicamente.
+     */
+    public function ajax_get_schedules_for_form() {
+        if (!isset($_POST['course_id'])) {
+            wp_send_json_error(['message' => 'ID de curso no proporcionado.'], 400);
+        }
+
+        $course_id = intval($_POST['course_id']);
+
+        if ($course_id <= 0) {
+            wp_send_json_error(['message' => 'ID de curso no válido.'], 400);
+        }
+
+        // Llamar a la nueva función centralizada en SGA_Utils
+        $schedules = SGA_Utils::get_schedules_for_wp_course($course_id);
+
+        if (empty($schedules)) {
+            wp_send_json_error(['message' => 'No se encontraron horarios para este curso.'], 404);
+        }
+
+        // Devolver los datos en el formato que espera el JS
+        wp_send_json_success(['data' => $schedules]);
+    }
+    // FIN: NUEVA FUNCIÓN AJAX AÑADIDA
 }

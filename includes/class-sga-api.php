@@ -52,6 +52,14 @@ class SGA_API {
         // ====================================================================
         // FIN DE NUEVO ENDPOINT
         // ====================================================================
+
+        // INICIO: Ruta añadida para obtener horarios de un curso
+        register_rest_route('sga/v1', '/course/(?P<id>\d+)/schedules', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'handle_get_course_schedules' ],
+            'permission_callback' => [ $this, 'check_api_permission' ], // Reutiliza tu check de permisos
+        ] );
+        // FIN: Ruta añadida
     }
 
     /**
@@ -261,5 +269,36 @@ class SGA_API {
     // ====================================================================
     // FIN DE NUEVA FUNCIÓN
     // ====================================================================
+
+    // INICIO: Método añadido para obtener horarios
+    /**
+     * Obtiene los horarios (desde el post meta '_sga_schedule') para un ID de curso (post) dado.
+     * Asume que el CPT 'curso' tiene un post meta '_sga_schedule' con los horarios.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public function handle_get_course_schedules( WP_REST_Request $request ) {
+        
+        $post_id = (int) $request['id'];
+
+        if ( empty( $post_id ) ) {
+            return new WP_Error( 'rest_bad_request', __( 'ID de curso no válido.', 'sga' ), [ 'status' => 400 ] );
+        }
+        
+        // ====================================================================
+        // INICIO: MODIFICACIÓN PARA USAR FUNCIÓN CENTRALIZADA
+        // ====================================================================
+        
+        // Toda la lógica de ACF se movió a SGA_Utils
+        $schedules = SGA_Utils::get_schedules_for_wp_course($post_id);
+        
+        // ====================================================================
+        // FIN: MODIFICACIÓN PARA USAR FUNCIÓN CENTRALIZADA
+        // ====================================================================
+
+        return new WP_REST_Response( [ 'success' => true, 'data' => $schedules ], 200 );
+    }
+    // FIN: Método añadido
 
 } // Fin de la clase SGA_API
