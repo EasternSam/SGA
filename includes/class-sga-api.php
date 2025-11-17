@@ -37,6 +37,21 @@ class SGA_API {
             'callback' => [$this, 'handle_get_matricula_sequence'],
             'permission_callback' => [$this, 'check_api_permission'],
         ]);
+
+        // ====================================================================
+        // NUEVO ENDPOINT PARA OBTENER CURSOS (PUNTO 3)
+        // ====================================================================
+        /**
+         * Endpoint para que el sistema Laravel consulte la lista de cursos de WP.
+         */
+        register_rest_route('sga/v1', '/get-courses/', [
+            'methods' => 'GET',
+            'callback' => [$this, 'handle_get_courses'],
+            'permission_callback' => [$this, 'check_api_permission'], // Reutiliza tu check de permisos
+        ]);
+        // ====================================================================
+        // FIN DE NUEVO ENDPOINT
+        // ====================================================================
     }
 
     /**
@@ -189,4 +204,62 @@ class SGA_API {
 
         return new WP_REST_Response($response, 200);
     }
-}
+
+    // ====================================================================
+    // NUEVA FUNCIÓN PARA MANEJAR GET COURSES (PUNTO 3)
+    // ====================================================================
+
+    /**
+     * Maneja la solicitud GET /get-courses
+     * Devuelve una lista de todos los cursos publicados en WordPress (CPT 'cursos').
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public function handle_get_courses($request) {
+        // La seguridad ya fue manejada por 'check_api_permission'
+        
+        // 1. La consulta (Query)
+        // Usamos 'curso' (singular) porque así está en tu class-sga-cpt.php
+        $args = [
+            'post_type'      => 'curso',
+            
+            // ====================================================================
+            // REVERTIMOS ESTO A 'publish' AHORA QUE EL CPT ES VISIBLE EN LA API
+            // ====================================================================
+            'post_status'    => 'publish',
+            // ====================================================================
+            
+            'posts_per_page' => -1, // Obtener todos los cursos
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        ];
+
+        $courses_query = new WP_Query($args);
+        $courses_data = [];
+
+        // 2. Formatear la respuesta
+        if ($courses_query->have_posts()) {
+            while ($courses_query->have_posts()) {
+                $courses_query->the_post();
+                
+                // Usamos el título del post como nombre del curso
+                $course_title = get_the_title();
+
+                $courses_data[] = [
+                    'wp_course_id'   => get_the_ID(),
+                    'wp_course_name' => $course_title,
+                ];
+            }
+            wp_reset_postdata(); // Restaurar datos originales
+        }
+
+        // 3. Devolver la respuesta
+        // Enviamos 'success' => true para consistencia con la respuesta de Laravel
+        return new WP_REST_Response(['success' => true, 'data' => $courses_data], 200);
+    }
+    // ====================================================================
+    // FIN DE NUEVA FUNCIÓN
+    // ====================================================================
+
+} // Fin de la clase SGA_API

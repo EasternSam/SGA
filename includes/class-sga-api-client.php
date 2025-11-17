@@ -5,114 +5,137 @@ if (!defined('ABSPATH')) exit;
 /**
  * Clase SGA_API_Client
  *
- * Maneja la comunicación saliente con la API del sistema de gestión (Laravel).
+ * Cliente HTTP para realizar llamadas SALIENTES a la API de Laravel (SGA).
  * (Este archivo maneja la SALIDA de datos hacia Laravel)
  */
 class SGA_API_Client {
 
     private $api_url;
-    private $api_key;
+    private $api_token;
 
     public function __construct() {
-        // Obtener la URL y la clave de las opciones de WordPress
-        $this->api_url = get_option('sga_api_url', '');
-        $this->api_key = get_option('sga_api_key', '');
+        $options = get_option('sga_integration_options', []);
+        
+        // 'api_url' debe ser la URL base de Laravel, ej: https://mi-sga.com/
+        $this->api_url = $options['api_url'] ?? get_option('sga_api_url', ''); 
+        
+        // 'api_token' es el Token de Sanctum de Laravel (ej: 1|Abc...)
+        $this->api_token = $options['api_token'] ?? '';
     }
 
     /**
-     * Envía datos a un endpoint de la API (POST).
-     * @param string $endpoint El endpoint de la API (ej. 'enroll')
-     * @param array $data Los datos a enviar en el cuerpo.
-     * @return array|WP_Error La respuesta de la API decodificada o un WP_Error.
+     * Realiza una petición GET a un endpoint protegido de la API de Laravel.
+     *
+     * @param string $endpoint El endpoint al que se llamará (ej. 'v1/courses')
+     * @return array|WP_Error Los datos decodificados o un error.
      */
-    public function post_data($endpoint, $data) {
-        if (empty($this->api_url) || empty($this->api_key)) {
-            return new WP_Error('sga_api_not_configured', 'La URL o la clave de la API no están configuradas.');
+    private function get($endpoint) {
+        if (empty($this->api_url) || empty($this->api_token)) {
+            SGA_Utils::_log_activity('API Client Error', 'La URL de la API o el Token no están configurados en Ajustes > SGA.', 0, true);
+            return new WP_Error('api_config_error', 'La URL de la API o el Token no están configurados.');
         }
 
-        $url = trailingslashit($this->api_url) . $endpoint;
+        // Construir la URL completa
+        // rtrim quita la barra final de la URL base
+        // ltrim quita la barra inicial del endpoint
+        // '/api/' es el prefijo estándar de Laravel para rutas de API
+        $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/');
 
-        $args = array(
-            'method'  => 'POST',
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $this->api_key,
-                'Content-Type'  => 'application/json; charset=utf-8',
+        $args = [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $this->api_token,
                 'Accept'        => 'application/json',
-            ),
-            'body'    => json_encode($data),
-            'timeout' => 15,
-        );
+                'Content-Type'  => 'application/json',
+            ],
+            'sslverify' => false // Desactivar para desarrollo local (ej. Ngrok)
+        ];
 
-        $response = wp_remote_post($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        return json_decode(wp_remote_retrieve_body($response), true);
-    }
-
-    /**
-     * Obtiene datos de un endpoint de la API (GET).
-     * @param string $endpoint El endpoint de la API (ej. 'students')
-     * @return array|WP_Error La respuesta de la API decodificada o un WP_Error.
-     */
-    public function get_data($endpoint) {
-        if (empty($this->api_url) || empty($this->api_key)) {
-            return new WP_Error('sga_api_not_configured', 'La URL o la clave de la API no están configuradas.');
-        }
-
-        $url = trailingslashit($this->api_url) . $endpoint;
-
-        $args = array(
-            'method'  => 'GET',
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $this->api_key,
-                'Accept'        => 'application/json',
-            ),
-            'timeout' => 15,
-        );
-
+        SGA_Utils::_log_activity('API Client GET', 'Iniciando llamada GET a: ' . $url, 0, true);
         $response = wp_remote_get($url, $args);
 
+        return $this->handle_response($response, $url);
+    }
+
+    // ====================================================================
+    // NUEVO MÉTODO POST (PUNTO 1)
+    // ====================================================================
+
+    /**
+     * Realiza una petición POST a un endpoint protegido de la API de Laravel.
+     *
+     * @param string $endpoint El endpoint al que se llamará (ej. 'v1/wordpress/new-inscription')
+     * @param array $data Los datos (body) que se enviarán como JSON.
+     * @return array|WP_Error Los datos decodificados o un error.
+     */
+    public function post($endpoint, $data = []) {
+        if (empty($this->api_url) || empty($this->api_token)) {
+            SGA_Utils::_log_activity('API Client Error', 'La URL de la API o el Token no están configurados en Ajustes > SGA.', 0, true);
+            return new WP_Error('api_config_error', 'La URL de la API o el Token no están configurados.');
+        }
+
+        // Construir la URL completa
+        $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/');
+
+        $args = [
+            'method'    => 'POST',
+            'timeout'   => 30,
+            'headers'   => [
+                'Authorization' => 'Bearer ' . $this->api_token,
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/json',
+            ],
+            'body'      => json_encode($data), // Enviar los datos como JSON
+            'sslverify' => false // Desactivar para desarrollo local (ej. Ngrok)
+        ];
+
+        SGA_Utils::_log_activity('API Client POST', 'Iniciando llamada POST a: ' . $url, 0, true);
+        $response = wp_remote_post($url, $args);
+
+        return $this->handle_response($response, $url);
+    }
+    // ====================================================================
+    // FIN DE NUEVO MÉTODO
+    // ====================================================================
+
+
+    /**
+     * Manejador de respuestas centralizado para GET y POST.
+     *
+     * @param array|WP_Error $response La respuesta de wp_remote_get/post
+     * @param string $url La URL que fue llamada (para logging)
+     * @return array|WP_Error
+     */
+    private function handle_response($response, $url) {
         if (is_wp_error($response)) {
+            // Error de conexión de WordPress (cURL, DNS, timeout)
+            SGA_Utils::_log_activity('API Client Error: WP_Error', 'Error al llamar a ' . $url . ': ' . $response->get_error_message(), 0, true);
             return $response;
         }
 
-        return json_decode(wp_remote_retrieve_body($response), true);
+        $response_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if ($response_code >= 200 && $response_code < 300) {
+            // Éxito (2xx)
+            SGA_Utils::_log_activity('API Client: Éxito', 'Llamada exitosa a ' . $url . ' (HTTP ' . $response_code . ')', 0, true);
+            // Devolvemos el body y el status
+            return ['status' => $response_code, 'body' => $data];
+        } else {
+            // Error del servidor de Laravel (4xx, 5xx)
+            $error_message = $data['message'] ?? $body;
+            SGA_Utils::_log_activity('API Client: Error Laravel', 'Llamada a ' . $url . ' falló (HTTP ' . $response_code . '): ' . $error_message, 0, true);
+            // Devolvemos el body y el status para que la función que llamó decida
+            return ['status' => $response_code, 'body' => $data];
+        }
     }
 
-    // --- FUNCIONES DE EJEMPLO AÑADIDAS ---
-
     /**
-     * Prueba la conexión con el endpoint /test de Laravel.
-     *
-     * @return array Respuesta de la API
-     */
-    public function test_connection() {
-        // 'test' es el endpoint que añadimos en routes/api.php
-        // la URL base ('https://.../api/v1/') ya está en $this->api_url
-        // NOTA: trailingslashit() en get_data() se encarga de la barra,
-        // así que 'test' es correcto.
-        return $this->get_data('test');
-    }
-
-    /**
-     * Obtiene todos los cursos del endpoint /courses de Laravel.
-     *
-     * @return array Respuesta de la API (lista de cursos)
+     * Función pública de ejemplo para obtener cursos.
+     * Usada por el shortcode [sga_cursos_laravel]
      */
     public function get_all_courses() {
-        return $this->get_data('courses');
+        return $this->get('v1/courses'); // Llama a la ruta /api/v1/courses
     }
-
-    /**
-     * Obtiene un estudiante específico.
-     *
-     * @param int $student_id ID del estudiante
-     * @return array Respuesta de la API (datos del estudiante)
-     */
-    // public function get_student($student_id) {
-    //     return $this->get_data('student/' . $student_id);
-    // }
 }

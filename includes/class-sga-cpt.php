@@ -56,6 +56,13 @@ class SGA_CPT {
                 'rewrite' => array('slug' => 'cursos'),
                 'show_in_menu' => false,
                 'taxonomies' => array('category'),
+                
+                // ====================================================================
+                // LÍNEA AÑADIDA PARA EXPONER CURSOS A LA API (PUNTO 3)
+                // ====================================================================
+                'show_in_rest' => true,
+                // ====================================================================
+                
             ));
         }
 
