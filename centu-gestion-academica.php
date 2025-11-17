@@ -41,6 +41,10 @@ require_once SGA_PLUGIN_PATH . 'includes/class-sga-payments.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-reports.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-integration.php';
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-api.php';
+// --- INICIO DE LA CORRECCIÓN ---
+// Cargar el cliente de la API de forma global.
+require_once SGA_PLUGIN_PATH . 'includes/class-sga-api-client.php';
+// --- FIN DE LA CORRECCIÓN ---
 require_once SGA_PLUGIN_PATH . 'includes/class-sga-main.php';
 
 // --- 4. Registrar Hooks de Activación y Desactivación ---

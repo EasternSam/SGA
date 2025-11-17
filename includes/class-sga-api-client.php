@@ -14,13 +14,18 @@ class SGA_API_Client {
     private $api_token;
 
     public function __construct() {
-        $options = get_option('sga_integration_options', []);
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Cargar las opciones de API guardadas por class-sga-admin.php
+        // Las opciones 'sga_api_url' y 'sga_api_key' se guardan como opciones
+        // independientes, no dentro de 'sga_integration_options'.
         
-        // 'api_url' debe ser la URL base de Laravel, ej: https://mi-sga.com/
-        $this->api_url = $options['api_url'] ?? get_option('sga_api_url', ''); 
-        
-        // 'api_token' es el Token de Sanctum de Laravel (ej: 1|Abc...)
-        $this->api_token = $options['api_token'] ?? '';
+        // $options = get_option('sga_integration_options', []); // <-- INCORRECTO
+        // $this->api_url = $options['api_url'] ?? get_option('sga_api_url', ''); // <-- INCORRECTO
+        // $this->api_token = $options['api_token'] ?? ''; // <-- INCORRECTO
+
+        $this->api_url = get_option('sga_api_url', ''); 
+        $this->api_token = get_option('sga_api_key', ''); // <-- Clave correcta: 'sga_api_key'
+        // --- FIN DE LA CORRECCIÓN ---
     }
 
     /**
@@ -35,11 +40,14 @@ class SGA_API_Client {
             return new WP_Error('api_config_error', 'La URL de la API o el Token no están configurados.');
         }
 
-        // Construir la URL completa
-        // rtrim quita la barra final de la URL base
-        // ltrim quita la barra inicial del endpoint
-        // '/api/' es el prefijo estándar de Laravel para rutas de API
-        $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/');
+        // --- INICIO DE LA CORRECCIÓN ---
+        // La URL base ($this->api_url) ya contiene el prefijo /api/v1 (según las instrucciones en class-sga-admin.php).
+        // No debemos añadir '/api/' otra vez.
+        
+        // $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/'); // <-- INCORRECTO
+        $url = rtrim($this->api_url, '/') . '/' . ltrim($endpoint, '/'); // <-- CORRECTO
+        // --- FIN DE LA CORRECCIÓN ---
+
 
         $args = [
             'timeout' => 30,
@@ -74,8 +82,11 @@ class SGA_API_Client {
             return new WP_Error('api_config_error', 'La URL de la API o el Token no están configurados.');
         }
 
-        // Construir la URL completa
-        $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/');
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Misma corrección de URL que en el método get()
+        // $url = rtrim($this->api_url, '/') . '/api/' . ltrim($endpoint, '/'); // <-- INCORRECTO
+        $url = rtrim($this->api_url, '/') . '/' . ltrim($endpoint, '/'); // <-- CORRECTO
+        // --- FIN DE LA CORRECCIÓN ---
 
         $args = [
             'method'    => 'POST',
@@ -117,17 +128,28 @@ class SGA_API_Client {
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Manejar el caso en que la respuesta no sea JSON (ej. un error 500 de Laravel con HTML)
+        if ($data === null && !empty($body)) {
+             $error_message = 'La API devolvió una respuesta no-JSON (posiblemente un error 500 o 404 de Laravel). HTTP Status: ' . $response_code;
+             SGA_Utils::_log_activity('API Client: Error Laravel', 'Llamada a ' . $url . ' falló. ' . $error_message, 0, true);
+             return ['status' => $response_code, 'body' => ['message' => $error_message, 'raw_response' => $body]];
+        }
+        // --- FIN DE LA CORRECCIÓN ---
+
         if ($response_code >= 200 && $response_code < 300) {
             // Éxito (2xx)
             SGA_Utils::_log_activity('API Client: Éxito', 'Llamada exitosa a ' . $url . ' (HTTP ' . $response_code . ')', 0, true);
             // Devolvemos el body y el status
-            return ['status' => $response_code, 'body' => $data];
+            // --- CORRECCIÓN: Devolver $data (el body decodificado) en lugar de $response
+            return $data; // <-- Devolver directamente el array/JSON decodificado
         } else {
             // Error del servidor de Laravel (4xx, 5xx)
-            $error_message = $data['message'] ?? $body;
+            $error_message = $data['message'] ?? (is_string($body) ? $body : 'Respuesta de error desconocida.');
             SGA_Utils::_log_activity('API Client: Error Laravel', 'Llamada a ' . $url . ' falló (HTTP ' . $response_code . '): ' . $error_message, 0, true);
             // Devolvemos el body y el status para que la función que llamó decida
-            return ['status' => $response_code, 'body' => $data];
+            // --- CORRECCIÓN: Devolver $data (el body decodificado) en lugar de $response
+            return $data; // <-- Devolver directamente el array/JSON decodificado
         }
     }
 
@@ -136,6 +158,17 @@ class SGA_API_Client {
      * Usada por el shortcode [sga_cursos_laravel]
      */
     public function get_all_courses() {
-        return $this->get('v1/courses'); // Llama a la ruta /api/v1/courses
+        // Llama a la ruta /api/v1/courses (asumiendo que $this->api_url es https://.../api/v1)
+        return $this->get('courses'); 
+    }
+
+    /**
+     * [NUEVA FUNCIÓN PÚBLICA]
+     * Prueba la conexión con el endpoint /api/v1/test de Laravel.
+     * Usado por el botón de debug en class-sga-admin.php.
+     */
+    public function test_connection() {
+         // Llama a la ruta /api/v1/test (asumiendo que $this->api_url es https://.../api/v1)
+        return $this->get('test');
     }
 }

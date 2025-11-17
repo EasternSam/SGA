@@ -588,8 +588,11 @@ class SGA_Admin {
                     // --- MODIFICADO: Interpretar la nueva respuesta ---
                     if (response.success) {
                         // response.data contendrá el JSON de Laravel: {status: 'success', message: '¡Conexión...'}
-                        var response_msg = response.data.message || JSON.stringify(response.data);
+                        // --- INICIO CORRECCIÓN: La respuesta de la API Client ahora es solo el body ---
+                        var response_data = response.data;
+                        var response_msg = response_data.message || JSON.stringify(response_data);
                         resultsDiv.css('color', 'green').html('<strong>Éxito:</strong> ' + response_msg).slideDown();
+                        // --- FIN CORRECCIÓN ---
                     } else {
                         // response.data.message contendrá el error
                         var error_msg = response.data.message || 'Error desconocido.';
@@ -677,30 +680,10 @@ class SGA_Admin {
         }
 
         // Cargar SGA_Utils (para loguear)
-        if (!class_exists('SGA_Utils')) {
-            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
-            if (file_exists($utils_file)) {
-                require_once $utils_file;
-            } else {
-                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-utils.php.']);
-                return;
-            }
-        }
-
-        // --- INICIO DE LA CORRECCIÓN ---
+        // No es necesario 'class_exists' si lo cargamos en el archivo principal
+        
         // Cargar la NUEVA clase de cliente API
-        if (!class_exists('SGA_API_Client')) { // <-- USAR NUEVO NOMBRE DE CLASE
-            $client_file = plugin_dir_path(__FILE__) . 'class-sga-api-client.php'; // <-- USAR NUEVO ARCHIVO
-            if (file_exists($client_file)) {
-                require_once $client_file;
-            } else {
-                // Ahora podemos usar SGA_Utils para loguear el error
-                SGA_Utils::_log_activity('API Test (v1): Error Fatal', 'No se pudo cargar class-sga-api-client.php.', 0, true);
-                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-api-client.php.']);
-                return;
-            }
-        }
-        // --- FIN DE LA CORRECCIÓN ---
+        // No es necesario 'class_exists' si lo cargamos en el archivo principal
 
 
         // Usamos la nueva clase de Cliente API
@@ -715,11 +698,12 @@ class SGA_Admin {
             return;
         }
 
+        // --- INICIO CORRECCIÓN: La respuesta de la API Client ahora es solo el body ---
         // Comprobar si la respuesta de la API fue un éxito
         if (isset($response['status']) && $response['status'] === 'success') {
             // Éxito: Laravel respondió { "status": "success", "message": "¡Conexión..." }
             SGA_Utils::_log_activity('API Test (v1): Éxito', json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0, true);
-            wp_send_json_success($response);
+            wp_send_json_success($response); // Enviar el body directamente
         } else {
             // La API respondió, pero con un error (ej. 401 Unauthorized, 404, 500)
             $log_message = 'La API de Laravel respondió, pero no fue exitosa: ' . json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -740,6 +724,7 @@ class SGA_Admin {
 
             wp_send_json_error(['message' => $error_text, 'response' => $response]);
         }
+        // --- FIN CORRECCIÓN ---
     }
     // --- FIN MODIFICACIÓN ---
 
@@ -759,15 +744,7 @@ class SGA_Admin {
         }
 
         // Cargar SGA_Utils (para loguear)
-        if (!class_exists('SGA_Utils')) {
-            $utils_file = plugin_dir_path(__FILE__) . 'class-sga-utils.php';
-            if (file_exists($utils_file)) {
-                require_once $utils_file;
-            } else {
-                wp_send_json_error(['message' => 'Error fatal: No se pudo cargar class-sga-utils.php.']);
-                return;
-            }
-        }
+        // No es necesario si se carga en el archivo principal
         
         $cedula = sanitize_text_field($_POST['cedula'] ?? '');
         $curso = sanitize_text_field($_POST['curso'] ?? '');

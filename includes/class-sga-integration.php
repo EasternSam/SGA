@@ -18,11 +18,51 @@ class SGA_Integration {
     }
 
     /**
+     * [NUEVA FUNCIÓN HELPER]
+     * Transforma el string del horario del formulario de Fluent Forms al formato
+     * que espera la base de datos de Laravel.
+     *
+     * Ej: "Sábado a las 9:00AM - 12:00PM (Presencial)"
+     * -> "Sábado | 09:00 AM - 12:00 PM"
+     *
+     * @param string $raw_string El string del formulario.
+     * @return string El string formateado para Laravel.
+     */
+    private function _sga_format_schedule_string($raw_string) {
+        if (empty($raw_string)) {
+            return '';
+        }
+        
+        // 1. Quitar la modalidad (ej. " (Presencial)")
+        $clean_string = preg_replace('/\s*\([^)]+\)$/', '', $raw_string);
+        
+        // 2. Reemplazar " a las " por " | "
+        $clean_string = str_replace(' a las ', ' | ', $clean_string);
+        
+        // 3. Añadir espacios antes de AM/PM
+        // Ej: "9:00AM-12:00PM" -> "9:00 AM-12:00 PM"
+        $clean_string = preg_replace('/(\d+:\d+)(AM|PM)/', '$1 $2', $clean_string);
+        
+        // 4. Asegurar espacios alrededor del guión
+        // Ej: "9:00 AM-12:00 PM" -> "9:00 AM - 12:00 PM"
+        $clean_string = preg_replace('/(\d\d\s[AP]M)-(\d+:\d+\s[AP]M)/', '$1 - $2', $clean_string);
+        
+        // 5. Añadir cero inicial a horas de un solo dígito (ej. "9:00 AM" -> "09:00 AM")
+        // Busca un dígito que esté precedido por un espacio O un pipe, y seguido de ":HH AM/PM"
+        $clean_string = preg_replace('/([\s|])(\d):(\d{2}\s[AP]M)/', '$10$2:$3', $clean_string);
+
+        return $clean_string;
+    }
+
+    /**
      * Procesa el envío de un formulario de inscripción de Fluent Forms.
      * MODIFICADO PARA EL PUNTO 1:
      * Esta función ya no crea el estudiante en WP, sino que envía los datos
      * a la API pública de Laravel (EnrollmentController@store) para que Laravel
      * maneje la lógica de creación y acceso temporal.
+     *
+     * --- MODIFICADO DE NUEVO ---
+     * Ahora busca el ID del post del curso en WP y lo envía a Laravel.
      */
     public function procesar_inscripcion_y_crear_perfil($entryId, $formData, $form) {
         
@@ -40,6 +80,30 @@ class SGA_Integration {
         $tipo_cedula = $formData['input_radio'] ?? 'No soy menor';
         $es_menor = $tipo_cedula !== 'No soy menor';
         $cedula_raw = $formData['cedula_o_identificacion'] ?? '';
+        
+        // --- INICIO DE LA MODIFICACIÓN (WP) ---
+        // Obtener el nombre del curso del formulario
+        $course_name_from_form = $formData['nombre_del_curso'] ?? '';
+        
+        // Buscar el CPT 'curso' en WordPress por su título para obtener su ID
+        $wp_course_post = null;
+        if (!empty($course_name_from_form)) {
+            $wp_course_post = get_posts([
+                'post_type' => 'curso',
+                'title' => $course_name_from_form,
+                'posts_per_page' => 1,
+                'post_status' => ['publish', 'private'], // Buscar en ambos estados
+                'fields' => 'ids' // Solo necesitamos el ID
+            ]);
+        }
+
+        // Obtener el ID de WordPress
+        $wp_course_id = null;
+        if (!empty($wp_course_post)) {
+            $wp_course_id = $wp_course_post[0]; // get_posts con 'fields' => 'ids' devuelve un array de IDs
+        }
+        // --- FIN DE LA MODIFICACIÓN (WP) ---
+
 
         $datos_estudiante = [
             // Campos Principales (Requeridos por Laravel)
@@ -49,9 +113,19 @@ class SGA_Integration {
             'email'      => $formData['email'] ?? '',
             'phone'      => $formData['phone'] ?? '', // Laravel lo usa para 'home_phone'
             
-            // Campos del Curso (Requeridos por Laravel)
-            'course_name'     => $formData['nombre_del_curso'] ?? '',  // Tu controller espera el *Nombre* del Módulo
-            'schedule_string' => $formData['horario_seleccionado'] ?? '', // Tu controller espera el *Nombre* de la Sección/Horario
+            // --- INICIO DE LA MODIFICACIÓN (Envío de String Crudo) ---
+            // Enviamos el string del horario TAL CUAL viene del formulario.
+            // Laravel usará esto como clave de mapeo.
+            'schedule_string_from_wp' => $formData['horario_seleccionado'] ?? '',
+            // --- FIN DE LA MODIFICACIÓN ---
+
+            // --- INICIO DE LA MODIFICACIÓN (WP) ---
+            // Enviar el ID del curso de WP. Laravel lo espera como 'wp_course_id'.
+            'wp_course_id' => $wp_course_id, 
+            
+            // También enviar el nombre original para logs/fallbacks
+            'course_name_from_wp' => $course_name_from_form,
+            // --- FIN DE LA MODIFICACIÓN (WP) ---
 
             // Campos Opcionales (basado en tu controller de Laravel)
             'mobile_phone' => $formData['phone'] ?? null, // Usamos 'phone' como fallback si 'mobile_phone' no existe
@@ -74,11 +148,24 @@ class SGA_Integration {
             // 'tutor_relationship' => $formData['tutor_relationship'] ?? null,
         ];
 
-        // --- 3. VALIDACIÓN BÁSICA EN WORDPRESS ---
-        if (empty($datos_estudiante['cedula']) || empty($datos_estudiante['email']) || empty($datos_estudiante['course_name']) || empty($datos_estudiante['schedule_string'])) {
+        // --- 3. VALIDACIÓN BÁSICA EN WORDPRESS (MODIFICADA) ---
+        // Verificamos 'wp_course_id' en lugar de 'course_name'
+        if (empty($datos_estudiante['cedula']) || empty($datos_estudiante['email']) || empty($datos_estudiante['wp_course_id']) || empty($datos_estudiante['schedule_string_from_wp'])) {
+            
+            // Si el ID del curso es nulo, es porque no se encontró en WP
+            if(empty($datos_estudiante['wp_course_id'])) {
+                 SGA_Utils::_log_activity(
+                    'Error Integración Fluent Forms', 
+                    "El curso '{$course_name_from_form}' enviado desde el formulario no fue encontrado como un CPT 'curso' en WordPress. No se pudo obtener 'wp_course_id'.",
+                    0,
+                    true
+                );
+                return;
+            }
+            
             SGA_Utils::_log_activity(
                 'Error Integración Fluent Forms', 
-                'Faltan datos clave (cédula, email, course_name o schedule_string) en el envío del formulario ID: ' . $form->id,
+                'Faltan datos clave (cédula, email, wp_course_id o schedule_string_from_wp) en el envío del formulario ID: ' . $form->id,
                 0,
                 true
             );
@@ -113,7 +200,7 @@ class SGA_Integration {
             // ====================================================================
 
 
-            SGA_Utils::_log_activity('Integración Fluent Forms', 'Enviando inscripción a Laravel (Ruta Pública): ' . $url . ' | Cédula: ' . $datos_estudiante['cedula'], 0, true);
+            SGA_Utils::_log_activity('Integración Fluent Forms', 'Enviando inscripción a Laravel (Ruta Pública): ' . $url . ' | Cédula: ' . $datos_estudiante['cedula'] . ' | WP Course ID: ' . $datos_estudiante['wp_course_id'], 0, true);
 
             $response = wp_remote_post($url, [
                 'method'    => 'POST',
@@ -270,7 +357,10 @@ class SGA_Integration {
             // Re-buscamos solo para la asignación de agente
             if (is_array($cursos_actuales)) {
                 foreach ($cursos_actuales as $index => $curso) {
-                    if (isset($curso['nombre_curso']) && $curso['nombre_curso'] === $datos_estudiante['course_name']) {
+                    // --- INICIO MODIFICACIÓN ---
+                    // Usar el nombre del curso enviado desde WP (que ahora incluye el ID)
+                    if (isset($curso['nombre_curso']) && $curso['nombre_curso'] === $datos_estudiante['course_name_from_wp']) {
+                    // --- FIN MODIFICACIÓN ---
                         $inscripcion_existente_index = $index;
                         break;
                     }
@@ -283,8 +373,10 @@ class SGA_Integration {
             if ($inscripcion_existente_index === -1) {
                 // Si la fila de ACF no existe, la creamos (solo para registro y asignación)
                 add_row('cursos_inscritos', array(
-                    'nombre_curso' => $datos_estudiante['course_name'],
-                    'horario' => $datos_estudiante['schedule_string'],
+                    // --- INICIO MODIFICACIÓN ---
+                    'nombre_curso' => $datos_estudiante['course_name_from_wp'], // Usar el nombre original
+                    // --- FIN MODIFICACIÓN ---
+                    'horario' => $datos_estudiante['schedule_string_from_wp'], // <-- Usar el string crudo de WP
                     'fecha_inscripcion' => current_time('mysql'),
                     'estado' => 'Inscrito' // Estado base en WP
                 ), $post_id);
@@ -308,7 +400,9 @@ class SGA_Integration {
             // --- 5. ASIGNACIÓN DE AGENTE (Lógica original) ---
             $next_agent_id = null;
             $agent_role = 'agente'; 
-            $course_post = get_posts(['post_type' => 'curso', 'title' => $datos_estudiante['course_name'], 'posts_per_page' => 1]);
+            // --- INICIO MODIFICACIÓN ---
+            $course_post = get_posts(['post_type' => 'curso', 'title' => $datos_estudiante['course_name_from_wp'], 'posts_per_page' => 1]);
+            // --- FIN MODIFICACIÓN ---
             $is_infotep_course = false;
             
             if ($course_post) {
@@ -324,7 +418,9 @@ class SGA_Integration {
             if ($next_agent_id && $new_row_index !== -1) {
                 SGA_Utils::_assign_inscription_to_agent($post_id, $new_row_index, $next_agent_id);
                 $agent_info = get_userdata($next_agent_id);
-                $log_content_agent = "La inscripción de {$nombre_completo} para '{$datos_estudiante['course_name']}' (Rol: {$agent_role}) fue asignada automáticamente al agente: {$agent_info->display_name}.";
+                // --- INICIO MODIFICACIÓN ---
+                $log_content_agent = "La inscripción de {$nombre_completo} para '{$datos_estudiante['course_name_from_wp']}' (Rol: {$agent_role}) fue asignada automáticamente al agente: {$agent_info->display_name}.";
+                // --- FIN MODIFICACIÓN ---
                 SGA_Utils::_log_activity('Inscripción Asignada (WP)', $log_content_agent, 0);
             }
 
@@ -335,8 +431,10 @@ class SGA_Integration {
                     $nombre_completo, 
                     $datos_estudiante['email'], 
                     $cedula_raw, 
-                    $datos_estudiante['course_name'], 
-                    $datos_estudiante['schedule_string']
+                    // --- INICIO MODIFICACIÓN ---
+                    $datos_estudiante['course_name_from_wp'], 
+                    // --- FIN MODIFICACIÓN ---
+                    $datos_estudiante['schedule_string_from_wp'] // <-- Usar el string crudo
                 );
             }
         }
@@ -497,7 +595,9 @@ class SGA_Integration {
                  foreach ($courses as $course) {
                      // Asumo que la columna se llama 'name' (de Laravel)
                      // Si se llama 'nombre' o 'nombre_curso', debes cambiar 'name' aquí abajo
+                     // --- INICIO DE LA CORRECCIÓN DE SINTAXIS ---
                      echo '<li>' . esc_html($course['name']) . ' (ID: ' . esc_html($course['id']) . ')</li>';
+                     // --- FIN DE LA CORRECCIÓN DE SINTAXIS ---
                  }
                  echo '</ul>';
             }
